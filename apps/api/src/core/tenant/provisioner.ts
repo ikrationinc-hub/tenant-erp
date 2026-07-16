@@ -1,14 +1,8 @@
-import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import { db } from "../../config/db.js";
-import { withTenantSchemaAdmin } from "../../database/get-db.js";
-import { runMigrations } from "../../database/migration-runner.js";
+import { applyPendingTenantMigrations } from "../../database/migration-runner.js";
 import { tenants } from "../../database/platform/schema.js";
 import { slugToTenantSchemaName } from "../../database/tenant/schema-name.js";
-
-const TENANT_MIGRATIONS_FOLDER = fileURLToPath(
-  new URL("../../database/tenant/migrations", import.meta.url),
-);
 
 export interface CreateTenantSchemaInput {
   name: string;
@@ -37,9 +31,7 @@ export async function createTenantSchema(input: CreateTenantSchemaInput): Promis
     throw new Error("failed to insert tenant row");
   }
 
-  await withTenantSchemaAdmin(schemaName, async (adminDb) => {
-    await runMigrations(adminDb, TENANT_MIGRATIONS_FOLDER, schemaName);
-  });
+  await applyPendingTenantMigrations(schemaName);
 
   const [activated] = await db
     .update(tenants)

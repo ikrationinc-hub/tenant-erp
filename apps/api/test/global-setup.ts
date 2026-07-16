@@ -1,15 +1,17 @@
 import { fileURLToPath } from "node:url";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Client } from "pg";
-// Safe to import statically: neither of these touches src/config/env.ts.
-import { runMigrations } from "../src/database/migration-runner.js";
 
 // Runs once, before any test file's module graph loads, so process.env is
 // already correct by the time src/config/env.ts (and anything that imports
-// it) is first evaluated. Must NOT import any app module here that itself
-// imports env.ts - that would force env.ts to evaluate (and fail) before
-// DATABASE_URL below is set.
+// it) is first evaluated. Must NOT import ANY src/ module here, even
+// indirectly - src/database/migration-runner.ts, for example, now imports
+// src/config/db.ts (for listActiveTenants), which imports env.ts, which
+// would evaluate (and fail) before DATABASE_URL below is set. Only bare
+// libraries (pg, drizzle-orm, testcontainers) are safe to import statically
+// in this file.
 
 const PLATFORM_MIGRATIONS_FOLDER = fileURLToPath(
   new URL("../src/database/platform/migrations", import.meta.url),
@@ -39,7 +41,7 @@ export async function setup(): Promise<void> {
   await client.connect();
   try {
     const migrationDb = drizzle({ client });
-    await runMigrations(migrationDb, PLATFORM_MIGRATIONS_FOLDER);
+    await migrate(migrationDb, { migrationsFolder: PLATFORM_MIGRATIONS_FOLDER });
   } finally {
     await client.end();
   }

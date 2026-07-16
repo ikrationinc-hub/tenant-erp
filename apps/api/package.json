@@ -14,7 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:tenant:generate": "drizzle-kit generate --config=drizzle.tenant.config.ts",
-    "check:tenant-boundary": "node scripts/check-search-path-boundary.mjs"
+    "check:tenant-boundary": "node scripts/check-search-path-boundary.mjs",
+    "migrate:tenants": "tsx scripts/migrate-tenants.ts"
   },
   "dependencies": {
     "@hyperion/contracts": "workspace:*",
