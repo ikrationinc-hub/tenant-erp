@@ -8,11 +8,13 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsup",
     "start": "node dist/server.js",
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/check-search-path-boundary.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:tenant:generate": "drizzle-kit generate --config=drizzle.tenant.config.ts",
+    "check:tenant-boundary": "node scripts/check-search-path-boundary.mjs"
   },
   "dependencies": {
     "@hyperion/contracts": "workspace:*",

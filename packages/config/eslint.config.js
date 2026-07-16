@@ -15,7 +15,7 @@ export const baseConfig = tseslint.config(
       globals: { ...globals.node },
       parserOptions: {
         projectService: {
-          allowDefaultProject: ["*.config.js", "*.config.ts"],
+          allowDefaultProject: ["*.config.js", "*.config.ts", "scripts/*.mjs"],
         },
         tsconfigRootDir: process.cwd(),
       },
