@@ -1,4 +1,5 @@
 import { createApp } from "./app.js";
+import { closeDbPool } from "./config/db.js";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 
@@ -8,12 +9,12 @@ const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, "api server listening");
 });
 
-function shutdown(signal: string): void {
+async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "shutting down");
-  server.close(() => {
-    process.exit(0);
-  });
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await closeDbPool();
+  process.exit(0);
 }
 
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));

@@ -12,6 +12,12 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "db:generate": "pnpm --filter @hyperion/api db:generate",
+    "db:migrate": "pnpm --filter @hyperion/api db:migrate",
+    "docker:up": "docker compose -f docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f docker/docker-compose.yml down",
+    "docker:ps": "docker compose -f docker/docker-compose.yml ps",
+    "docker:logs": "docker compose -f docker/docker-compose.yml logs -f",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\""
   },
