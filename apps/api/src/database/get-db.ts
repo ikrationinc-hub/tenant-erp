@@ -61,6 +61,25 @@ async function runInTenantTransaction<T>(
   });
 }
 
+/**
+ * Same guarantee as withTenantDb, keyed directly by schema name instead of a
+ * RequestContext. Exists for call sites that legitimately don't have a
+ * resolved RequestContext yet - chiefly login, which is what produces the
+ * JWT a RequestContext's tenantScope would otherwise come from. Prefer
+ * withTenantDb wherever a RequestContext is already available.
+ */
+export async function withTenantSchema<T>(
+  tenantSchemaName: string,
+  fn: (tx: TenantTx) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    return await runInTenantTransaction(client, tenantSchemaName, fn);
+  } finally {
+    client.release();
+  }
+}
+
 export async function withTenantDb<T>(
   ctx: RequestContext,
   fn: (tx: TenantTx) => Promise<T>,
@@ -69,12 +88,7 @@ export async function withTenantDb<T>(
     throw new Error("withTenantDb called without a resolved tenant scope");
   }
 
-  const client = await pool.connect();
-  try {
-    return await runInTenantTransaction(client, ctx.tenantScope.tenantSchema, fn);
-  } finally {
-    client.release();
-  }
+  return withTenantSchema(ctx.tenantScope.tenantSchema, fn);
 }
 
 /**

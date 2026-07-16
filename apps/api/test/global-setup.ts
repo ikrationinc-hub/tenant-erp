@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { Redis } from "ioredis";
 import { Client } from "pg";
 
 // Runs once, before any test file's module graph loads, so process.env is
@@ -44,6 +45,19 @@ export async function setup(): Promise<void> {
     await migrate(migrationDb, { migrationsFolder: PLATFORM_MIGRATIONS_FOLDER });
   } finally {
     await client.end();
+  }
+
+  // Unlike the Postgres container above, Redis is the long-lived
+  // docker-compose instance shared across every local test invocation, not
+  // an ephemeral one - login rate-limit counters, lockout counters, and
+  // denylisted jtis would otherwise accumulate across runs. Flush once,
+  // here, so every test run starts from a clean slate regardless of what a
+  // previous run left behind.
+  const redis = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
+  try {
+    await redis.flushdb();
+  } finally {
+    await redis.quit();
   }
 }
 

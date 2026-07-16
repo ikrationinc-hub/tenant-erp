@@ -9,6 +9,11 @@ export interface TenantScope {
   tenantSchema: string;
   companyId: string;
   branchId?: string;
+  /** The authenticated user (JWT `sub`) and their roles. Optional: some
+   * scopes (e.g. tenant-isolation tests exercising get-db.ts directly) have
+   * no real logged-in user behind them. */
+  userId?: string;
+  roles?: string[];
 }
 
 export interface RequestContext {

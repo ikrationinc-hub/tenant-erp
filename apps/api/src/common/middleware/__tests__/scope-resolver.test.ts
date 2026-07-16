@@ -4,6 +4,7 @@ import request from "supertest";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { db } from "../../../config/db.js";
+import { signAccessToken } from "../../../core/auth/jwt.js";
 import { tenants } from "../../../database/platform/schema.js";
 import { getTenantScope, runWithRequestContext } from "../../context/request-context.js";
 import { errorHandler } from "../error-handler.js";
@@ -16,13 +17,11 @@ const probeResponseSchema = z.object({
       tenantSchema: z.string(),
       companyId: z.string(),
       branchId: z.string().optional(),
+      userId: z.string().optional(),
+      roles: z.array(z.string()).optional(),
     })
     .nullable(),
 });
-
-function encodeStubToken(claims: Record<string, unknown>): string {
-  return Buffer.from(JSON.stringify(claims)).toString("base64url");
-}
 
 function buildTestApp(): express.Express {
   const app = express();
@@ -38,7 +37,7 @@ function buildTestApp(): express.Express {
 }
 
 describe("scopeResolverMiddleware", () => {
-  it("resolves tenant scope from a valid bearer token, from the token only", async () => {
+  it("resolves tenant scope from a valid access token, from the token only", async () => {
     const unique = randomUUID().slice(0, 8);
     const [tenant] = await db
       .insert(tenants)
@@ -54,11 +53,17 @@ describe("scopeResolverMiddleware", () => {
     }
 
     const companyId = randomUUID();
+    const sub = randomUUID();
     const app = buildTestApp();
 
-    const response = await request(app)
-      .get("/probe")
-      .set("Authorization", `Bearer ${encodeStubToken({ tenantId: tenant.id, companyId })}`);
+    const { token } = await signAccessToken({
+      sub,
+      tenant: tenant.id,
+      company_id: companyId,
+      roles: ["purchase.viewer"],
+    });
+
+    const response = await request(app).get("/probe").set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(200);
     const body = probeResponseSchema.parse(response.body);
@@ -66,6 +71,8 @@ describe("scopeResolverMiddleware", () => {
       tenantId: tenant.id,
       tenantSchema: tenant.schemaName,
       companyId,
+      userId: sub,
+      roles: ["purchase.viewer"],
     });
   });
 
@@ -75,15 +82,19 @@ describe("scopeResolverMiddleware", () => {
     expect(response.status).toBe(401);
   });
 
-  it("ignores tenant hints from headers/query and rejects an unknown tenantId", async () => {
+  it("ignores tenant hints from headers/query and rejects an unknown tenant claim", async () => {
     const app = buildTestApp();
+    const { token } = await signAccessToken({
+      sub: randomUUID(),
+      tenant: randomUUID(),
+      company_id: randomUUID(),
+      roles: [],
+    });
+
     const response = await request(app)
       .get("/probe?tenantId=should-be-ignored")
       .set("X-Tenant-Id", "should-also-be-ignored")
-      .set(
-        "Authorization",
-        `Bearer ${encodeStubToken({ tenantId: randomUUID(), companyId: randomUUID() })}`,
-      );
+      .set("Authorization", `Bearer ${token}`);
 
     expect(response.status).toBe(401);
   });
@@ -104,13 +115,21 @@ describe("scopeResolverMiddleware", () => {
     }
 
     const app = buildTestApp();
-    const response = await request(app)
-      .get("/probe")
-      .set(
-        "Authorization",
-        `Bearer ${encodeStubToken({ tenantId: tenant.id, companyId: randomUUID() })}`,
-      );
+    const { token } = await signAccessToken({
+      sub: randomUUID(),
+      tenant: tenant.id,
+      company_id: randomUUID(),
+      roles: [],
+    });
 
+    const response = await request(app).get("/probe").set("Authorization", `Bearer ${token}`);
+
+    expect(response.status).toBe(401);
+  });
+
+  it("rejects a malformed bearer token", async () => {
+    const app = buildTestApp();
+    const response = await request(app).get("/probe").set("Authorization", "Bearer not-a-jwt");
     expect(response.status).toBe(401);
   });
 });

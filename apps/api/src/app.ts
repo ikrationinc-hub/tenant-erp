@@ -5,6 +5,7 @@ import { rateLimit } from "express-rate-limit";
 import { requestContextMiddleware } from "./common/middleware/request-context.middleware.js";
 import { errorHandler } from "./common/middleware/error-handler.js";
 import { healthRouter } from "./modules/health/health.routes.js";
+import { authRouter } from "./modules/auth/auth.routes.js";
 
 export function createApp(): Express {
   const app = express();
@@ -23,6 +24,7 @@ export function createApp(): Express {
   app.use(express.json());
 
   app.use(healthRouter);
+  app.use("/api/v1/auth", authRouter);
 
   app.use(errorHandler);
 

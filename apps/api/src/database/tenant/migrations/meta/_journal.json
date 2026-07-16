@@ -8,6 +8,13 @@
       "when": 1784184483151,
       "tag": "0000_mysterious_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784200075592,
+      "tag": "0001_high_outlaw_kid",
+      "breakpoints": true
     }
   ]
 }
