@@ -196,3 +196,160 @@ export const loginHistoryRelations = relations(loginHistory, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+// --- RBAC ---------------------------------------------------------------
+// permission keys are namespaced module.entity.action, e.g.
+// "purchase.po.approve", "masters.supplier.create". `permissions` is a
+// shared catalogue (no company_id): the same key means the same thing for
+// every company in the tenant. What a company's roles actually grant is
+// role_permissions/field_permissions, which ARE company-scoped (via roles).
+
+/** Seeded catalogue, not user-edited day to day - minimal columns, no soft delete/version. */
+export const permissions = pgTable(
+  "permissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    key: text("key").notNull(),
+    module: text("module").notNull(),
+    entity: text("entity").notNull(),
+    action: text("action").notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("permissions_key_key").on(table.key)],
+);
+
+export const roles = pgTable(
+  "roles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    name: text("name").notNull(),
+    /** System roles (e.g. an auto-created company admin) - not this task's concern to seed, just to mark. */
+    isSystem: boolean("is_system").notNull().default(false),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("roles_company_id_name_key")
+      .on(table.companyId, table.name)
+      .where(sql`${table.deletedAt} is null`),
+  ],
+);
+
+/**
+ * Grant records, not user-edited documents: no updated_by/version, but DO
+ * soft-delete (deleted_at) - "who revoked what and when" is exactly the
+ * segregation-of-duties audit trail the plan doc asks for, and CLAUDE.md's
+ * "no hard deletes" rule doesn't carve out an exception for grants.
+ */
+export const rolePermissions = pgTable(
+  "role_permissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+    permissionId: uuid("permission_id")
+      .notNull()
+      .references(() => permissions.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by").notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("role_permissions_role_id_permission_id_key")
+      .on(table.roleId, table.permissionId)
+      .where(sql`${table.deletedAt} is null`),
+  ],
+);
+
+export const userRoles = pgTable(
+  "user_roles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by").notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("user_roles_user_id_role_id_key")
+      .on(table.userId, table.roleId)
+      .where(sql`${table.deletedAt} is null`),
+  ],
+);
+
+export const fieldPermissions = pgTable(
+  "field_permissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+    module: text("module").notNull(),
+    entity: text("entity").notNull(),
+    fieldKey: text("field_key").notNull(),
+    canView: boolean("can_view").notNull().default(true),
+    canEdit: boolean("can_edit").notNull().default(true),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("field_permissions_role_module_entity_field_key")
+      .on(table.companyId, table.roleId, table.module, table.entity, table.fieldKey)
+      .where(sql`${table.deletedAt} is null`),
+  ],
+);
+
+export const rolesRelations = relations(roles, ({ one, many }) => ({
+  company: one(companies, {
+    fields: [roles.companyId],
+    references: [companies.id],
+  }),
+  rolePermissions: many(rolePermissions),
+  userRoles: many(userRoles),
+  fieldPermissions: many(fieldPermissions),
+}));
+
+export const rolePermissionsRelations = relations(rolePermissions, ({ one }) => ({
+  role: one(roles, {
+    fields: [rolePermissions.roleId],
+    references: [roles.id],
+  }),
+  permission: one(permissions, {
+    fields: [rolePermissions.permissionId],
+    references: [permissions.id],
+  }),
+}));
+
+export const userRolesRelations = relations(userRoles, ({ one }) => ({
+  user: one(users, {
+    fields: [userRoles.userId],
+    references: [users.id],
+  }),
+  role: one(roles, {
+    fields: [userRoles.roleId],
+    references: [roles.id],
+  }),
+}));
+
+export const fieldPermissionsRelations = relations(fieldPermissions, ({ one }) => ({
+  role: one(roles, {
+    fields: [fieldPermissions.roleId],
+    references: [roles.id],
+  }),
+  company: one(companies, {
+    fields: [fieldPermissions.companyId],
+    references: [companies.id],
+  }),
+}));

@@ -8,7 +8,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsup",
     "start": "node dist/server.js",
-    "lint": "eslint . && node scripts/check-search-path-boundary.mjs",
+    "lint": "eslint . && node scripts/check-search-path-boundary.mjs && node scripts/check-rbac-boundary.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",

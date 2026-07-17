@@ -15,6 +15,13 @@
       "when": 1784200075592,
       "tag": "0001_high_outlaw_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784213376626,
+      "tag": "0002_silent_white_tiger",
+      "breakpoints": true
     }
   ]
 }

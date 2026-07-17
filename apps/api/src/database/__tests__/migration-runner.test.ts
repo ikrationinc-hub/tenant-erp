@@ -14,7 +14,11 @@ const TEST_TIMEOUT_MS = 120_000;
 // Every real tenant migration file that exists on disk, in order - kept as a
 // list (not a single constant) because the auth task added a second one
 // on top of the platform-schema task's first.
-const REAL_MIGRATION_VERSIONS = ["0000_mysterious_blindfold", "0001_high_outlaw_kid"];
+const REAL_MIGRATION_VERSIONS = [
+  "0000_mysterious_blindfold",
+  "0001_high_outlaw_kid",
+  "0002_silent_white_tiger",
+];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 
 interface TenantRef {
