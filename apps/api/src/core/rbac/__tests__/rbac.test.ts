@@ -98,6 +98,7 @@ async function issueAccessToken(seed: SeededUser): Promise<string> {
     tenant: seed.tenant.id,
     company_id: seed.companyId,
     roles: [],
+    scope: "full",
   });
   return token;
 }

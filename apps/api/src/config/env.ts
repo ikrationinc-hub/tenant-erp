@@ -17,8 +17,10 @@ const envSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().min(1, "S3_SECRET_ACCESS_KEY is required"),
   S3_BUCKET: z.string().min(1, "S3_BUCKET is required"),
 
-  SMTP_HOST: z.string().min(1, "SMTP_HOST is required"),
-  SMTP_PORT: z.coerce.number().int().positive(),
+  RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
+  MAIL_FROM_ADDRESS: z.string().email("MAIL_FROM_ADDRESS must be a valid email address"),
+  MAIL_FROM_NAME: z.string().min(1, "MAIL_FROM_NAME is required"),
+  APP_BASE_URL: z.string().min(1, "APP_BASE_URL is required"),
 
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 });

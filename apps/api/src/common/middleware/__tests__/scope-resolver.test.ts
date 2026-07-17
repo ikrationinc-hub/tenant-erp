@@ -61,6 +61,7 @@ describe("scopeResolverMiddleware", () => {
       tenant: tenant.id,
       company_id: companyId,
       roles: ["purchase.viewer"],
+      scope: "full",
     });
 
     const response = await request(app).get("/probe").set("Authorization", `Bearer ${token}`);
@@ -89,6 +90,7 @@ describe("scopeResolverMiddleware", () => {
       tenant: randomUUID(),
       company_id: randomUUID(),
       roles: [],
+      scope: "full",
     });
 
     const response = await request(app)
@@ -120,6 +122,7 @@ describe("scopeResolverMiddleware", () => {
       tenant: tenant.id,
       company_id: randomUUID(),
       roles: [],
+      scope: "full",
     });
 
     const response = await request(app).get("/probe").set("Authorization", `Bearer ${token}`);

@@ -18,6 +18,7 @@ const REAL_MIGRATION_VERSIONS = [
   "0000_mysterious_blindfold",
   "0001_high_outlaw_kid",
   "0002_silent_white_tiger",
+  "0003_narrow_moonstone",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

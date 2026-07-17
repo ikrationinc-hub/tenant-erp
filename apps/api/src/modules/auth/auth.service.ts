@@ -12,6 +12,7 @@ import {
   findRefreshTokenById,
   findUserByEmail,
   findUserById,
+  findUserByMobile,
   insertLoginHistory,
   insertRefreshToken,
   markRefreshTokenRotated,
@@ -32,18 +33,29 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
-export interface LoginResult extends AuthTokens {
-  user: {
-    id: string;
-    email: string;
-    name: string;
-    companyId: string;
-  };
+export interface LoginUserSummary {
+  id: string;
+  email: string | null;
+  name: string;
+  companyId: string;
 }
+
+/**
+ * A must-change-password login (task: provisioned users, or anyone else
+ * flagged must_change_password) gets NO refresh token at all - only an
+ * access token scoped to "password_change" (core/auth/jwt.ts,
+ * common/middleware/password-change-scope.ts). Forcing a fresh login after
+ * the password is actually changed is simpler and safer than trying to
+ * keep a long-lived refresh token alive for an account that isn't secured
+ * yet. See docs/adr/0006-user-onboarding.md.
+ */
+export type LoginResult =
+  | (AuthTokens & { mustChangePassword: false; user: LoginUserSummary })
+  | { accessToken: string; mustChangePassword: true; user: LoginUserSummary };
 
 export interface MeResult {
   id: string;
-  email: string;
+  email: string | null;
   name: string;
   companyId: string;
   status: UserRow["status"];
@@ -60,7 +72,8 @@ function invalidCredentialsError(): UnauthorizedError {
   return new UnauthorizedError("Invalid email or password");
 }
 
-async function issueTokenPair(
+/** Exported for modules/users's change-password endpoint - issuing a fresh full-scope pair after a must-change-password reset is the same operation login() uses. */
+export async function issueTokenPair(
   tenantId: string,
   user: Pick<UserRow, "id" | "companyId">,
   tx: TenantTx,
@@ -82,6 +95,7 @@ async function issueTokenPair(
     tenant: tenantId,
     company_id: user.companyId,
     roles: [],
+    scope: "full",
   });
 
   return { accessToken, refreshToken };
@@ -91,23 +105,26 @@ export async function login(input: LoginInput, meta: RequestMeta): Promise<Login
   const tenant = await resolveTenantForLogin(meta.hostname, input.tenantCode);
 
   if (!tenant) {
-    logger.warn({ email: input.email, hostname: meta.hostname }, "login against unresolved tenant");
+    logger.warn({ identifier: input.identifier, hostname: meta.hostname }, "login against unresolved tenant");
     throw invalidCredentialsError();
   }
 
-  if (await isLockedOut(tenant.schemaName, input.email)) {
+  if (await isLockedOut(tenant.schemaName, input.identifier)) {
     throw new UnauthorizedError("Too many failed attempts. Try again later.");
   }
 
   return withTenantSchema(tenant.schemaName, async (tx) => {
-    const user = await findUserByEmail(tx, input.email);
+    // `identifier` may be an email or a mobile number (provisioned ops
+    // users have no email) - email is tried first since it's the common case.
+    const user =
+      (await findUserByEmail(tx, input.identifier)) ?? (await findUserByMobile(tx, input.identifier));
     const passwordOk = await verifyPassword(user?.passwordHash ?? null, input.password);
 
     if (!user || !passwordOk) {
-      await recordLoginFailure(tenant.schemaName, input.email);
+      await recordLoginFailure(tenant.schemaName, input.identifier);
       await insertLoginHistory(tx, {
         ...(user ? { userId: user.id, companyId: user.companyId } : {}),
-        attemptedEmail: input.email,
+        attemptedEmail: input.identifier,
         outcome: "failure",
         reason: user ? "invalid_password" : "unknown_email",
         ...(meta.ip ? { ip: meta.ip } : {}),
@@ -120,7 +137,7 @@ export async function login(input: LoginInput, meta: RequestMeta): Promise<Login
       await insertLoginHistory(tx, {
         userId: user.id,
         companyId: user.companyId,
-        attemptedEmail: input.email,
+        attemptedEmail: input.identifier,
         outcome: "failure",
         reason: `account_${user.status}`,
         ...(meta.ip ? { ip: meta.ip } : {}),
@@ -131,24 +148,49 @@ export async function login(input: LoginInput, meta: RequestMeta): Promise<Login
       );
     }
 
-    await clearLoginFailures(tenant.schemaName, input.email);
+    await clearLoginFailures(tenant.schemaName, input.identifier);
     await touchLastLogin(tx, user.id);
+
+    const userSummary: LoginUserSummary = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      companyId: user.companyId,
+    };
+
+    if (user.mustChangePassword) {
+      const { token: accessToken } = await signAccessToken({
+        sub: user.id,
+        tenant: tenant.id,
+        company_id: user.companyId,
+        roles: [],
+        scope: "password_change",
+      });
+
+      await insertLoginHistory(tx, {
+        userId: user.id,
+        companyId: user.companyId,
+        attemptedEmail: input.identifier,
+        outcome: "success",
+        ...(meta.ip ? { ip: meta.ip } : {}),
+        ...(meta.userAgent ? { userAgent: meta.userAgent } : {}),
+      });
+
+      return { accessToken, mustChangePassword: true, user: userSummary };
+    }
 
     const tokens = await issueTokenPair(tenant.id, user, tx);
 
     await insertLoginHistory(tx, {
       userId: user.id,
       companyId: user.companyId,
-      attemptedEmail: input.email,
+      attemptedEmail: input.identifier,
       outcome: "success",
       ...(meta.ip ? { ip: meta.ip } : {}),
       ...(meta.userAgent ? { userAgent: meta.userAgent } : {}),
     });
 
-    return {
-      ...tokens,
-      user: { id: user.id, email: user.email, name: user.name, companyId: user.companyId },
-    };
+    return { ...tokens, mustChangePassword: false, user: userSummary };
   });
 }
 
@@ -210,6 +252,7 @@ export async function refresh(refreshTokenString: string): Promise<AuthTokens> {
       tenant: tenant.id,
       company_id: user.companyId,
       roles: [],
+      scope: "full",
     });
 
     return { accessToken, refreshToken: newRefreshToken };

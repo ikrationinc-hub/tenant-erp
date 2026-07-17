@@ -44,6 +44,12 @@ export const PERMISSION_CATALOGUE: PermissionCatalogueEntry[] = [
   entry("users", "user", "read", "View users"),
   entry("users", "user", "update", "Edit a user"),
   entry("users", "user", "delete", "Deactivate a user"),
+  entry(
+    "users",
+    "user",
+    "provision",
+    "Provision a user with a temporary password, bypassing the email invite flow (no email address)",
+  ),
 
   entry("roles", "role", "create", "Create a role"),
   entry("roles", "role", "read", "View roles"),

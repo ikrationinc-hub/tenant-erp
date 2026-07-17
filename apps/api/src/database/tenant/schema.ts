@@ -5,6 +5,7 @@ import {
   index,
   inet,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -88,8 +89,13 @@ export const userStatusEnum = pgEnum("user_status", ["invited", "active", "suspe
 
 /**
  * password_hash is NULLABLE: invited users have no password until they set
- * one themselves via a single-use invite link (that flow is not part of
- * this schema/task - only login against an already-active user is).
+ * one themselves via a single-use invite link (core/auth/invite-token.ts,
+ * modules/users). email is also NULLABLE: ops staff provisioned through the
+ * POST /users/provision exception path (task item 4 of user onboarding)
+ * have no email at all and log in by mobile instead - login() tries email
+ * first, falls back to mobile if the supplied identifier isn't shaped like
+ * one. mobile therefore carries the same uniqueness requirement email does,
+ * so "log in by mobile" can never be ambiguous about which user it means.
  */
 export const users = pgTable(
   "users",
@@ -98,7 +104,7 @@ export const users = pgTable(
     companyId: uuid("company_id")
       .notNull()
       .references(() => companies.id, { onDelete: "restrict" }),
-    email: text("email").notNull(),
+    email: text("email"),
     mobile: text("mobile").notNull(),
     passwordHash: text("password_hash"),
     name: text("name").notNull(),
@@ -109,7 +115,10 @@ export const users = pgTable(
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     ...auditColumns(),
   },
-  (table) => [uniqueIndex("users_email_key").on(table.email).where(sql`${table.deletedAt} is null`)],
+  (table) => [
+    uniqueIndex("users_email_key").on(table.email).where(sql`${table.deletedAt} is null`),
+    uniqueIndex("users_mobile_key").on(table.mobile).where(sql`${table.deletedAt} is null`),
+  ],
 );
 
 /**
@@ -351,5 +360,103 @@ export const fieldPermissionsRelations = relations(fieldPermissions, ({ one }) =
   company: one(companies, {
     fields: [fieldPermissions.companyId],
     references: [companies.id],
+  }),
+}));
+
+// --- User onboarding ------------------------------------------------------
+
+export const invitationStatusEnum = pgEnum("invitation_status", ["pending", "accepted", "revoked"]);
+
+/**
+ * Single-use, email-delivered invite tokens (admins never set passwords -
+ * see docs/adr/0006-user-onboarding.md). Only `token_hash` is ever stored;
+ * the raw token exists only in the email and the invitee's URL, exactly
+ * like a password - a DB read alone must never be enough to redeem an
+ * invitation. `roles` is the intent captured at invite time; the actual
+ * user_roles rows are only inserted once the invitation is accepted.
+ *
+ * Not on the generic auditColumns() convention: an invitation is a
+ * short-lived, three-state workflow object (pending -> accepted | revoked),
+ * not a versioned business document - "expired" is deliberately NOT a
+ * fourth persisted status (nothing proactively transitions it), it's
+ * computed at read time by comparing expires_at to now().
+ */
+export const invitations = pgTable(
+  "invitations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    email: text("email").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    roles: jsonb("roles").$type<string[]>().notNull().default([]),
+    invitedBy: uuid("invited_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    status: invitationStatusEnum("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("invitations_token_hash_key").on(table.tokenHash),
+    uniqueIndex("invitations_company_id_email_pending_key")
+      .on(table.companyId, table.email)
+      .where(sql`${table.status} = 'pending'`),
+  ],
+);
+
+export const invitationsRelations = relations(invitations, ({ one }) => ({
+  company: one(companies, {
+    fields: [invitations.companyId],
+    references: [companies.id],
+  }),
+  invitedByUser: one(users, {
+    fields: [invitations.invitedBy],
+    references: [users.id],
+  }),
+}));
+
+/**
+ * Append-only (rule 6/8: audit writes happen inside the business
+ * transaction, and are themselves immutable) - same non-generic-audit-
+ * columns shape as login_history/permissions above, for the same reason: a
+ * log entry is never edited, versioned, or soft-deleted. Deliberately
+ * generic (entity/entity_id/action/metadata) rather than one table per
+ * event type, since this task's only requirement is "record who
+ * provisioned a user" - broader audit-log consumers can filter on `entity`.
+ */
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    entity: text("entity").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    action: text("action").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("audit_logs_entity_entity_id_idx").on(table.entity, table.entityId),
+    index("audit_logs_actor_id_idx").on(table.actorId),
+  ],
+);
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  company: one(companies, {
+    fields: [auditLogs.companyId],
+    references: [companies.id],
+  }),
+  actor: one(users, {
+    fields: [auditLogs.actorId],
+    references: [users.id],
   }),
 }));

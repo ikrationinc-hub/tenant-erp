@@ -46,6 +46,7 @@ export async function scopeResolverMiddleware(
       companyId: claims.company_id,
       userId: claims.sub,
       roles: claims.roles,
+      scope: claims.scope,
       ...(claims.branch_id ? { branchId: claims.branch_id } : {}),
     });
 

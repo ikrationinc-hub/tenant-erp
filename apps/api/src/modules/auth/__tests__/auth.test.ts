@@ -129,7 +129,7 @@ describe("auth: login/refresh/logout/me", () => {
 
       const loginRes = await request(app())
         .post("/api/v1/auth/login")
-        .send({ email: seed.email, password: KNOWN_PASSWORD, tenantCode: seed.tenant.slug });
+        .send({ identifier: seed.email, password: KNOWN_PASSWORD, tenantCode: seed.tenant.slug });
 
       expect(loginRes.status).toBe(200);
       const login = asLogin(loginRes);
@@ -157,7 +157,7 @@ describe("auth: login/refresh/logout/me", () => {
 
       const res = await request(app())
         .post("/api/v1/auth/login")
-        .send({ email: seed.email, password: "not-the-password", tenantCode: seed.tenant.slug });
+        .send({ identifier: seed.email, password: "not-the-password", tenantCode: seed.tenant.slug });
 
       expect(res.status).toBe(401);
       expect(asError(res).error.message).toBe("Invalid email or password");
@@ -172,12 +172,12 @@ describe("auth: login/refresh/logout/me", () => {
 
       const wrongPasswordRes = await request(app())
         .post("/api/v1/auth/login")
-        .send({ email: seed.email, password: "not-the-password", tenantCode: seed.tenant.slug });
+        .send({ identifier: seed.email, password: "not-the-password", tenantCode: seed.tenant.slug });
 
       const unknownEmailRes = await request(app())
         .post("/api/v1/auth/login")
         .send({
-          email: `does-not-exist-${randomUUID()}@example.com`,
+          identifier: `does-not-exist-${randomUUID()}@example.com`,
           password: "whatever",
           tenantCode: seed.tenant.slug,
         });
@@ -210,7 +210,7 @@ describe("auth: login/refresh/logout/me", () => {
           await tx.insert(users).values({
             companyId: seed.companyId,
             email,
-            mobile: "+10000000000",
+            mobile: `+1555${String(i).padStart(7, "0")}`,
             passwordHash: await hashPassword(KNOWN_PASSWORD),
             name: `Timing User ${i}`,
             status: "active",
@@ -225,7 +225,7 @@ describe("auth: login/refresh/logout/me", () => {
         const start = performance.now();
         await request(app())
           .post("/api/v1/auth/login")
-          .send({ email, password, tenantCode: seed.tenant.slug });
+          .send({ identifier: email, password, tenantCode: seed.tenant.slug });
         return performance.now() - start;
       }
 
@@ -259,7 +259,7 @@ describe("auth: login/refresh/logout/me", () => {
       const seed = await seedTenantWithActiveUser("rotation");
       const loginRes = await request(app())
         .post("/api/v1/auth/login")
-        .send({ email: seed.email, password: KNOWN_PASSWORD, tenantCode: seed.tenant.slug });
+        .send({ identifier: seed.email, password: KNOWN_PASSWORD, tenantCode: seed.tenant.slug });
       const login = asLogin(loginRes);
 
       const firstRefreshRes = await request(app())
@@ -287,7 +287,7 @@ describe("auth: login/refresh/logout/me", () => {
       const seed = await seedTenantWithActiveUser("reuse");
       const loginRes = await request(app())
         .post("/api/v1/auth/login")
-        .send({ email: seed.email, password: KNOWN_PASSWORD, tenantCode: seed.tenant.slug });
+        .send({ identifier: seed.email, password: KNOWN_PASSWORD, tenantCode: seed.tenant.slug });
       const login = asLogin(loginRes);
 
       const firstRefreshRes = await request(app())
@@ -341,7 +341,7 @@ describe("auth: login/refresh/logout/me", () => {
       const seed = await seedTenantWithActiveUser("logout");
       const loginRes = await request(app())
         .post("/api/v1/auth/login")
-        .send({ email: seed.email, password: KNOWN_PASSWORD, tenantCode: seed.tenant.slug });
+        .send({ identifier: seed.email, password: KNOWN_PASSWORD, tenantCode: seed.tenant.slug });
       const login = asLogin(loginRes);
 
       const meBefore = await request(app())
@@ -408,7 +408,7 @@ describe("auth: login/refresh/logout/me", () => {
 
       const loginRes = await request(app())
         .post("/api/v1/auth/login")
-        .send({ email: tenantA.email, password: KNOWN_PASSWORD, tenantCode: tenantA.tenant.slug });
+        .send({ identifier: tenantA.email, password: KNOWN_PASSWORD, tenantCode: tenantA.tenant.slug });
       expect(loginRes.status).toBe(200);
       const login = asLogin(loginRes);
 
@@ -434,7 +434,7 @@ describe("auth: login/refresh/logout/me", () => {
       const res = await request(app())
         .post("/api/v1/auth/login")
         .set("Host", `${seed.tenant.slug}.hyperion-erp.example.com`)
-        .send({ email: seed.email, password: KNOWN_PASSWORD });
+        .send({ identifier: seed.email, password: KNOWN_PASSWORD });
 
       expect(res.status).toBe(200);
       expect(asLogin(res).user.id).toBe(seed.userId);
@@ -451,18 +451,18 @@ describe("auth: login/refresh/logout/me", () => {
       for (let i = 0; i < 5; i += 1) {
         await request(app())
           .post("/api/v1/auth/login")
-          .send({ email: seed.email, password: "wrong", tenantCode: seed.tenant.slug });
+          .send({ identifier: seed.email, password: "wrong", tenantCode: seed.tenant.slug });
         await request(app())
           .post("/api/v1/auth/login")
-          .send({ email: fakeEmail, password: "wrong", tenantCode: seed.tenant.slug });
+          .send({ identifier: fakeEmail, password: "wrong", tenantCode: seed.tenant.slug });
       }
 
       const realEmailLockedOut = await request(app())
         .post("/api/v1/auth/login")
-        .send({ email: seed.email, password: KNOWN_PASSWORD, tenantCode: seed.tenant.slug });
+        .send({ identifier: seed.email, password: KNOWN_PASSWORD, tenantCode: seed.tenant.slug });
       const fakeEmailLockedOut = await request(app())
         .post("/api/v1/auth/login")
-        .send({ email: fakeEmail, password: "wrong", tenantCode: seed.tenant.slug });
+        .send({ identifier: fakeEmail, password: "wrong", tenantCode: seed.tenant.slug });
 
       expect(realEmailLockedOut.status).toBe(401);
       expect(fakeEmailLockedOut.status).toBe(401);

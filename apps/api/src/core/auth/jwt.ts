@@ -16,12 +16,22 @@ const refreshSecret = new TextEncoder().encode(env.JWT_REFRESH_SECRET);
  * request. `exp`/`iat` are declared explicitly (not left to zod's default
  * key-stripping) because logout needs `exp` to size the denylist TTL.
  */
+/**
+ * `scope: "password_change"` is minted only for a must-change-password
+ * login (see auth.service.ts's login()) and is enforced by
+ * common/middleware/password-change-scope.ts on every other protected
+ * route - task requirement "a token scoped to the password-change endpoint
+ * only." Required, not optional-with-a-default: every call site states its
+ * intent explicitly, matching how `roles` is always passed explicitly below
+ * even before RBAC was wired into token issuance.
+ */
 const accessTokenClaimsSchema = z.object({
   sub: z.string().uuid(),
   tenant: z.string().uuid(),
   company_id: z.string().uuid(),
   branch_id: z.string().uuid().optional(),
   roles: z.array(z.string()),
+  scope: z.enum(["full", "password_change"]),
   jti: z.string().uuid(),
   exp: z.number(),
   iat: z.number(),

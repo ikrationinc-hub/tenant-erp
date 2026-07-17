@@ -6,6 +6,8 @@ import { requestContextMiddleware } from "./common/middleware/request-context.mi
 import { errorHandler } from "./common/middleware/error-handler.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { invitationsRouter } from "./modules/users/invitations.routes.js";
+import { usersRouter } from "./modules/users/users.routes.js";
 
 export function createApp(): Express {
   const app = express();
@@ -25,6 +27,8 @@ export function createApp(): Express {
 
   app.use(healthRouter);
   app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/users", usersRouter);
+  app.use("/api/v1/invitations", invitationsRouter);
 
   app.use(errorHandler);
 

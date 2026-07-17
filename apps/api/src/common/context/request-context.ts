@@ -14,6 +14,14 @@ export interface TenantScope {
    * no real logged-in user behind them. */
   userId?: string;
   roles?: string[];
+  /**
+   * The access token's own `scope` claim ("full" | "password_change") -
+   * NOT to be confused with TenantScope itself. "password_change" means
+   * every route except the password-change endpoint must reject the
+   * request (common/middleware/password-change-scope.ts). Optional for the
+   * same reason userId is: some scopes have no real token behind them.
+   */
+  scope?: "full" | "password_change";
 }
 
 export interface RequestContext {

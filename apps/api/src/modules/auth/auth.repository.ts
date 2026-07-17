@@ -16,6 +16,16 @@ export async function findUserByEmail(tx: TenantTx, email: string): Promise<User
   return user;
 }
 
+/** Login fallback for users with no email (provisioned ops staff) - see users_mobile_key in schema.ts. */
+export async function findUserByMobile(tx: TenantTx, mobile: string): Promise<UserRow | undefined> {
+  const [user] = await tx
+    .select()
+    .from(users)
+    .where(and(eq(users.mobile, mobile), isNull(users.deletedAt)))
+    .limit(1);
+  return user;
+}
+
 export async function findUserById(tx: TenantTx, id: string): Promise<UserRow | undefined> {
   const [user] = await tx
     .select()
