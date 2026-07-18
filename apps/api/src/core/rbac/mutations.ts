@@ -1,4 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
+import { insertAuditLog } from "../audit/write.js";
 import { withTenantSchema } from "../../database/get-db.js";
 import { fieldPermissions, roles, rolePermissions, userRoles } from "../../database/tenant/schema.js";
 import { bumpRoleVersion } from "./cache.js";
@@ -10,6 +11,10 @@ import { bumpRoleVersion } from "./cache.js";
  * (task requirement: "a role change takes effect immediately, not after
  * TTL"). Nothing outside this file should ever write to roles,
  * role_permissions, user_roles, or field_permissions.
+ *
+ * Each is also now an audited "permission change" (numbering/audit task,
+ * CLAUDE.md rule 6): the audit write happens inside the same
+ * withTenantSchema transaction as the mutation itself, never after.
  */
 
 export interface CreateRoleInput {
@@ -21,8 +26,8 @@ export interface CreateRoleInput {
 }
 
 export async function createRole(input: CreateRoleInput): Promise<typeof roles.$inferSelect> {
-  const [role] = await withTenantSchema(input.schemaName, (tx) =>
-    tx
+  const role = await withTenantSchema(input.schemaName, async (tx) => {
+    const [inserted] = await tx
       .insert(roles)
       .values({
         companyId: input.companyId,
@@ -30,11 +35,22 @@ export async function createRole(input: CreateRoleInput): Promise<typeof roles.$
         isSystem: input.isSystem ?? false,
         createdBy: input.createdBy,
       })
-      .returning(),
-  );
-  if (!role) {
-    throw new Error("failed to insert role");
-  }
+      .returning();
+    if (!inserted) {
+      throw new Error("failed to insert role");
+    }
+
+    await insertAuditLog(tx, {
+      companyId: input.companyId,
+      changedBy: input.createdBy,
+      entity: "role",
+      entityId: inserted.id,
+      action: "role.created",
+      after: { name: input.name, isSystem: input.isSystem ?? false },
+    });
+
+    return inserted;
+  });
   await bumpRoleVersion(input.companyId);
   return role;
 }
@@ -46,9 +62,17 @@ export async function assignRoleToUser(
   roleId: string,
   createdBy: string,
 ): Promise<void> {
-  await withTenantSchema(schemaName, (tx) =>
-    tx.insert(userRoles).values({ userId, roleId, createdBy }),
-  );
+  await withTenantSchema(schemaName, async (tx) => {
+    await tx.insert(userRoles).values({ userId, roleId, createdBy });
+    await insertAuditLog(tx, {
+      companyId,
+      changedBy: createdBy,
+      entity: "user_role",
+      entityId: userId,
+      action: "role.assigned",
+      after: { userId, roleId },
+    });
+  });
   await bumpRoleVersion(companyId);
 }
 
@@ -57,15 +81,24 @@ export async function revokeRoleFromUser(
   companyId: string,
   userId: string,
   roleId: string,
+  revokedBy: string,
 ): Promise<void> {
-  await withTenantSchema(schemaName, (tx) =>
-    tx
+  await withTenantSchema(schemaName, async (tx) => {
+    await tx
       .update(userRoles)
       .set({ deletedAt: new Date() })
       .where(
         and(eq(userRoles.userId, userId), eq(userRoles.roleId, roleId), isNull(userRoles.deletedAt)),
-      ),
-  );
+      );
+    await insertAuditLog(tx, {
+      companyId,
+      changedBy: revokedBy,
+      entity: "user_role",
+      entityId: userId,
+      action: "role.revoked",
+      before: { userId, roleId },
+    });
+  });
   await bumpRoleVersion(companyId);
 }
 
@@ -76,9 +109,17 @@ export async function grantPermissionToRole(
   permissionId: string,
   createdBy: string,
 ): Promise<void> {
-  await withTenantSchema(schemaName, (tx) =>
-    tx.insert(rolePermissions).values({ roleId, permissionId, createdBy }),
-  );
+  await withTenantSchema(schemaName, async (tx) => {
+    await tx.insert(rolePermissions).values({ roleId, permissionId, createdBy });
+    await insertAuditLog(tx, {
+      companyId,
+      changedBy: createdBy,
+      entity: "role_permission",
+      entityId: roleId,
+      action: "permission.granted",
+      after: { roleId, permissionId },
+    });
+  });
   await bumpRoleVersion(companyId);
 }
 
@@ -87,9 +128,10 @@ export async function revokePermissionFromRole(
   companyId: string,
   roleId: string,
   permissionId: string,
+  revokedBy: string,
 ): Promise<void> {
-  await withTenantSchema(schemaName, (tx) =>
-    tx
+  await withTenantSchema(schemaName, async (tx) => {
+    await tx
       .update(rolePermissions)
       .set({ deletedAt: new Date() })
       .where(
@@ -98,8 +140,16 @@ export async function revokePermissionFromRole(
           eq(rolePermissions.permissionId, permissionId),
           isNull(rolePermissions.deletedAt),
         ),
-      ),
-  );
+      );
+    await insertAuditLog(tx, {
+      companyId,
+      changedBy: revokedBy,
+      entity: "role_permission",
+      entityId: roleId,
+      action: "permission.revoked",
+      before: { roleId, permissionId },
+    });
+  });
   await bumpRoleVersion(companyId);
 }
 
@@ -118,6 +168,20 @@ export interface SetFieldPermissionInput {
 /** Upsert: soft-revokes any existing row for this (role, module, entity, field) and inserts the new rule. */
 export async function setFieldPermission(input: SetFieldPermissionInput): Promise<void> {
   await withTenantSchema(input.schemaName, async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(fieldPermissions)
+      .where(
+        and(
+          eq(fieldPermissions.companyId, input.companyId),
+          eq(fieldPermissions.roleId, input.roleId),
+          eq(fieldPermissions.module, input.module),
+          eq(fieldPermissions.entity, input.entity),
+          eq(fieldPermissions.fieldKey, input.fieldKey),
+          isNull(fieldPermissions.deletedAt),
+        ),
+      );
+
     await tx
       .update(fieldPermissions)
       .set({ deletedAt: new Date() })
@@ -141,6 +205,22 @@ export async function setFieldPermission(input: SetFieldPermissionInput): Promis
       canView: input.canView,
       canEdit: input.canEdit,
       createdBy: input.createdBy,
+    });
+
+    await insertAuditLog(tx, {
+      companyId: input.companyId,
+      changedBy: input.createdBy,
+      entity: "field_permission",
+      entityId: input.roleId,
+      action: "field_permission.set",
+      ...(existing ? { before: { canView: existing.canView, canEdit: existing.canEdit } } : {}),
+      after: {
+        module: input.module,
+        entity: input.entity,
+        fieldKey: input.fieldKey,
+        canView: input.canView,
+        canEdit: input.canEdit,
+      },
     });
   });
   await bumpRoleVersion(input.companyId);

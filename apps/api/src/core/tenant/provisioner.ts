@@ -3,6 +3,8 @@ import { db } from "../../config/db.js";
 import { applyPendingTenantMigrations } from "../../database/migration-runner.js";
 import { tenants } from "../../database/platform/schema.js";
 import { slugToTenantSchemaName } from "../../database/tenant/schema-name.js";
+import { RESOLVED_MODULES } from "../module-registry/registry.js";
+import { seedTenantModules } from "../module-registry/tenant-modules.js";
 import { seedPermissionCatalogue } from "../rbac/seed.js";
 
 export interface CreateTenantSchemaInput {
@@ -34,6 +36,7 @@ export async function createTenantSchema(input: CreateTenantSchemaInput): Promis
 
   await applyPendingTenantMigrations(schemaName);
   await seedPermissionCatalogue(schemaName);
+  await seedTenantModules(tenant.id, RESOLVED_MODULES);
 
   const [activated] = await db
     .update(tenants)

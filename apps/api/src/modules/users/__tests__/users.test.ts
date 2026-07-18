@@ -168,13 +168,13 @@ async function seedTenantWithAdmin(label: string, permissionKeys: string[]): Pro
     schemaName: tenant.schemaName,
     companyId,
     name: `${label}-admin-role`,
-    createdBy: randomUUID(),
+    createdBy: adminUserId,
   });
-  await assignRoleToUser(tenant.schemaName, companyId, adminUserId, role.id, randomUUID());
+  await assignRoleToUser(tenant.schemaName, companyId, adminUserId, role.id, adminUserId);
 
   for (const key of permissionKeys) {
     const permissionId = await findPermissionId(tenant.schemaName, key);
-    await grantPermissionToRole(tenant.schemaName, companyId, role.id, permissionId, randomUUID());
+    await grantPermissionToRole(tenant.schemaName, companyId, role.id, permissionId, adminUserId);
   }
 
   // The seeded admin has no password set (invite/provision are what we're
@@ -355,7 +355,7 @@ describe("user onboarding: invitations, provisioning, password-change scope", ()
         schemaName: admin.tenant.schemaName,
         companyId: admin.companyId,
         name: "Approver",
-        createdBy: randomUUID(),
+        createdBy: admin.adminUserId,
       });
       const approvePermissionId = await findPermissionId(admin.tenant.schemaName, "purchase.po.approve");
       await grantPermissionToRole(
@@ -363,7 +363,7 @@ describe("user onboarding: invitations, provisioning, password-change scope", ()
         admin.companyId,
         approverRole.id,
         approvePermissionId,
-        randomUUID(),
+        admin.adminUserId,
       );
 
       const res = await request(app())

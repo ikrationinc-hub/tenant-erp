@@ -9,13 +9,19 @@ const RESOLVED_TTL_SECONDS = 60 * 60;
  * role_version is tracked per COMPANY, not per user: roles/permissions are
  * company-scoped, and a single role edit can affect every user holding
  * that role. Bumping one counter invalidates all of them at once, with no
- * need to enumerate which users are affected. Missing key = version 1,
- * matching a first-ever INCR's result, so the two paths agree on the
- * starting point for a company that's never had a change.
+ * need to enumerate which users are affected. Missing key = version 0,
+ * NOT 1: Redis's INCR on a missing key sets it to 1, so if "missing" and
+ * "post-first-bump" both read as 1, a company's very first-ever role
+ * change would be invisible to the cache key (same version before and
+ * after), leaving a stale cached result live under the "new" version too.
+ * This was a real bug, caught by an equivalent single-bump test in
+ * core/menu-engine/cache.ts before it was fixed here too - 0 as the
+ * missing-key baseline means the first bump (0 -> 1 via INCR) is always a
+ * genuine, cache-key-visible transition.
  */
 export async function getRoleVersion(companyId: string): Promise<number> {
   const value = await redis.get(`${VERSION_PREFIX}${companyId}`);
-  return value === null ? 1 : Number(value);
+  return value === null ? 0 : Number(value);
 }
 
 /** Called by every core/rbac mutation on a successful DB change - never anywhere else. */

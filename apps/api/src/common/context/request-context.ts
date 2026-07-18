@@ -27,6 +27,9 @@ export interface TenantScope {
 export interface RequestContext {
   requestId: string;
   tenantScope?: TenantScope;
+  /** Populated once by request-context.middleware.ts - read by core/audit/write.ts so callers never have to thread these through every insertAuditLog call. */
+  ip?: string;
+  userAgent?: string;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();

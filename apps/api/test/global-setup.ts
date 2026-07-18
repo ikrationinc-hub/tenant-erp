@@ -24,6 +24,15 @@ export async function setup(): Promise<void> {
   container = await new PostgreSqlContainer("postgres:17").start();
 
   process.env.DATABASE_URL = container.getConnectionUri();
+  // Points at the same database as a different (deliberately restricted,
+  // non-superuser) role - core/database/migration-runner.ts creates this
+  // role and grants it privileges automatically the first time tenant
+  // migrations run against this container, same as it would against the
+  // docker-compose Postgres in dev.
+  const appUrl = new URL(container.getConnectionUri());
+  appUrl.username = "hyperion_app";
+  appUrl.password = "test-hyperion-app-password";
+  process.env.DATABASE_APP_URL = appUrl.toString();
   process.env.REDIS_URL ??= "redis://localhost:6380";
   process.env.JWT_ACCESS_SECRET ??= "test-access-secret-at-least-32-characters-long";
   process.env.JWT_REFRESH_SECRET ??= "test-refresh-secret-at-least-32-characters-long";

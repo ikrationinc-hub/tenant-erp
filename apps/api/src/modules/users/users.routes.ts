@@ -1,14 +1,18 @@
 import { Router } from "express";
 import { enforcePasswordChangeScope } from "../../common/middleware/password-change-scope.js";
+import { requireModuleEnabled } from "../../common/middleware/require-module-enabled.js";
 import { requirePermission } from "../../common/middleware/rbac.js";
 import { scopeResolverMiddleware } from "../../common/middleware/scope-resolver.js";
 import * as usersController from "./users.controller.js";
 
 export const usersRouter: Router = Router();
 
+const requireUsersModule = requireModuleEnabled("users");
+
 usersRouter.post(
   "/invite",
   scopeResolverMiddleware,
+  requireUsersModule,
   enforcePasswordChangeScope,
   requirePermission("users.user.create"),
   usersController.invite,
@@ -17,6 +21,7 @@ usersRouter.post(
 usersRouter.post(
   "/provision",
   scopeResolverMiddleware,
+  requireUsersModule,
   enforcePasswordChangeScope,
   requirePermission("users.user.provision"),
   usersController.provision,
@@ -25,6 +30,7 @@ usersRouter.post(
 usersRouter.post(
   "/invitations/:id/resend",
   scopeResolverMiddleware,
+  requireUsersModule,
   enforcePasswordChangeScope,
   requirePermission("users.user.create"),
   usersController.resendInvitation,
@@ -33,14 +39,17 @@ usersRouter.post(
 usersRouter.post(
   "/invitations/:id/revoke",
   scopeResolverMiddleware,
+  requireUsersModule,
   enforcePasswordChangeScope,
   requirePermission("users.user.create"),
   usersController.revokeInvitation,
 );
 
 /**
- * No enforcePasswordChangeScope here, deliberately: this IS the one
- * endpoint a "password_change"-scoped token is allowed to reach (task
- * requirement). Works for a normal "full"-scoped session too.
+ * No enforcePasswordChangeScope OR requireModuleEnabled here, deliberately:
+ * this IS the one endpoint a "password_change"-scoped token is allowed to
+ * reach (task requirement), and self-service password changes are
+ * foundational account management, not a "users" administration feature a
+ * tenant would toggle off. Works for a normal "full"-scoped session too.
  */
 usersRouter.post("/me/password", scopeResolverMiddleware, usersController.changePassword);

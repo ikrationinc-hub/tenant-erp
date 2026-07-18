@@ -19,6 +19,10 @@ const REAL_MIGRATION_VERSIONS = [
   "0001_high_outlaw_kid",
   "0002_silent_white_tiger",
   "0003_narrow_moonstone",
+  "0004_cute_purifiers",
+  "0005_furry_kingpin",
+  "0006_sad_trish_tilby",
+  "0007_tiresome_blob",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

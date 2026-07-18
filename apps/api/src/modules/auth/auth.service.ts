@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { UnauthorizedError } from "../../common/errors/index.js";
 import type { RequestContext } from "../../common/context/request-context.js";
+import { insertAuditLog } from "../../core/audit/write.js";
 import { denylistJti } from "../../core/auth/denylist.js";
 import { REFRESH_TOKEN_TTL_MS, signAccessToken, signRefreshToken, verifyRefreshToken } from "../../core/auth/jwt.js";
 import { clearLoginFailures, isLockedOut, recordLoginFailure } from "../../core/auth/login-rate-limit.js";
@@ -130,6 +131,19 @@ export async function login(input: LoginInput, meta: RequestMeta): Promise<Login
         ...(meta.ip ? { ip: meta.ip } : {}),
         ...(meta.userAgent ? { userAgent: meta.userAgent } : {}),
       });
+      // Only when a real account was targeted - an unknown-email attempt has
+      // no entity to attach the record to, and login_history above already
+      // captures it for the anti-enumeration lockout story.
+      if (user) {
+        await insertAuditLog(tx, {
+          companyId: user.companyId,
+          changedBy: user.id,
+          entity: "auth",
+          entityId: user.id,
+          action: "auth.login_failed",
+          after: { reason: "invalid_password" },
+        });
+      }
       throw invalidCredentialsError();
     }
 
@@ -142,6 +156,14 @@ export async function login(input: LoginInput, meta: RequestMeta): Promise<Login
         reason: `account_${user.status}`,
         ...(meta.ip ? { ip: meta.ip } : {}),
         ...(meta.userAgent ? { userAgent: meta.userAgent } : {}),
+      });
+      await insertAuditLog(tx, {
+        companyId: user.companyId,
+        changedBy: user.id,
+        entity: "auth",
+        entityId: user.id,
+        action: "auth.login_failed",
+        after: { reason: `account_${user.status}` },
       });
       throw new UnauthorizedError(
         user.status === "invited" ? "Account has not been activated yet" : "Account is suspended",
@@ -175,11 +197,28 @@ export async function login(input: LoginInput, meta: RequestMeta): Promise<Login
         ...(meta.ip ? { ip: meta.ip } : {}),
         ...(meta.userAgent ? { userAgent: meta.userAgent } : {}),
       });
+      await insertAuditLog(tx, {
+        companyId: user.companyId,
+        changedBy: user.id,
+        entity: "auth",
+        entityId: user.id,
+        action: "auth.login_succeeded",
+        after: { mustChangePassword: true },
+      });
 
       return { accessToken, mustChangePassword: true, user: userSummary };
     }
 
     const tokens = await issueTokenPair(tenant.id, user, tx);
+
+    await insertAuditLog(tx, {
+      companyId: user.companyId,
+      changedBy: user.id,
+      entity: "auth",
+      entityId: user.id,
+      action: "auth.login_succeeded",
+      after: { mustChangePassword: false },
+    });
 
     await insertLoginHistory(tx, {
       userId: user.id,

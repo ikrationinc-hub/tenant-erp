@@ -26,8 +26,18 @@ export type TenantTx = Parameters<TenantDb["transaction"]>[0] extends (
   ? Tx
   : never;
 
+/**
+ * Every normal business query goes through this pool, connected as
+ * DATABASE_APP_URL's role (hyperion_app) - NOT DATABASE_URL's superuser.
+ * This is what makes core/audit's REVOKE UPDATE/DELETE on audit_logs mean
+ * anything: a superuser bypasses every ACL check, so the connection this
+ * app actually queries through must not be one. withTenantSchemaAdmin
+ * below (migrations, tenant provisioning) deliberately keeps using
+ * DATABASE_URL's superuser instead, since creating schemas/tables/roles/
+ * grants needs the elevated role. See docs/adr/0007-numbering-and-audit.md.
+ */
 const pool = new Pool({
-  connectionString: env.DATABASE_URL,
+  connectionString: env.DATABASE_APP_URL,
   max: 20,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,

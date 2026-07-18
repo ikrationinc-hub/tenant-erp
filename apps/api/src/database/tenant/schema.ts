@@ -1,5 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   index,
@@ -8,8 +9,10 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -420,33 +423,58 @@ export const invitationsRelations = relations(invitations, ({ one }) => ({
 }));
 
 /**
- * Append-only (rule 6/8: audit writes happen inside the business
- * transaction, and are themselves immutable) - same non-generic-audit-
- * columns shape as login_history/permissions above, for the same reason: a
- * log entry is never edited, versioned, or soft-deleted. Deliberately
- * generic (entity/entity_id/action/metadata) rather than one table per
- * event type, since this task's only requirement is "record who
- * provisioned a user" - broader audit-log consumers can filter on `entity`.
+ * Append-only and, as of the partitioning/immutability hardening task,
+ * enforced as such at the DB level - not just by convention: a migration
+ * REVOKEs UPDATE/DELETE on this table from hyperion_app (the role every
+ * normal query runs as; see get-db.ts and migration-runner.ts's
+ * ensureAppRoleGrants), so no repository code, however buggy, can ever
+ * mutate a written row. No updated_at/deleted_at/version for the same
+ * reason login_history/permissions omit them - there is nothing to version,
+ * an audit entry is never edited.
+ *
+ * `company_id`/`changed_by` are nullable, mirroring login_history's own
+ * precedent: a login attempt against an unknown email resolves neither a
+ * user nor that user's company, but the attempt itself still needs a
+ * home. (An attempt where the tenant itself can't even be resolved has
+ * nowhere to be written at all - there is no schema to write into - so
+ * that case is logged only via logger.warn, same as before this task.)
+ *
+ * PARTITION BY RANGE (changed_at), monthly, from the very first migration
+ * that creates this table (migrations/0006_sad_trish_tilby.sql, which also
+ * creates a DEFAULT partition as a catch-all) - this is expected to become
+ * the largest table in the system, and partitioning it after the fact,
+ * once it's large, is exactly the kind of operation you do NOT want to be
+ * doing under pressure. Specific monthly partitions are created and kept
+ * topped up by migration-runner.ts's ensureAuditLogPartitions, via the
+ * admin connection (see core/audit/write.ts's doc comment for why this
+ * can't run through the app's normal restricted connection). drizzle-kit's
+ * schema DSL can't express PARTITION BY, so the actual CREATE TABLE lives
+ * in a hand-written migration; this pgTable definition exists for query-
+ * building/type-safety against the partitioned parent, which behaves like
+ * a normal table for every DML statement the app issues.
  */
 export const auditLogs = pgTable(
   "audit_logs",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id")
-      .notNull()
-      .references(() => companies.id, { onDelete: "restrict" }),
-    actorId: uuid("actor_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+    id: uuid("id").notNull().defaultRandom(),
+    companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
     entity: text("entity").notNull(),
     entityId: uuid("entity_id").notNull(),
     action: text("action").notNull(),
-    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    before: jsonb("before").$type<Record<string, unknown>>(),
+    after: jsonb("after").$type<Record<string, unknown>>(),
+    changedBy: uuid("changed_by").references(() => users.id, { onDelete: "set null" }),
+    /** The partition key - every partition-scoped statement filters/creates on this. */
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+    /** text, not uuid: requestId can be client-supplied via the X-Request-Id header (request-context.middleware.ts), never validated as UUID-shaped. */
+    requestId: text("request_id"),
+    ip: inet("ip"),
+    userAgent: text("user_agent"),
   },
   (table) => [
+    primaryKey({ columns: [table.id, table.changedAt] }),
     index("audit_logs_entity_entity_id_idx").on(table.entity, table.entityId),
-    index("audit_logs_actor_id_idx").on(table.actorId),
+    index("audit_logs_changed_by_idx").on(table.changedBy),
   ],
 );
 
@@ -455,8 +483,184 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
     fields: [auditLogs.companyId],
     references: [companies.id],
   }),
-  actor: one(users, {
-    fields: [auditLogs.actorId],
+  changedByUser: one(users, {
+    fields: [auditLogs.changedBy],
     references: [users.id],
+  }),
+}));
+
+// --- Numbering engine (CLAUDE.md rule 7) ---------------------------------
+// Gapless document numbers via a locked counter row, never a Postgres
+// SEQUENCE (a rolled-back transaction leaks the value a SEQUENCE handed
+// out - see core/numbering/next-number.ts). One row per
+// (company, branch, doc_type, fiscal_year); a new fiscal year gets its own
+// row rather than resetting current_value in place, so last year's final
+// number stays exactly what was printed on last year's last document even
+// if this row is inspected later.
+
+/**
+ * `.nullsNotDistinct()` (Postgres 15+) matters here specifically because
+ * branch_id is nullable (a company-level series, e.g. no branch
+ * segmentation): the default Postgres behavior treats every NULL as
+ * distinct from every other NULL, so a plain unique constraint would let
+ * two concurrent first-ever inserts for the same (company, NULL, doc_type,
+ * fiscal_year) both succeed - exactly the race SELECT ... FOR UPDATE is
+ * supposed to make impossible. Without this, the uniqueness guarantee
+ * silently doesn't apply to the no-branch case.
+ */
+export const numberSeries = pgTable(
+  "number_series",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    docType: text("doc_type").notNull(),
+    /** e.g. "PO-{BRANCH}-{FY}-{0000}" - see core/numbering/next-number.ts for token semantics. */
+    prefixPattern: text("prefix_pattern").notNull(),
+    fiscalYear: integer("fiscal_year").notNull(),
+    /** Last number actually issued. The next call issues currentValue + 1. */
+    currentValue: integer("current_value").notNull().default(0),
+    /** Authoritative zero-pad width for the sequence portion - not derived from counting zeros in prefix_pattern's token. */
+    padding: integer("padding").notNull(),
+    ...auditColumns(),
+  },
+  (table) => [
+    unique("number_series_company_branch_doctype_fy_key")
+      .on(table.companyId, table.branchId, table.docType, table.fiscalYear)
+      .nullsNotDistinct(),
+  ],
+);
+
+export const numberSeriesRelations = relations(numberSeries, ({ one }) => ({
+  company: one(companies, {
+    fields: [numberSeries.companyId],
+    references: [companies.id],
+  }),
+  branch: one(branches, {
+    fields: [numberSeries.branchId],
+    references: [branches.id],
+  }),
+}));
+
+// --- Menu engine ----------------------------------------------------------
+// A menu item's visibility (core/menu-engine/resolve.ts) is the AND of
+// three independent gates: required_permission (null = no permission
+// required), module_key (null = not tied to a toggleable module), and
+// is_visible (an explicit admin-controlled on/off switch independent of
+// the other two). `required_permission`/`module_key` are plain text, not
+// FK-constrained to permissions.key/a modules table - modules are defined
+// in code (core/module-registry), not a DB table, and a menu referencing
+// a permission key that doesn't exist yet (mid-setup) should not be a
+// hard FK violation.
+
+export const menus = pgTable(
+  "menus",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    path: text("path"),
+    icon: text("icon"),
+    parentId: uuid("parent_id").references((): AnyPgColumn => menus.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    requiredPermission: text("required_permission"),
+    moduleKey: text("module_key"),
+    isVisible: boolean("is_visible").notNull().default(true),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("menus_company_id_key_key")
+      .on(table.companyId, table.key)
+      .where(sql`${table.deletedAt} is null`),
+    index("menus_parent_id_idx").on(table.parentId),
+  ],
+);
+
+export const menusRelations = relations(menus, ({ one, many }) => ({
+  company: one(companies, {
+    fields: [menus.companyId],
+    references: [companies.id],
+  }),
+  parent: one(menus, {
+    fields: [menus.parentId],
+    references: [menus.id],
+    relationName: "menu_parent",
+  }),
+  children: many(menus, { relationName: "menu_parent" }),
+}));
+
+// --- Reference masters ----------------------------------------------------
+// One generic table, not four near-identical ones (country/currency/uom/
+// incoterm) - CLAUDE.md's field model already anticipates "~16 masters via
+// one generic pattern" as later, dedicated work; this is a deliberately
+// small precursor for the one thing THIS task needs (provisioning seeds a
+// handful of standard reference lists), not an attempt to build that
+// generic pattern early. Tenant-wide, no company_id: a country or currency
+// code means the same thing for every company in the tenant, same
+// reasoning as `permissions`.
+
+export const referenceMasterTypeEnum = pgEnum("reference_master_type", [
+  "country",
+  "currency",
+  "uom",
+  "incoterm",
+]);
+
+export const referenceMasters = pgTable(
+  "reference_masters",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: referenceMasterTypeEnum("type").notNull(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("reference_masters_type_code_key").on(table.type, table.code)],
+);
+
+// --- Field engine, Tier 2 (CLAUDE.md field model) --------------------------
+// A field_definitions ROW is itself the override: label/is_visible/
+// is_mandatory/sort_order all have real (non-null) values, because
+// existence of the row means "override this field," not "maybe override
+// some of these." A Tier-1 field with no row here just uses its plain
+// column default everywhere - resolving the merged view (row present ->
+// override, absent -> default) is core/field-engine's job, not built as
+// part of this task (provisioning only seeds the rows).
+
+export const fieldDefinitions = pgTable(
+  "field_definitions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    module: text("module").notNull(),
+    entity: text("entity").notNull(),
+    fieldKey: text("field_key").notNull(),
+    label: text("label").notNull(),
+    isVisible: boolean("is_visible").notNull().default(true),
+    isMandatory: boolean("is_mandatory").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("field_definitions_company_module_entity_field_key")
+      .on(table.companyId, table.module, table.entity, table.fieldKey)
+      .where(sql`${table.deletedAt} is null`),
+  ],
+);
+
+export const fieldDefinitionsRelations = relations(fieldDefinitions, ({ one }) => ({
+  company: one(companies, {
+    fields: [fieldDefinitions.companyId],
+    references: [companies.id],
   }),
 }));

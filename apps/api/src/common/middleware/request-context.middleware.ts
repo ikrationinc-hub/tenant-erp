@@ -10,7 +10,15 @@ export function requestContextMiddleware(req: Request, res: Response, next: Next
 
   res.setHeader(REQUEST_ID_HEADER, requestId);
 
-  runWithRequestContext({ requestId }, () => {
-    next();
-  });
+  const userAgent = req.header("user-agent");
+  runWithRequestContext(
+    {
+      requestId,
+      ...(req.ip ? { ip: req.ip } : {}),
+      ...(userAgent ? { userAgent } : {}),
+    },
+    () => {
+      next();
+    },
+  );
 }

@@ -105,11 +105,11 @@ export async function inviteUser(ctx: RequestContext, input: InviteUserInput): P
 
     await insertAuditLog(tx, {
       companyId,
-      actorId: scope.userId,
+      changedBy: scope.userId,
       entity: "user",
       entityId: user.id,
       action: "user.invited",
-      metadata: { email: input.email, roles: input.roles },
+      after: { email: input.email, mobile: input.mobile, roles: input.roles, status: "invited" },
     });
 
     return {
@@ -185,11 +185,12 @@ export async function acceptInvitation(
 
     await insertAuditLog(tx, {
       companyId: invitation.companyId,
-      actorId: user.id,
+      changedBy: user.id,
       entity: "user",
       entityId: user.id,
       action: "user.invitation_accepted",
-      metadata: { email: invitation.email },
+      before: { status: user.status, passwordHash: user.passwordHash },
+      after: { status: "active", passwordHash: "<redacted>" },
     });
 
     return { userId: user.id, roles: invitation.roles, companyId: invitation.companyId };
@@ -230,10 +231,12 @@ export async function resendInvitation(
 
     await insertAuditLog(tx, {
       companyId: scope.companyId,
-      actorId: scope.userId,
+      changedBy: scope.userId,
       entity: "invitation",
       entityId: invitation.id,
       action: "invitation.resent",
+      before: { expiresAt: invitation.expiresAt },
+      after: { expiresAt },
     });
 
     const companyName = (await findCompanyName(tx, scope.companyId)) ?? "";
@@ -262,10 +265,12 @@ export async function revokeInvitation(ctx: RequestContext, invitationId: string
     await markInvitationRevoked(tx, invitation.id);
     await insertAuditLog(tx, {
       companyId: scope.companyId,
-      actorId: scope.userId,
+      changedBy: scope.userId,
       entity: "invitation",
       entityId: invitation.id,
       action: "invitation.revoked",
+      before: { status: invitation.status },
+      after: { status: "revoked" },
     });
   });
 }
@@ -308,11 +313,16 @@ export async function provisionUser(
 
     await insertAuditLog(tx, {
       companyId,
-      actorId: scope.userId,
+      changedBy: scope.userId,
       entity: "user",
       entityId: user.id,
       action: "user.provisioned",
-      metadata: { mobile: input.mobile, roles: input.roles, provisionedBy: scope.userId },
+      after: {
+        mobile: input.mobile,
+        roles: input.roles,
+        status: "active",
+        mustChangePassword: true,
+      },
     });
 
     return { userId: user.id };
@@ -338,10 +348,12 @@ export async function changePassword(
 
     await insertAuditLog(tx, {
       companyId: scope.companyId,
-      actorId: scope.userId,
+      changedBy: scope.userId,
       entity: "user",
       entityId: scope.userId,
       action: "user.password_changed",
+      before: { mustChangePassword: true },
+      after: { mustChangePassword: false },
     });
 
     return issueTokenPair(scope.tenantId, { id: scope.userId, companyId: scope.companyId }, tx);

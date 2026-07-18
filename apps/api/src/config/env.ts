@@ -5,6 +5,16 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
 
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  /**
+   * A separate, deliberately less-privileged role from DATABASE_URL's -
+   * every normal business query (get-db.ts's tenant pool) connects as this
+   * role, never the superuser migrations/provisioning use. This is what
+   * makes REVOKE UPDATE/DELETE on audit_logs (core/audit) mean anything: a
+   * superuser bypasses every ACL check, so restricting "the application DB
+   * role" requires the application to not BE a superuser in the first
+   * place. See docs/adr/0007-numbering-and-audit.md.
+   */
+  DATABASE_APP_URL: z.string().min(1, "DATABASE_APP_URL is required"),
 
   REDIS_URL: z.string().min(1, "REDIS_URL is required"),
 

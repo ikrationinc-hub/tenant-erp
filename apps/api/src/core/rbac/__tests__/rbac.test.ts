@@ -163,7 +163,7 @@ describe("permission engine (core/rbac)", () => {
         schemaName: seed.tenant.schemaName,
         companyId: seed.companyId,
         name: "Approver",
-        createdBy: randomUUID(),
+        createdBy: seed.userId,
       });
 
       // No role assigned yet: denied.
@@ -172,8 +172,8 @@ describe("permission engine (core/rbac)", () => {
         .set("Authorization", `Bearer ${await issueAccessToken(seed)}`);
       expect(deniedRes.status).toBe(403);
 
-      await assignRoleToUser(seed.tenant.schemaName, seed.companyId, seed.userId, role.id, randomUUID());
-      await grantPermissionToRole(seed.tenant.schemaName, seed.companyId, role.id, permissionId, randomUUID());
+      await assignRoleToUser(seed.tenant.schemaName, seed.companyId, seed.userId, role.id, seed.userId);
+      await grantPermissionToRole(seed.tenant.schemaName, seed.companyId, role.id, permissionId, seed.userId);
 
       const grantedRes = await request(app)
         .get("/probe/permission")
@@ -194,10 +194,10 @@ describe("permission engine (core/rbac)", () => {
         schemaName: seed.tenant.schemaName,
         companyId: seed.companyId,
         name: "Approver",
-        createdBy: randomUUID(),
+        createdBy: seed.userId,
       });
-      await assignRoleToUser(seed.tenant.schemaName, seed.companyId, seed.userId, role.id, randomUUID());
-      await grantPermissionToRole(seed.tenant.schemaName, seed.companyId, role.id, permissionId, randomUUID());
+      await assignRoleToUser(seed.tenant.schemaName, seed.companyId, seed.userId, role.id, seed.userId);
+      await grantPermissionToRole(seed.tenant.schemaName, seed.companyId, role.id, permissionId, seed.userId);
 
       const token = await issueAccessToken(seed);
 
@@ -205,7 +205,13 @@ describe("permission engine (core/rbac)", () => {
       const before = await request(app).get("/probe/permission").set("Authorization", `Bearer ${token}`);
       expect(before.status).toBe(200);
 
-      await revokePermissionFromRole(seed.tenant.schemaName, seed.companyId, role.id, permissionId);
+      await revokePermissionFromRole(
+        seed.tenant.schemaName,
+        seed.companyId,
+        role.id,
+        permissionId,
+        seed.userId,
+      );
 
       // Same token, no wait, no restart, no TTL expiry - just revoked.
       const after = await request(app).get("/probe/permission").set("Authorization", `Bearer ${token}`);
@@ -224,10 +230,10 @@ describe("permission engine (core/rbac)", () => {
         schemaName: seed.tenant.schemaName,
         companyId: seed.companyId,
         name: "Approver",
-        createdBy: randomUUID(),
+        createdBy: seed.userId,
       });
-      await assignRoleToUser(seed.tenant.schemaName, seed.companyId, seed.userId, role.id, randomUUID());
-      await grantPermissionToRole(seed.tenant.schemaName, seed.companyId, role.id, permissionId, randomUUID());
+      await assignRoleToUser(seed.tenant.schemaName, seed.companyId, seed.userId, role.id, seed.userId);
+      await grantPermissionToRole(seed.tenant.schemaName, seed.companyId, role.id, permissionId, seed.userId);
 
       const resolved = await resolve({
         requestId: randomUUID(),
@@ -255,9 +261,9 @@ describe("permission engine (core/rbac)", () => {
         schemaName: seed.tenant.schemaName,
         companyId: seed.companyId,
         name: "Restricted",
-        createdBy: randomUUID(),
+        createdBy: seed.userId,
       });
-      await assignRoleToUser(seed.tenant.schemaName, seed.companyId, seed.userId, role.id, randomUUID());
+      await assignRoleToUser(seed.tenant.schemaName, seed.companyId, seed.userId, role.id, seed.userId);
       await setFieldPermission({
         schemaName: seed.tenant.schemaName,
         companyId: seed.companyId,
@@ -267,7 +273,7 @@ describe("permission engine (core/rbac)", () => {
         fieldKey: "creditLimit",
         canView: false,
         canEdit: false,
-        createdBy: randomUUID(),
+        createdBy: seed.userId,
       });
 
       const token = await issueAccessToken(seed);
@@ -302,9 +308,9 @@ describe("permission engine (core/rbac)", () => {
         schemaName: seed.tenant.schemaName,
         companyId: seed.companyId,
         name: "Restricted Viewer",
-        createdBy: randomUUID(),
+        createdBy: seed.userId,
       });
-      await assignRoleToUser(seed.tenant.schemaName, seed.companyId, seed.userId, role.id, randomUUID());
+      await assignRoleToUser(seed.tenant.schemaName, seed.companyId, seed.userId, role.id, seed.userId);
       await setFieldPermission({
         schemaName: seed.tenant.schemaName,
         companyId: seed.companyId,
@@ -314,7 +320,7 @@ describe("permission engine (core/rbac)", () => {
         fieldKey: "creditLimit",
         canView: false,
         canEdit: false,
-        createdBy: randomUUID(),
+        createdBy: seed.userId,
       });
 
       const token = await issueAccessToken(seed);

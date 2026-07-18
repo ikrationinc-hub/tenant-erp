@@ -4,9 +4,126 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { db } from "../config/db.js";
+import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 import { withTenantSchemaAdmin } from "./get-db.js";
 import { tenants } from "./platform/schema.js";
+
+/**
+ * The role every normal business query connects as (get-db.ts's pool via
+ * DATABASE_APP_URL) - deliberately NOT a superuser, so that
+ * core/audit/write.ts's REVOKE UPDATE/DELETE on audit_logs actually means
+ * something. Idempotent and re-asserted on every tenant migration run
+ * (including a no-pending-migrations no-op), so both a brand-new schema and
+ * one that existed before this feature end up with correct grants. See
+ * docs/adr/0007-numbering-and-audit.md.
+ */
+const APP_DB_ROLE = "hyperion_app";
+
+function escapeSqlLiteral(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+/**
+ * Runs after every tenant migration attempt for `schemaName`, whether or
+ * not anything was actually pending - so an already-migrated tenant from
+ * before this feature existed still ends up with correct grants. Uses
+ * `adminDb` (DATABASE_URL's superuser) since granting/revoking privileges
+ * requires the elevated role; APP_DB_ROLE itself never needs these rights.
+ */
+async function ensureAppRoleGrants(
+  adminDb: NodePgDatabase<Record<string, never>>,
+  schemaName: string,
+): Promise<void> {
+  const appPassword = new URL(env.DATABASE_APP_URL).password;
+  const escapedPassword = escapeSqlLiteral(appPassword);
+
+  // Exception-based, not check-then-create: tenant migrations for
+  // different schemas can run concurrently (parallel test files, or
+  // multiple tenants provisioning at once), and a plain "IF NOT EXISTS"
+  // SELECT-then-CREATE has a race window two concurrent sessions can both
+  // pass through before either commits. Catching the exception here is
+  // atomic - Postgres raises it from the CREATE ROLE itself, not from a
+  // separate check, so there's no window for two sessions to both think
+  // the role is missing. Two concurrent CREATE ROLEs racing on the same
+  // name were observed (empirically, not just in theory - this is what a
+  // parallel test run's flakiness traced back to) to raise
+  // unique_violation on pg_authid's own unique index, not
+  // duplicate_object - CREATE ROLE apparently doesn't go through the same
+  // higher-level "already exists" check CREATE SCHEMA/CREATE TABLE do.
+  // Catching both is what actually closes the race.
+  await adminDb.execute(sql.raw(`
+    DO $$
+    BEGIN
+      EXECUTE format('CREATE ROLE ${APP_DB_ROLE} LOGIN PASSWORD %L', '${escapedPassword}');
+    EXCEPTION
+      WHEN duplicate_object THEN
+        NULL;
+      WHEN unique_violation THEN
+        NULL;
+    END
+    $$;
+  `));
+
+  const schemaIdent = sql.identifier(schemaName);
+  const roleIdent = sql.identifier(APP_DB_ROLE);
+
+  await adminDb.execute(sql`GRANT USAGE ON SCHEMA ${schemaIdent} TO ${roleIdent}`);
+  await adminDb.execute(
+    sql`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ${schemaIdent} TO ${roleIdent}`,
+  );
+  await adminDb.execute(
+    sql`ALTER DEFAULT PRIVILEGES IN SCHEMA ${schemaIdent} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${roleIdent}`,
+  );
+
+  // The one deliberate carve-out (CLAUDE.md rule 6, task: audit immutability):
+  // the app role can INSERT and SELECT audit_logs, never UPDATE or DELETE it,
+  // even though the blanket grant above just gave it exactly that.
+  await adminDb.execute(sql`REVOKE UPDATE, DELETE ON audit_logs FROM ${roleIdent}`);
+}
+
+/**
+ * Pre-creates audit_logs partitions for the surrounding `monthsAhead`
+ * months (default: the month before, current, and two after). Runs on the
+ * admin connection deliberately - see core/audit/write.ts's doc comment on
+ * why hyperion_app cannot be granted CREATE and do this itself (it would
+ * end up owning, and therefore able to UPDATE/DELETE, whatever partition it
+ * creates). Idempotent (IF NOT EXISTS-guarded, catching duplicate_table),
+ * so re-running this on every migration invocation is exactly what keeps
+ * the scheme "self-sustaining forever" in practice: it only actually
+ * creates something new once a calendar month rolls past what was already
+ * covered.
+ */
+async function ensureAuditLogPartitions(
+  adminDb: NodePgDatabase<Record<string, never>>,
+  monthsAhead: readonly number[] = [-1, 0, 1, 2],
+): Promise<void> {
+  const now = new Date();
+
+  for (const offset of monthsAhead) {
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset + 1, 1));
+    const partitionName = `audit_logs_${monthStart.getUTCFullYear()}_${String(monthStart.getUTCMonth() + 1).padStart(2, "0")}`;
+
+    await adminDb.execute(
+      sql.raw(`
+        DO $$
+        BEGIN
+          EXECUTE format(
+            'CREATE TABLE %I PARTITION OF audit_logs FOR VALUES FROM (%L) TO (%L)',
+            '${partitionName}', '${monthStart.toISOString()}', '${monthEnd.toISOString()}'
+          );
+        EXCEPTION
+          WHEN duplicate_table THEN
+            NULL;
+          WHEN unique_violation THEN
+            NULL;
+        END
+        $$;
+      `),
+    );
+  }
+}
 
 /**
  * `migrationsSchema` matters more than it looks: drizzle's migrator tracks
@@ -80,6 +197,7 @@ function readTenantMigrationFiles(): TenantMigrationFile[] {
  */
 async function applyPendingMigrationsWithDb(
   adminDb: NodePgDatabase<Record<string, never>>,
+  schemaName: string,
   migrationFiles: TenantMigrationFile[],
 ): Promise<string[]> {
   await adminDb.execute(sql`
@@ -95,20 +213,25 @@ async function applyPendingMigrationsWithDb(
   const alreadyApplied = new Set(appliedRows.rows.map((row) => row.version));
   const pending = migrationFiles.filter((file) => !alreadyApplied.has(file.version));
 
-  if (pending.length === 0) {
-    return [];
+  if (pending.length > 0) {
+    await adminDb.transaction(async (tx) => {
+      for (const file of pending) {
+        for (const statement of file.statements) {
+          await tx.execute(sql.raw(statement));
+        }
+        await tx.execute(
+          sql`insert into ${sql.identifier(SCHEMA_MIGRATIONS_TABLE)} (version) values (${file.version})`,
+        );
+      }
+    });
   }
 
-  await adminDb.transaction(async (tx) => {
-    for (const file of pending) {
-      for (const statement of file.statements) {
-        await tx.execute(sql.raw(statement));
-      }
-      await tx.execute(
-        sql`insert into ${sql.identifier(SCHEMA_MIGRATIONS_TABLE)} (version) values (${file.version})`,
-      );
-    }
-  });
+  // Runs even when nothing was pending, deliberately outside the migration
+  // transaction above: an already-migrated tenant from before this feature
+  // existed still needs correct grants, and re-asserting idempotent
+  // GRANT/REVOKE statements on every run is cheap and side-effect-free.
+  await ensureAppRoleGrants(adminDb, schemaName);
+  await ensureAuditLogPartitions(adminDb);
 
   return pending.map((file) => file.version);
 }
@@ -125,7 +248,7 @@ export async function applyPendingTenantMigrations(
   migrationFiles: TenantMigrationFile[] = readTenantMigrationFiles(),
 ): Promise<string[]> {
   return withTenantSchemaAdmin(schemaName, (adminDb) =>
-    applyPendingMigrationsWithDb(adminDb, migrationFiles),
+    applyPendingMigrationsWithDb(adminDb, schemaName, migrationFiles),
   );
 }
 
