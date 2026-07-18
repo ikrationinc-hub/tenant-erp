@@ -147,6 +147,46 @@ Acceptance:
 
 ---
 
+## FE-5.5 — Admin & onboarding screens
+
+```
+Read the identity section of docs/Hyperion-ERP-Backend-Plan-v2.md before starting. This covers the TENANT-ADMIN surface — the screens Hyperion's own admin uses. It does NOT cover platform-admin tenant creation (that's a separate app — see the note at the end).
+
+These are mostly SchemaForm + SchemaTable again — you already built the machinery. The only genuinely new component is role/permission assignment.
+
+=== COMPANY MANAGEMENT (tenant admin adds legal entities) ===
+1. Company list + form via SchemaTable / SchemaForm over the companies entity. Fields from metadata: name, country, currency, fiscal_year_start_month, timezone, tax_registration_no, status.
+2. This is a normal schema-driven screen — no special-casing. company_id is the legal-entity scope; a tenant can have several.
+
+=== BRANCH MANAGEMENT ===
+3. branches is already in the FE-5 master list — just confirm it renders and that branch is scoped to the selected company (creating a branch inherits the current company_id from context, never from a form field — mirrors backend rule 2).
+
+=== USER MANAGEMENT (the demo centrepiece) ===
+4. User list via SchemaTable over the users entity: name, email, mobile, status (invited/active/suspended), roles, last_login. Filter by status and role.
+5. Invite drawer → POST /api/v1/users/invite {email, mobile, name, roles[]}. NO password field — rule from BE-7. The form must not render one.
+6. Row actions: resend invite, revoke invite, suspend/reactivate user, edit roles. Each gated by permission via <Can/>.
+7. The ops-staff exception (BE-7): a "provision without email" action that calls the provision endpoint. Surface the backend's rejection clearly if the chosen roles hold an approval permission — don't swallow the 403.
+8. Show invite status inline: Invited (pending) vs Active. A pending invite shows its expiry.
+
+=== ROLE & PERMISSION ASSIGNMENT (the one new component) ===
+9. Role list + create/rename via SchemaForm over roles.
+10. Permission assignment UI — AntD Transfer or a grouped-checkbox tree. Left = available permissions grouped by module.entity, right = granted. This is NOT a SchemaForm — it's a dedicated component reading GET /permissions (the catalogue) and the role's current grants.
+11. Field-permission assignment (can_view / can_edit per field) — a matrix per module.entity. This is what makes the "hide Purchase Rate" demo in FE-7 possible. Keep it a simple grid: fields down the side, view/edit checkboxes across.
+12. Saving a role change must visibly work — the affected user's menu and field access change on their next request (BE-6 bumps role_version). If you can, demo this live: change a role, refresh the other session, access changed.
+
+Tests: company create scoped correctly; invite drawer has no password field; provision-without-email surfaces the 403 for approval roles; permission Transfer round-trips; field-permission matrix saves; a role change invalidates the affected user's cached menu/permissions.
+
+Acceptance:
+- Tenant admin can, entirely in the browser: create a company, add branches, invite a user, assign a role, set field permissions
+- No password field appears on any admin-facing user form
+- `grep -rn 'label="' src/modules/admin/` returns nothing — these are schema-driven too
+
+NOTE — platform-admin tenant creation is deliberately NOT here.
+Platform admins authenticate against platform.platform_admins (a separate table, separate auth) and should live in a SEPARATE app at admin.yourerp.com — never inside apps/web, or a platform concern leaks into tenant code. For the 16-week demo, creating a tenant via the BE-10 provisioning endpoint (Postman/curl) is acceptable. If you want a UI for it, that's a post-prototype apps/admin scaffold — ask and I'll write it as its own prompt sequence.
+```
+
+---
+
 ## FE-6 — Supplier + Purchase
 
 ```
