@@ -5,3 +5,4 @@ export * from "./invitations.js";
 export * from "./users.js";
 export * from "./scope.js";
 export * from "./master-options.js";
+export * from "./platform-admin.js";
