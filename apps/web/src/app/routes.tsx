@@ -6,6 +6,12 @@ import { RequireAuth } from "./guards/RequireAuth";
 import { RequireFullScope } from "./guards/RequireFullScope";
 import { AppShell } from "./layout/AppShell";
 import { BootstrapStatus } from "./BootstrapStatus";
+import { SchemaFormDevPage } from "./dev/SchemaFormDevPage";
+
+/** Storybook-free renderer check (FE-3) - never shipped in a production build. */
+const devRoutes: RouteObject[] = import.meta.env.DEV
+  ? [{ path: "/_dev/schema-form", element: <SchemaFormDevPage /> }]
+  : [];
 
 /**
  * Empty of hardcoded BUSINESS routes (frontend rule 2) - FE-4 replaces the
@@ -16,6 +22,7 @@ import { BootstrapStatus } from "./BootstrapStatus";
 export const routes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
   { path: "/accept-invitation/:token", element: <AcceptInvitationPage /> },
+  ...devRoutes,
   {
     element: <RequireAuth />,
     children: [

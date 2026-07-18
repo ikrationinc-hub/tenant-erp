@@ -3,6 +3,7 @@ import {
   changePasswordResponseSchema,
   fieldDefinitionsResponseSchema,
   loginResponseSchema,
+  masterOptionsResponseSchema,
   meResponseSchema,
   myCompaniesResponseSchema,
   refreshResponseSchema,
@@ -10,11 +11,13 @@ import {
   type ChangePasswordResponse,
   type FieldDefinitionsResponse,
   type LoginResponse,
+  type MasterOption,
   type MeResponse,
   type MyCompaniesResponse,
   type ValidateInvitationResponse,
 } from "@hyperion/contracts";
 import { endpoints } from "../core/api/endpoints";
+import { schemaFormDevFixture } from "../core/schema-form/dev-fixture";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -109,6 +112,24 @@ const mockFieldDefinitions: FieldDefinitionsResponse = fieldDefinitionsResponseS
   ],
 });
 
+const MASTER_OPTIONS: Record<string, MasterOption[]> = {
+  countries: [
+    { value: "ae", label: "United Arab Emirates" },
+    { value: "sg", label: "Singapore" },
+    { value: "in", label: "India" },
+  ],
+  cities: [
+    { value: "dubai", label: "Dubai", parentValue: "ae" },
+    { value: "abu-dhabi", label: "Abu Dhabi", parentValue: "ae" },
+    { value: "singapore-city", label: "Singapore", parentValue: "sg" },
+    { value: "mumbai", label: "Mumbai", parentValue: "in" },
+  ],
+  warehouses: [
+    { value: "wh-1", label: "Jebel Ali Warehouse" },
+    { value: "wh-2", label: "Singapore Bonded Warehouse" },
+  ],
+};
+
 export const handlers = [
   http.post(`${API_BASE}${endpoints.login}`, () => HttpResponse.json(mockLoginResponse)),
   http.post(`${API_BASE}${endpoints.refresh}`, () =>
@@ -127,7 +148,27 @@ export const handlers = [
     HttpResponse.json(mockInvitation),
   ),
   http.post(`${API_BASE}${endpoints.acceptInvitation(":token")}`, () => new HttpResponse(null, { status: 204 })),
-  http.get(`${API_BASE}${endpoints.fieldDefinitions(":module", ":entity")}`, () =>
-    HttpResponse.json(mockFieldDefinitions),
-  ),
+  http.get(`${API_BASE}${endpoints.fieldDefinitions(":module", ":entity")}`, ({ params }) => {
+    if (params.module === schemaFormDevFixture.module && params.entity === schemaFormDevFixture.entity) {
+      return HttpResponse.json(schemaFormDevFixture);
+    }
+    return HttpResponse.json(mockFieldDefinitions);
+  }),
+  http.get(`${API_BASE}${endpoints.masterOptions(":master")}`, ({ params, request }) => {
+    const master = typeof params.master === "string" ? params.master : "";
+    const all = MASTER_OPTIONS[master] ?? [];
+    const url = new URL(request.url);
+    const parentValue = url.searchParams.get("parentValue");
+    const search = url.searchParams.get("search")?.toLowerCase();
+
+    let filtered = all;
+    if (parentValue) {
+      filtered = filtered.filter((option) => option.parentValue === parentValue);
+    }
+    if (search) {
+      filtered = filtered.filter((option) => option.label.toLowerCase().includes(search));
+    }
+
+    return HttpResponse.json(masterOptionsResponseSchema.parse({ options: filtered }));
+  }),
 ];

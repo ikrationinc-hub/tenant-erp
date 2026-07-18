@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { afterAll, afterEach, beforeAll } from "vitest";
+import { cleanup } from "@testing-library/react";
 import { server } from "../mocks/server";
 import { queryClient } from "../core/api/query-client";
 import { useAppStore } from "../core/store/app-store";
@@ -19,6 +20,7 @@ window.matchMedia ??= (query: string) => ({
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 
 afterEach(() => {
+  cleanup();
   server.resetHandlers();
   queryClient.clear();
   useAppStore.setState({
