@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  type PgColumnBuilderBase,
   boolean,
   check,
   index,
@@ -599,37 +600,85 @@ export const menusRelations = relations(menus, ({ one, many }) => ({
   children: many(menus, { relationName: "menu_parent" }),
 }));
 
-// --- Reference masters ----------------------------------------------------
-// One generic table, not four near-identical ones (country/currency/uom/
-// incoterm) - CLAUDE.md's field model already anticipates "~16 masters via
-// one generic pattern" as later, dedicated work; this is a deliberately
-// small precursor for the one thing THIS task needs (provisioning seeds a
-// handful of standard reference lists), not an attempt to build that
-// generic pattern early. Tenant-wide, no company_id: a country or currency
-// code means the same thing for every company in the tenant, same
-// reasoning as `permissions`.
+// --- Generic master-data pattern (docs/spec/Purchase-V2.md §4) ------------
+// Every "Dropdown -> Master" field in the Purchase spec needs a master
+// table. `defineMasterTable` is the schema half of that generic pattern
+// (core/masters/ is the repository/service/controller/routes half) -
+// company-scoped (not tenant-wide like the old reference_masters precursor
+// this replaces: CLAUDE.md's table conventions apply to master data too,
+// no exception carved out for it), soft-delete-aware unique on
+// (company_id, code), and a fixed column set every master shares
+// (code/name/is_active/sort_order) plus whatever extra typed columns that
+// specific master needs (e.g. cities' country_id FK). branch_id exists for
+// convention-compliance (every table has one) but nothing in core/masters
+// reads or writes it yet - master data is company-wide, not branch-scoped,
+// in this build.
 
-export const referenceMasterTypeEnum = pgEnum("reference_master_type", [
-  "country",
-  "currency",
-  "uom",
-  "incoterm",
-]);
+/** items' vertical seam (task: "item_type column now even though only metals is used") - not a registry yet, just the column. */
+export const itemTypeEnum = pgEnum("item_type", ["metals", "electronics", "toys"]);
 
-export const referenceMasters = pgTable(
-  "reference_masters",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    type: referenceMasterTypeEnum("type").notNull(),
-    code: text("code").notNull(),
-    name: text("name").notNull(),
-    sortOrder: integer("sort_order").notNull().default(0),
-    isActive: boolean("is_active").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [uniqueIndex("reference_masters_type_code_key").on(table.type, table.code)],
-);
+function defineMasterTable<TExtra extends Record<string, PgColumnBuilderBase>>(
+  tableName: string,
+  extraColumns: TExtra,
+) {
+  return pgTable(
+    tableName,
+    {
+      id: uuid("id").primaryKey().defaultRandom(),
+      companyId: uuid("company_id")
+        .notNull()
+        .references(() => companies.id, { onDelete: "restrict" }),
+      branchId: uuid("branch_id"),
+      code: text("code").notNull(),
+      name: text("name").notNull(),
+      isActive: boolean("is_active").notNull().default(true),
+      sortOrder: integer("sort_order").notNull().default(0),
+      ...extraColumns,
+      ...auditColumns(),
+    },
+    (table) => [
+      uniqueIndex(`${tableName}_company_id_code_key`)
+        .on(table.companyId, table.code)
+        .where(sql`${table.deletedAt} is null`),
+    ],
+  );
+}
+
+export const countries = defineMasterTable("countries", {});
+export const currencies = defineMasterTable("currencies", {});
+export const paymentTerms = defineMasterTable("payment_terms", {});
+export const uom = defineMasterTable("uom", {});
+export const ports = defineMasterTable("ports", {});
+export const warehouses = defineMasterTable("warehouses", {});
+export const incoterms = defineMasterTable("incoterms", {});
+export const itemGrades = defineMasterTable("item_grades", {});
+export const vessels = defineMasterTable("vessels", {});
+export const transportModes = defineMasterTable("transport_modes", {});
+export const lmeExchanges = defineMasterTable("lme_exchanges", {});
+export const hedgePlatforms = defineMasterTable("hedge_platforms", {});
+export const supplierTypes = defineMasterTable("supplier_types", {});
+
+/** The one master with a required FK to another master (task: "cities (fk country)") - the cascading-dropdown reference case. */
+export const cities = defineMasterTable("cities", {
+  countryId: uuid("country_id")
+    .notNull()
+    .references(() => countries.id, { onDelete: "restrict" }),
+});
+
+export const items = defineMasterTable("items", {
+  itemType: itemTypeEnum("item_type").notNull(),
+});
+
+export const countriesRelations = relations(countries, ({ many }) => ({
+  cities: many(cities),
+}));
+
+export const citiesRelations = relations(cities, ({ one }) => ({
+  country: one(countries, {
+    fields: [cities.countryId],
+    references: [countries.id],
+  }),
+}));
 
 // --- Field engine, Tier 2 ONLY (CLAUDE.md field model) ---------------------
 // A field_definitions ROW is itself the override: label/is_visible/

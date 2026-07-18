@@ -26,6 +26,9 @@ const REAL_MIGRATION_VERSIONS = [
   "0008_serious_karen_page",
   "0009_worried_big_bertha",
   "0010_modern_adam_warlock",
+  "0011_chubby_blockbuster",
+  "0012_dry_robbie_robertson",
+  "0013_faulty_black_tarantula",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

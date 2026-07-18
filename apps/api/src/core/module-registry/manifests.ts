@@ -3,6 +3,7 @@ import { fieldDefinitionsRouter } from "../../modules/field-definitions/field-de
 import { healthRouter } from "../../modules/health/health.routes.js";
 import { menusRouter } from "../../modules/menus/menus.routes.js";
 import { usersRouter } from "../../modules/users/users.routes.js";
+import { ALL_MASTER_PERMISSIONS, mastersRouter } from "../masters/registry.js";
 import { permissionEntry } from "../rbac/types.js";
 import type { ModuleManifest } from "./types.js";
 
@@ -102,9 +103,12 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     key: "masters",
     name: "Masters",
     version: "1.0.0",
-    // Not built yet (90-day plan, week 7+) - permissions declared ahead of
-    // the routes so roles can be configured to reference them today.
+    routes: mastersRouter,
     permissions: [
+      // supplier/customer are full business entities (Supplier Creation's
+      // own richer field set - docs/spec/Purchase-V2.md §1), not simple
+      // code/name masters - declared ahead of their own future module,
+      // same as before this task, not built by core/masters/registry.ts.
       permissionEntry("masters", "supplier", "create", "Create a supplier master record"),
       permissionEntry("masters", "supplier", "read", "View supplier master records"),
       permissionEntry("masters", "supplier", "update", "Edit a supplier master record"),
@@ -113,9 +117,17 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       permissionEntry("masters", "customer", "read", "View customer master records"),
       permissionEntry("masters", "customer", "update", "Edit a customer master record"),
       permissionEntry("masters", "customer", "delete", "Remove a customer master record"),
+      // The 15 generic masters (countries, cities, currencies, ...) -
+      // create/read/update per entity, generated from
+      // core/masters/registry.ts so a 16th master needs no changes here.
+      ...ALL_MASTER_PERMISSIONS,
     ],
     dependsOn: ["auth", "roles"],
-    migrations: [],
+    migrations: [
+      "0011_chubby_blockbuster",
+      "0012_dry_robbie_robertson",
+      "0013_faulty_black_tarantula",
+    ],
   },
   {
     key: "purchase",

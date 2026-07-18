@@ -1,3 +1,4 @@
+import { ALL_MASTER_FIELD_DEFAULTS } from "../masters/registry.js";
 import type { FieldDefault } from "./types.js";
 
 /**
@@ -136,6 +137,11 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     sortOrder: 5,
     isSystem: false,
   },
+  // Every masters.<entity> Tier-2 field (code/name/isActive + each
+  // master's own extras, e.g. cities.countryId) - generated from
+  // core/masters/registry.ts's MASTER_MODULES rather than hand-duplicated
+  // here, so a 16th master needs zero changes to this file.
+  ...ALL_MASTER_FIELD_DEFAULTS,
 ];
 
 export function getFieldDefaults(module: string, entity: string): FieldDefault[] {

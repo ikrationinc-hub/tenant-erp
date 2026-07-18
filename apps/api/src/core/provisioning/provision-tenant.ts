@@ -23,7 +23,7 @@ import { seedDefaultRoles } from "./seed-roles.js";
 import { seedDefaultMenuTree } from "./seed-menu-tree.js";
 import { seedDefaultFieldDefinitions } from "./seed-field-definitions.js";
 import { seedDefaultNumberSeries } from "./seed-number-series.js";
-import { seedReferenceMasters } from "./seed-reference-masters.js";
+import { seedMasterData } from "../masters/seed-data.js";
 
 export interface ProvisionTenantInput {
   name: string;
@@ -206,7 +206,7 @@ async function provisionNewTenant(
     await seedDefaultMenuTree({ schemaName, companyId, createdBy: adminUserId });
     await seedDefaultFieldDefinitions({ schemaName, companyId, createdBy: adminUserId });
     await seedDefaultNumberSeries({ schemaName, companyId, createdBy: adminUserId });
-    await seedReferenceMasters({ schemaName });
+    await seedMasterData({ schemaName, companyId, createdBy: adminUserId });
 
     await applyModuleEnablement(tenant.id, schemaName, input.modules);
 
@@ -265,7 +265,7 @@ async function reProvisionExistingTenant(
 
   await seedDefaultFieldDefinitions({ schemaName, companyId, createdBy: adminUser?.id ?? existingTenant.id });
   await seedDefaultNumberSeries({ schemaName, companyId, createdBy: adminUser?.id ?? existingTenant.id });
-  await seedReferenceMasters({ schemaName });
+  await seedMasterData({ schemaName, companyId, createdBy: adminUser?.id ?? existingTenant.id });
   await applyModuleEnablement(existingTenant.id, schemaName, input.modules);
 
   return {
