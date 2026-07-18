@@ -6,6 +6,24 @@ export const platformLoginSchema = z.object({
 });
 export type PlatformLoginInput = z.infer<typeof platformLoginSchema>;
 
+export const platformRefreshSchema = z.object({
+  refreshToken: z.string().min(1),
+});
+export type PlatformRefreshRequestBody = z.infer<typeof platformRefreshSchema>;
+
+export const platformLogoutSchema = z.object({
+  refreshToken: z.string().min(1),
+});
+export type PlatformLogoutRequestBody = z.infer<typeof platformLogoutSchema>;
+
+export const setTenantModuleSchema = z
+  .object({
+    moduleKey: z.string().min(1),
+    enabled: z.boolean(),
+  })
+  .strict();
+export type SetTenantModuleRequestBody = z.infer<typeof setTenantModuleSchema>;
+
 /**
  * `.strict()`, deliberately unlike most other validators in this codebase
  * (see docs/adr/0006's note on inviteUserSchema for the same reasoning):

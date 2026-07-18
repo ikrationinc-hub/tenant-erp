@@ -8,6 +8,13 @@
       "when": 1784176300987,
       "tag": "0000_powerful_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784381907268,
+      "tag": "0001_add_platform_refresh_tokens_and_login_history",
+      "breakpoints": true
     }
   ]
 }

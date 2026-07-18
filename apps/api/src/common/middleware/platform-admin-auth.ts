@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { getRequestContext } from "../context/request-context.js";
 import { verifyPlatformAdminToken } from "../../core/platform-auth/jwt.js";
+import { isJtiDenylisted } from "../../core/auth/denylist.js";
 import { UnauthorizedError } from "../errors/index.js";
 
 const BEARER_PREFIX = "Bearer ";
@@ -18,6 +19,12 @@ export async function platformAdminAuthMiddleware(
     }
     const token = header.slice(BEARER_PREFIX.length);
     const claims = await verifyPlatformAdminToken(token);
+
+    // A denylisted jti (logout/revocation) is rejected before any of that -
+    // mirrors scope-resolver.ts's tenant-side check exactly.
+    if (await isJtiDenylisted(claims.jti)) {
+      throw new UnauthorizedError("Token has been revoked");
+    }
 
     const ctx = getRequestContext();
     if (!ctx) {
