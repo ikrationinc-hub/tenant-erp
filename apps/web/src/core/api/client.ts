@@ -8,7 +8,12 @@ export interface ApiFetchOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
 }
 
-const AUTH_EXEMPT_PATHS: readonly string[] = [endpoints.login, endpoints.refresh];
+export interface ApiFetchConfig<T> {
+  /** Parses + validates the response body. Omit for a 204 or a call you deliberately leave untyped. */
+  schema?: ZodType<T>;
+  /** false for endpoints callable with no session (login, refresh, invitation lookup/accept). Defaults to true. */
+  auth?: boolean;
+}
 
 async function toApiError(res: Response): Promise<ApiError> {
   let body: unknown;
@@ -27,8 +32,10 @@ async function toApiError(res: Response): Promise<ApiError> {
 }
 
 function rawFetch(path: string, options: ApiFetchOptions, withAuth: boolean): Promise<Response> {
-  const headers = new Headers(options.headers);
-  if (options.body !== undefined) {
+  const { body, ...rest } = options;
+
+  const headers = new Headers(rest.headers);
+  if (body !== undefined) {
     headers.set("Content-Type", "application/json");
   }
   if (withAuth) {
@@ -39,9 +46,9 @@ function rawFetch(path: string, options: ApiFetchOptions, withAuth: boolean): Pr
   }
 
   return fetch(`${import.meta.env.VITE_API_BASE_URL}${path}`, {
-    ...options,
+    ...rest,
     headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : null,
+    body: body !== undefined ? JSON.stringify(body) : null,
   });
 }
 
@@ -85,12 +92,12 @@ async function refreshAccessToken(): Promise<string> {
  * refresh, and parses the response through the caller's contract schema so
  * a shape mismatch fails loudly instead of silently.
  */
-export async function apiFetch<T>(
+export async function apiFetch<T = unknown>(
   path: string,
   options: ApiFetchOptions = {},
-  schema?: ZodType<T>,
+  config: ApiFetchConfig<T> = {},
 ): Promise<T> {
-  const withAuth = !AUTH_EXEMPT_PATHS.includes(path);
+  const withAuth = config.auth ?? true;
   let res = await rawFetch(path, options, withAuth);
 
   if (res.status === 401 && withAuth) {
@@ -107,5 +114,5 @@ export async function apiFetch<T>(
   }
 
   const json: unknown = await res.json();
-  return schema ? schema.parse(json) : (json as T);
+  return config.schema ? config.schema.parse(json) : (json as T);
 }

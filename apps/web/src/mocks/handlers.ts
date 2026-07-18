@@ -1,12 +1,18 @@
 import { http, HttpResponse } from "msw";
 import {
+  changePasswordResponseSchema,
   fieldDefinitionsResponseSchema,
   loginResponseSchema,
   meResponseSchema,
+  myCompaniesResponseSchema,
   refreshResponseSchema,
+  validateInvitationResponseSchema,
+  type ChangePasswordResponse,
   type FieldDefinitionsResponse,
   type LoginResponse,
   type MeResponse,
+  type MyCompaniesResponse,
+  type ValidateInvitationResponse,
 } from "@hyperion/contracts";
 import { endpoints } from "../core/api/endpoints";
 
@@ -35,6 +41,35 @@ const mockLoginResponse: LoginResponse = loginResponseSchema.parse({
     name: mockUser.name,
     companyId: mockUser.companyId,
   },
+});
+
+const mockChangePasswordResponse: ChangePasswordResponse = changePasswordResponseSchema.parse({
+  accessToken: "mock-access-token-post-change",
+  refreshToken: "mock-refresh-token-post-change",
+  mustChangePassword: false,
+});
+
+const mockInvitation: ValidateInvitationResponse = validateInvitationResponseSchema.parse({
+  email: "new.hire@hyperion.test",
+  companyName: "Hyperion Metals Trading",
+});
+
+const mockCompanies: MyCompaniesResponse = myCompaniesResponseSchema.parse({
+  companies: [
+    {
+      id: mockUser.companyId,
+      name: "Hyperion Metals Trading",
+      branches: [
+        { id: "33333333-3333-4333-8333-333333333333", name: "Dubai HQ" },
+        { id: "44444444-4444-4444-8444-444444444444", name: "Jebel Ali Warehouse" },
+      ],
+    },
+    {
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Hyperion Singapore Pte Ltd",
+      branches: [{ id: "66666666-6666-4666-8666-666666666666", name: "Singapore HQ" }],
+    },
+  ],
 });
 
 const mockFieldDefinitions: FieldDefinitionsResponse = fieldDefinitionsResponseSchema.parse({
@@ -84,7 +119,14 @@ export const handlers = [
       }),
     ),
   ),
+  http.post(`${API_BASE}${endpoints.logout}`, () => new HttpResponse(null, { status: 204 })),
   http.get(`${API_BASE}${endpoints.me}`, () => HttpResponse.json(mockUser)),
+  http.post(`${API_BASE}${endpoints.changePassword}`, () => HttpResponse.json(mockChangePasswordResponse)),
+  http.get(`${API_BASE}${endpoints.myCompanies}`, () => HttpResponse.json(mockCompanies)),
+  http.get(`${API_BASE}${endpoints.validateInvitation(":token")}`, () =>
+    HttpResponse.json(mockInvitation),
+  ),
+  http.post(`${API_BASE}${endpoints.acceptInvitation(":token")}`, () => new HttpResponse(null, { status: 204 })),
   http.get(`${API_BASE}${endpoints.fieldDefinitions(":module", ":entity")}`, () =>
     HttpResponse.json(mockFieldDefinitions),
   ),

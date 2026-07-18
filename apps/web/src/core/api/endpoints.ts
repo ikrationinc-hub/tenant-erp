@@ -5,4 +5,20 @@ export const endpoints = {
   logout: "/auth/logout",
   me: "/auth/me",
   fieldDefinitions: (module: string, entity: string) => `/field-definitions/${module}/${entity}`,
+  validateInvitation: (token: string) => `/invitations/${token}`,
+  acceptInvitation: (token: string) => `/invitations/${token}/accept`,
+  changePassword: "/users/me/password",
+  myCompanies: "/users/me/companies",
 } as const;
+
+/** Appends a query string, skipping undefined values - `?tenantCode=` for an unset optional field is just noise. */
+export function withQuery(path: string, params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      search.set(key, value);
+    }
+  }
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
+}

@@ -20,6 +20,8 @@ interface AuthSlice {
     mustChangePassword: boolean;
   }) => void;
   setTokens: (tokens: { accessToken: string; refreshToken: string }) => void;
+  /** POST /users/me/password succeeded: swap in the fresh full-scope pair and drop the password-change restriction. */
+  completePasswordChange: (tokens: { accessToken: string; refreshToken: string }) => void;
   clearAuth: () => void;
 }
 
@@ -41,10 +43,26 @@ export const useAppStore = create<AppStore>()(
       user: null,
       mustChangePassword: false,
       setSession: ({ accessToken, refreshToken, user, mustChangePassword }) =>
-        set({ accessToken, refreshToken, user, mustChangePassword }),
+        set({
+          accessToken,
+          refreshToken,
+          user,
+          mustChangePassword,
+          activeCompanyId: user.companyId,
+          activeBranchId: null,
+        }),
       setTokens: ({ accessToken, refreshToken }) => set({ accessToken, refreshToken }),
+      completePasswordChange: ({ accessToken, refreshToken }) =>
+        set({ accessToken, refreshToken, mustChangePassword: false }),
       clearAuth: () =>
-        set({ accessToken: null, refreshToken: null, user: null, mustChangePassword: false }),
+        set({
+          accessToken: null,
+          refreshToken: null,
+          user: null,
+          mustChangePassword: false,
+          activeCompanyId: null,
+          activeBranchId: null,
+        }),
 
       sidebarCollapsed: false,
       activeCompanyId: null,

@@ -14,7 +14,7 @@ import { endpoints } from "../core/api/endpoints";
 export function BootstrapStatus(): ReactElement {
   const meQuery = useQuery<MeResponse>({
     queryKey: ["auth", "me"],
-    queryFn: () => apiFetch(endpoints.me, {}, meResponseSchema),
+    queryFn: () => apiFetch(endpoints.me, {}, { schema: meResponseSchema }),
   });
 
   return (

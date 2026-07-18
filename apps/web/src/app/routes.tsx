@@ -1,10 +1,35 @@
 import type { RouteObject } from "react-router-dom";
+import { LoginPage } from "../modules/auth/LoginPage";
+import { AcceptInvitationPage } from "../modules/auth/AcceptInvitationPage";
+import { ForcedPasswordChangePage } from "../modules/auth/ForcedPasswordChangePage";
+import { RequireAuth } from "./guards/RequireAuth";
+import { RequireFullScope } from "./guards/RequireFullScope";
+import { AppShell } from "./layout/AppShell";
 import { BootstrapStatus } from "./BootstrapStatus";
 
 /**
- * Empty of hardcoded BUSINESS routes (frontend rule 2) - FE-4 replaces this
- * array with routes generated from GET /menus. The single root entry is
- * shell scaffolding, not a module screen: it exists so the router has
- * somewhere to render while the rest of the provider stack is exercised.
+ * Empty of hardcoded BUSINESS routes (frontend rule 2) - FE-4 replaces the
+ * "/" subtree with routes generated from GET /menus. Everything here is
+ * shell/auth scaffolding: login, invitation acceptance, forced password
+ * change, and the guards that gate access to the shell itself.
  */
-export const routes: RouteObject[] = [{ path: "/", element: <BootstrapStatus /> }];
+export const routes: RouteObject[] = [
+  { path: "/login", element: <LoginPage /> },
+  { path: "/accept-invitation/:token", element: <AcceptInvitationPage /> },
+  {
+    element: <RequireAuth />,
+    children: [
+      { path: "/password-change", element: <ForcedPasswordChangePage /> },
+      {
+        element: <RequireFullScope />,
+        children: [
+          {
+            path: "/",
+            element: <AppShell />,
+            children: [{ index: true, element: <BootstrapStatus /> }],
+          },
+        ],
+      },
+    ],
+  },
+];
