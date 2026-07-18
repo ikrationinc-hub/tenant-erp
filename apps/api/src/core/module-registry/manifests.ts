@@ -1,4 +1,5 @@
 import { authRouter } from "../../modules/auth/auth.routes.js";
+import { fieldDefinitionsRouter } from "../../modules/field-definitions/field-definitions.routes.js";
 import { healthRouter } from "../../modules/health/health.routes.js";
 import { menusRouter } from "../../modules/menus/menus.routes.js";
 import { usersRouter } from "../../modules/users/users.routes.js";
@@ -79,6 +80,23 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: [],
     dependsOn: ["auth", "roles"],
     migrations: ["0007_menus"],
+  },
+  {
+    key: "field-definitions",
+    name: "Field Engine (Tier 2)",
+    version: "1.0.0",
+    routes: fieldDefinitionsRouter,
+    permissions: [
+      permissionEntry("field_definitions", "field", "read", "View a module/entity's resolved field definitions"),
+      permissionEntry(
+        "field_definitions",
+        "field",
+        "update",
+        "Override a Tier 2 field's label, visibility, mandatory flag, or sort order",
+      ),
+    ],
+    dependsOn: ["auth", "roles"],
+    migrations: ["0010_modern_adam_warlock"],
   },
   {
     key: "masters",

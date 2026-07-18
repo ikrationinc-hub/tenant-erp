@@ -631,14 +631,48 @@ export const referenceMasters = pgTable(
   (table) => [uniqueIndex("reference_masters_type_code_key").on(table.type, table.code)],
 );
 
-// --- Field engine, Tier 2 (CLAUDE.md field model) --------------------------
+// --- Field engine, Tier 2 ONLY (CLAUDE.md field model) ---------------------
 // A field_definitions ROW is itself the override: label/is_visible/
 // is_mandatory/sort_order all have real (non-null) values, because
 // existence of the row means "override this field," not "maybe override
-// some of these." A Tier-1 field with no row here just uses its plain
-// column default everywhere - resolving the merged view (row present ->
-// override, absent -> default) is core/field-engine's job, not built as
-// part of this task (provisioning only seeds the rows).
+// some of these." core/provisioning/seed-field-definitions.ts materializes
+// one row per code-declared field (core/field-engine/defaults.ts) for
+// every company at provisioning time - so a PATCH always has a real row/id
+// to target, and core/field-engine/resolve.ts's "merge code defaults with
+// company overrides" only needs to fall back to the code default for a
+// field added to the registry after a tenant was last provisioned.
+//
+// `tier` is CHECKed to exactly 2 - this table only ever holds Tier 2
+// overrides. Tier 1 fields need no row (they're just plain typed columns);
+// Tier 3 (arbitrary user-defined custom_fields/JSONB) is explicitly out of
+// this system's 90-day scope (CLAUDE.md's field model) and this table
+// makes no attempt to support it.
+//
+// `data_type` is never patchable (enforced by core/field-engine's PATCH
+// validator never accepting it, not by a DB trigger) - CLAUDE.md rule:
+// "data_type is NEVER overridable." `field_key` is likewise immutable and
+// never patchable: it's the real column/property identifier queries and
+// calculations depend on, and a label change must never be able to touch
+// it (rule: "Changing a label must not affect the column name, any query,
+// or any calculation").
+export const fieldDataTypeEnum = pgEnum("field_data_type", [
+  "text",
+  "textarea",
+  "number",
+  "decimal",
+  "boolean",
+  "date",
+  "datetime",
+  "select",
+]);
+
+export interface FieldValidationRules {
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  min?: number;
+  max?: number;
+}
 
 export const fieldDefinitions = pgTable(
   "field_definitions",
@@ -650,16 +684,26 @@ export const fieldDefinitions = pgTable(
     module: text("module").notNull(),
     entity: text("entity").notNull(),
     fieldKey: text("field_key").notNull(),
+    tier: integer("tier").notNull().default(2),
     label: text("label").notNull(),
+    dataType: fieldDataTypeEnum("data_type").notNull(),
     isVisible: boolean("is_visible").notNull().default(true),
     isMandatory: boolean("is_mandatory").notNull().default(false),
+    isEditable: boolean("is_editable").notNull().default(true),
+    defaultValue: text("default_value"),
+    /** e.g. "reference_master:currency" - where a select field's options come from. Opaque to the DB; core/field-engine and the frontend agree on the format. */
+    optionsSource: text("options_source"),
+    validationJson: jsonb("validation_json").$type<FieldValidationRules>(),
     sortOrder: integer("sort_order").notNull().default(0),
+    /** System fields cannot be hidden or made optional (core/field-engine/mutations.ts enforces this on every PATCH) - e.g. a login identifier. */
+    isSystem: boolean("is_system").notNull().default(false),
     ...auditColumns(),
   },
   (table) => [
     uniqueIndex("field_definitions_company_module_entity_field_key")
       .on(table.companyId, table.module, table.entity, table.fieldKey)
       .where(sql`${table.deletedAt} is null`),
+    check("field_definitions_tier_check", sql`${table.tier} = 2`),
   ],
 );
 

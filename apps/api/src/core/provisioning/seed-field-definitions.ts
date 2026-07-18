@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { withTenantSchema } from "../../database/get-db.js";
 import { fieldDefinitions } from "../../database/tenant/schema.js";
+import { FIELD_DEFAULTS } from "../field-engine/defaults.js";
 
 export interface SeedFieldDefinitionsInput {
   schemaName: string;
@@ -8,32 +9,19 @@ export interface SeedFieldDefinitionsInput {
   createdBy: string;
 }
 
-interface DefaultFieldDefinition {
-  module: string;
-  entity: string;
-  fieldKey: string;
-  label: string;
-  isMandatory: boolean;
-  sortOrder: number;
-}
-
 /**
- * A concrete, working example of Tier 2 (CLAUDE.md's field model) rather
- * than an attempt to cover every entity the catalogue names - "users.user"
- * is the one entity with real columns and a real module today; masters/
- * purchase don't have routes yet (core/module-registry/manifests.ts), so
- * there's nothing real to attach an override to for them.
+ * Materializes one field_definitions row per core/field-engine/
+ * defaults.ts entry - core/field-engine/defaults.ts is the single source
+ * of truth for what Tier 2 fields exist; this just makes sure every
+ * company gets a real row (and therefore a real PATCH-able id) for each
+ * of them from day one, rather than lazily creating one on first
+ * override. Idempotent: onConflictDoUpdate against the (company_id,
+ * module, entity, field_key) unique index, re-run-safe exactly like
+ * core/rbac/seed.ts's seedPermissionCatalogue.
  */
-const DEFAULT_FIELD_DEFINITIONS: DefaultFieldDefinition[] = [
-  { module: "users", entity: "user", fieldKey: "name", label: "Full Name", isMandatory: true, sortOrder: 0 },
-  { module: "users", entity: "user", fieldKey: "email", label: "Email", isMandatory: false, sortOrder: 1 },
-  { module: "users", entity: "user", fieldKey: "mobile", label: "Mobile", isMandatory: true, sortOrder: 2 },
-];
-
-/** Idempotent: onConflictDoUpdate against the (company_id, module, entity, field_key) unique index. */
 export async function seedDefaultFieldDefinitions(input: SeedFieldDefinitionsInput): Promise<void> {
   await withTenantSchema(input.schemaName, async (tx) => {
-    for (const field of DEFAULT_FIELD_DEFINITIONS) {
+    for (const field of FIELD_DEFAULTS) {
       await tx
         .insert(fieldDefinitions)
         .values({
@@ -42,17 +30,27 @@ export async function seedDefaultFieldDefinitions(input: SeedFieldDefinitionsInp
           entity: field.entity,
           fieldKey: field.fieldKey,
           label: field.label,
+          dataType: field.dataType,
+          isVisible: field.isVisible,
           isMandatory: field.isMandatory,
+          isEditable: field.isEditable,
           sortOrder: field.sortOrder,
+          isSystem: field.isSystem,
           createdBy: input.createdBy,
+          ...(field.defaultValue !== undefined ? { defaultValue: field.defaultValue } : {}),
+          ...(field.optionsSource !== undefined ? { optionsSource: field.optionsSource } : {}),
+          ...(field.validationJson !== undefined ? { validationJson: field.validationJson } : {}),
         })
         .onConflictDoUpdate({
           target: [fieldDefinitions.companyId, fieldDefinitions.module, fieldDefinitions.entity, fieldDefinitions.fieldKey],
           targetWhere: sql`${fieldDefinitions.deletedAt} is null`,
           set: {
             label: field.label,
+            isVisible: field.isVisible,
             isMandatory: field.isMandatory,
+            isEditable: field.isEditable,
             sortOrder: field.sortOrder,
+            isSystem: field.isSystem,
             updatedBy: input.createdBy,
             updatedAt: new Date(),
           },
