@@ -10,7 +10,8 @@ export type InvitationRow = typeof invitations.$inferSelect;
 export interface InsertInvitedUserInput {
   companyId: string;
   email: string;
-  mobile: string;
+  /** Optional: the regular /users/invite flow always collects it, but core/provisioning/provision-tenant.ts inviting a tenant admin has only a name and email to work with (see schema.ts's doc comment on users.mobile). */
+  mobile?: string;
   name: string;
   createdBy: string;
 }
@@ -21,10 +22,10 @@ export async function insertInvitedUser(tx: TenantTx, input: InsertInvitedUserIn
     .values({
       companyId: input.companyId,
       email: input.email,
-      mobile: input.mobile,
       name: input.name,
       status: "invited",
       createdBy: input.createdBy,
+      ...(input.mobile !== undefined ? { mobile: input.mobile } : {}),
     })
     .returning();
   if (!user) {
@@ -85,6 +86,16 @@ export async function findActiveUserByMobile(tx: TenantTx, mobile: string): Prom
     .select()
     .from(users)
     .where(and(eq(users.mobile, mobile), isNull(users.deletedAt)))
+    .limit(1);
+  return user;
+}
+
+/** Tenant-wide (not company-scoped) - core/provisioning/provision-tenant.ts checks this before creating a tenant's first admin, before any company-specific lookup makes sense. */
+export async function findActiveUserByEmail(tx: TenantTx, email: string): Promise<UserRow | undefined> {
+  const [user] = await tx
+    .select()
+    .from(users)
+    .where(and(eq(users.email, email), isNull(users.deletedAt)))
     .limit(1);
   return user;
 }

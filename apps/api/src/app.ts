@@ -7,6 +7,7 @@ import { errorHandler } from "./common/middleware/error-handler.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { menusRouter } from "./modules/menus/menus.routes.js";
+import { platformRouter } from "./modules/platform/platform.routes.js";
 import { invitationsRouter } from "./modules/users/invitations.routes.js";
 import { usersRouter } from "./modules/users/users.routes.js";
 
@@ -31,6 +32,7 @@ export function createApp(): Express {
   app.use("/api/v1/users", usersRouter);
   app.use("/api/v1/invitations", invitationsRouter);
   app.use("/api/v1/menus", menusRouter);
+  app.use("/api/v1/platform", platformRouter);
 
   app.use(errorHandler);
 

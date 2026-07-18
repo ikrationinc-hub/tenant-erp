@@ -20,6 +20,8 @@ const envSchema = z.object({
 
   JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters"),
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
+  /** Deliberately its own secret, not JWT_ACCESS_SECRET - platform admins are "separate auth entirely" (docs/Hyperion-ERP-Backend-Plan-v2.md), never tenant-scoped, and must never be verifiable by a tenant token or vice versa. */
+  PLATFORM_JWT_SECRET: z.string().min(32, "PLATFORM_JWT_SECRET must be at least 32 characters"),
 
   S3_ENDPOINT: z.string().min(1, "S3_ENDPOINT is required"),
   S3_REGION: z.string().min(1, "S3_REGION is required"),

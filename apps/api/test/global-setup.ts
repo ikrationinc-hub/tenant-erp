@@ -36,6 +36,7 @@ export async function setup(): Promise<void> {
   process.env.REDIS_URL ??= "redis://localhost:6380";
   process.env.JWT_ACCESS_SECRET ??= "test-access-secret-at-least-32-characters-long";
   process.env.JWT_REFRESH_SECRET ??= "test-refresh-secret-at-least-32-characters-long";
+  process.env.PLATFORM_JWT_SECRET ??= "test-platform-secret-at-least-32-characters-long";
   process.env.S3_ENDPOINT ??= "http://localhost:9000";
   process.env.S3_REGION ??= "us-east-1";
   process.env.S3_ACCESS_KEY_ID ??= "test";

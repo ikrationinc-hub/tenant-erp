@@ -79,3 +79,45 @@ export function getPermissionCatalogue(): PermissionCatalogueEntry[] {
 export function getModuleManifest(key: string): ModuleManifest | undefined {
   return RESOLVED_MODULES.find((manifest) => manifest.key === key);
 }
+
+/**
+ * "health" and "auth" are foundational infrastructure, not a business
+ * module a tenant would ever meaningfully toggle off (see require-module-
+ * enabled.ts's doc comment on why /login structurally can't even be
+ * gated) - every tenant gets them regardless of what was requested at
+ * provisioning time.
+ */
+export const ALWAYS_ENABLED_MODULE_KEYS: readonly string[] = ["health", "auth"];
+
+/**
+ * The full set of modules that must end up enabled to satisfy
+ * `requestedKeys`: the always-on infrastructure modules, the requested
+ * modules themselves, and every transitive dependency a requested module
+ * declares (a tenant can't meaningfully have "purchase" enabled without
+ * "masters" and "roles", which it depends on). Throws on an unknown key -
+ * requesting a module that doesn't exist is a caller error, not something
+ * to silently ignore.
+ */
+export function resolveModuleClosure(requestedKeys: string[]): Set<string> {
+  const closure = new Set<string>(ALWAYS_ENABLED_MODULE_KEYS);
+
+  function include(key: string): void {
+    if (closure.has(key)) {
+      return;
+    }
+    const manifest = getModuleManifest(key);
+    if (!manifest) {
+      throw new Error(`Unknown module "${key}"`);
+    }
+    closure.add(key);
+    for (const dep of manifest.dependsOn) {
+      include(dep);
+    }
+  }
+
+  for (const key of requestedKeys) {
+    include(key);
+  }
+
+  return closure;
+}

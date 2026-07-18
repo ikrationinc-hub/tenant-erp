@@ -23,6 +23,8 @@ const REAL_MIGRATION_VERSIONS = [
   "0005_furry_kingpin",
   "0006_sad_trish_tilby",
   "0007_tiresome_blob",
+  "0008_serious_karen_page",
+  "0009_worried_big_bertha",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

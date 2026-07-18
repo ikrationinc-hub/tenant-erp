@@ -97,8 +97,13 @@ export const userStatusEnum = pgEnum("user_status", ["invited", "active", "suspe
  * POST /users/provision exception path (task item 4 of user onboarding)
  * have no email at all and log in by mobile instead - login() tries email
  * first, falls back to mobile if the supplied identifier isn't shaped like
- * one. mobile therefore carries the same uniqueness requirement email does,
- * so "log in by mobile" can never be ambiguous about which user it means.
+ * one. mobile is NULLABLE for the mirror-image reason: a tenant admin
+ * created by core/provisioning/provision-tenant.ts has only an email (the
+ * platform admin provisioning them collects a name and email, never a
+ * phone number) - a user row genuinely can have either identifier without
+ * the other, just not neither. Both carry the same uniqueness requirement
+ * (a soft-delete-aware partial unique index each), so whichever identifier
+ * IS present can never be ambiguous about which user it means.
  */
 export const users = pgTable(
   "users",
@@ -108,7 +113,7 @@ export const users = pgTable(
       .notNull()
       .references(() => companies.id, { onDelete: "restrict" }),
     email: text("email"),
-    mobile: text("mobile").notNull(),
+    mobile: text("mobile"),
     passwordHash: text("password_hash"),
     name: text("name").notNull(),
     status: userStatusEnum("status").notNull().default("invited"),

@@ -30,6 +30,15 @@ export interface RequestContext {
   /** Populated once by request-context.middleware.ts - read by core/audit/write.ts so callers never have to thread these through every insertAuditLog call. */
   ip?: string;
   userAgent?: string;
+  /**
+   * Set by common/middleware/platform-admin-auth.ts, mutually exclusive
+   * with tenantScope in practice (a platform admin token carries no tenant
+   * claims at all - core/platform-auth/jwt.ts). Kept as its own field
+   * rather than folded into TenantScope: a platform admin isn't scoped to
+   * any tenant, so giving it a home inside TenantScope would misrepresent
+   * what it is.
+   */
+  platformAdminId?: string;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
