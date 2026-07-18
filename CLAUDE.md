@@ -4,38 +4,70 @@ Project instructions for Claude Code. Read this before every task.
 
 ## What we're building
 
-A multi-tenant, multi-company **commodity trading ERP** (metals: LME-priced, hedged, shipped in containers). Backend only for now. First client is a billion-dollar trading company. **Production-grade from commit #1 — this is not a prototype in code quality, only in scope.**
+A multi-tenant, multi-company **commodity trading ERP** (metals: LME-priced, hedged, shipped in containers). First client is a billion-dollar trading company. **Production-grade from commit #1 — this is a prototype in scope only, never in code quality.**
 
-Current milestone: 90-day prototype — architecture + company onboarding + the Purchase module. See `docs/PROTOTYPE-PLAN-90-DAYS.md`.
+Current milestone: 16-week prototype — architecture + company onboarding + Purchase module + a thin schema-driven UI. See `docs/PROTOTYPE-PLAN-16-WEEKS.md`.
+
+Team: 2 engineers, both doing backend and frontend. Time is the scarcest resource — prefer the boring solution.
+
+---
 
 ## Stack — decided, do not relitigate
 
+### Backend
 | | |
 |---|---|
 | Runtime | Node.js 22 LTS, TypeScript 5 `strict` |
 | HTTP | **Express 5** (not 4, not Fastify) |
-| DB | PostgreSQL 17 + **Drizzle ORM** + drizzle-kit (not Prisma) |
+| DB | PostgreSQL 17 + **Drizzle ORM** (not Prisma) |
 | Cache/queue | Redis 7 + ioredis + BullMQ |
-| Validation | **Zod** static DTOs · **AJV** for dynamic form schemas |
+| Validation | **Zod** static · **AJV** for dynamic form schemas |
 | Money | **decimal.js** + `numeric` columns |
 | Auth | jose (JWT) + argon2id |
 | Storage | MinIO (S3 API) via `@aws-sdk/client-s3` |
 | Logging | Pino + AsyncLocalStorage |
-| Tests | Vitest + Supertest + Testcontainers |
-| Repo | pnpm workspaces + Turborepo |
 
-## The 10 rules (violating these is a bug, not a style preference)
+### Frontend
+| | |
+|---|---|
+| Framework | React 19 + TypeScript `strict` + Vite |
+| Components | **Ant Design v5** (not shadcn, not MUI — AntD's Table/Tree/Transfer/Cascader ARE the product) |
+| Server state | **TanStack Query v5** |
+| Client state | **Zustand** — auth + UI prefs only. No Redux. |
+| Forms | **React Hook Form** + Zod resolver, wrapping AntD inputs via `Controller` |
+| Routing | React Router v7 |
+| Mocking | **MSW** — handlers built from `packages/contracts` |
+| Tests | Vitest + Testing Library + Playwright |
 
-1. **Money is never a JS number.** `numeric(18,2)` for amounts, `numeric(18,6)` for rates/quantities. `decimal.js` in code. Never `mode: 'number'` on a numeric column — that's a silent float conversion. Parse to `Decimal` at the repository boundary.
-2. **Tenant scope comes from the JWT.** Never from body, query, or header. Not even for admin endpoints.
-3. **`SET LOCAL search_path`, never `SET`.** Transaction-scoped only. A pooled connection leaking `search_path` across tenants is a data breach. This lives in `getDb(ctx)` and **nowhere else**.
-4. **Never write a cross-tenant query.** Not one. It permanently kills our database-per-tenant migration path.
+### Shared
+pnpm workspaces + Turborepo. `packages/contracts` holds Zod schemas + inferred types, imported by **both** api and web. Backend tests: Vitest + Supertest + Testcontainers.
+
+---
+
+## The 10 backend rules (violating these is a bug, not a style preference)
+
+1. **Money is never a JS number.** `numeric(18,2)` amounts, `numeric(18,6)` rates/quantities. `decimal.js` in code. Never `mode: 'number'` on a numeric column — silent float conversion. Parse to `Decimal` at the repository boundary.
+2. **Tenant scope comes from the JWT.** Never body, query, or header. Not even for admin endpoints.
+3. **`SET LOCAL search_path`, never `SET`.** Transaction-scoped only. A pooled connection leaking `search_path` across tenants is a data breach. Lives in `get-db.ts` and **nowhere else**.
+4. **Never write a cross-tenant query.** Not one. It permanently kills the database-per-tenant migration path.
 5. **Only the repository layer touches SQL.** Controllers and services never import `db`.
-6. **Audit writes happen inside the business transaction.** An audit log that can diverge from the data is worse than none.
-7. **Numbering is gapless.** Never use Postgres `SEQUENCE` for document numbers — it leaks on rollback. Use `number_series` + `SELECT FOR UPDATE`, same transaction as the insert.
-8. **Posted documents are immutable.** Corrections are reversal + re-entry, never edits.
-9. **No FK from a tenant schema to the `platform` schema.** `pg_dump -n tenant_x` must be self-contained.
-10. **Every list endpoint is paginated and filtered server-side.** From day one.
+6. **Audit writes happen inside the business transaction.**
+7. **Numbering is gapless.** Never a Postgres `SEQUENCE` for document numbers — it leaks on rollback. `number_series` + `SELECT FOR UPDATE`, same transaction as the insert.
+8. **Posted documents are immutable.** Corrections are reversal + re-entry.
+9. **No FK from a tenant schema to `platform`.** `pg_dump -n tenant_x` must be self-contained.
+10. **Every list endpoint is paginated and filtered server-side.**
+
+## The 7 frontend rules
+
+1. **Never hardcode a field label, type, or form layout.** Forms render from `GET /field-definitions/:module/:entity`. An `<Input label="Other Charges" />` anywhere under `modules/` defeats the entire field engine and is a bug.
+2. **Never hardcode navigation.** The menu tree renders from `GET /menus`. No route arrays in code.
+3. **The frontend never calculates money.** FR-105/106/203 are server-side. The API returns `numeric` as **strings** — never `parseFloat` them. Display as given. If a live preview is genuinely needed, use decimal.js — never native arithmetic.
+4. **Field permissions are UX, not security.** The backend resolves and enforces; the frontend renders whatever schema it's handed. Never re-derive permissions client-side.
+5. **TanStack Query owns server state.** Zustand only for auth token + UI prefs. Never cache API data in Zustand.
+6. **One component per spec field type**, in a registry (`core/schema-form/field-types/`). Thirteen exist — see `docs/spec/Purchase-V2.md` §4. Never a `switch` on field type outside the registry.
+7. **Types come from `packages/contracts`.** Never redeclare an API type inside `apps/web`.
+
+---
 
 ## Architecture
 
@@ -56,6 +88,12 @@ requestId → helmet/cors → rate limit → authenticate → resolve tenant/com
 → events → audit (same txn) → strip read-forbidden fields → response
 ```
 
+The frontend is **a rendering engine for backend metadata**, not hand-coded screens:
+```
+GET /field-definitions/purchase/purchase → schema → <SchemaForm/> → rendered form
+GET /menus                               → tree   → <Navigation/>
+```
+
 ## Table conventions — every table, no exceptions
 
 ```sql
@@ -70,17 +108,15 @@ deleted_at    timestamptz               -- soft delete. NO hard deletes.
 version       integer not null default 1  -- optimistic locking
 ```
 
-- Soft-delete-aware uniques: `create unique index ... where deleted_at is null`
-- Every composite index leads with `company_id`
-- All timestamps `timestamptz`, stored UTC. Business dates (LME fixing, invoice date) are `date`, not timestamp.
+Soft-delete-aware uniques: `create unique index ... where deleted_at is null`. Every composite index leads with `company_id`. Timestamps `timestamptz` UTC; business dates (LME fixing, invoice date) are `date`.
 
 ## Field model (three tiers — do not blur these)
 
-- **Tier 1 Fixed** — typed columns. ~85% of fields. Rate, quantity, exchange rate.
+- **Tier 1 Fixed** — typed columns. ~85%. Rate, quantity, exchange rate.
 - **Tier 2 Configurable** — real column + `field_definitions` row overriding label/visibility/mandatory/order. This is how *"Other Charges — field should be named by user"* works.
-- **Tier 3 Custom** — `custom_fields` JSONB, whitelisted entities only. **NOT IN THE 90-DAY SCOPE.**
+- **Tier 3 Custom** — `custom_fields` JSONB. **NOT IN THE 16-WEEK SCOPE.**
 
-If a task seems to need Tier 3, stop and ask. It's out of scope.
+If a task seems to need Tier 3, stop and ask.
 
 ## Layout
 
@@ -92,39 +128,49 @@ apps/api/src/
 │   ├── tenant/      per-tenant schema + migrations
 │   ├── get-db.ts    ← THE tenant boundary. search_path lives here only.
 │   └── migration-runner.ts
-├── common/
-│   ├── middleware/  auth, scope-resolver, rbac, field-rbac, error, rate-limit
-│   ├── errors/      AppError hierarchy
-│   ├── money/       Money value object, decimal wrappers
-│   ├── context/     AsyncLocalStorage request context
-│   └── events/ validators/ utils/ types/
+├── common/          middleware/ errors/ money/ context/ events/ validators/
 ├── core/            module-registry, rbac, field-rbac, menu-engine, field-engine,
-│                    numbering, workflow, audit, fx, pricing, docgen, storage,
+│                    numbering, workflow, audit, fx, pricing, storage,
 │                    notification, provisioning
 ├── modules/         auth, users, roles, masters, trading, verticals/metals, inventory
 │                    (each: controller, service, repository, routes, validator,
 │                     events, manifest)
 └── app.ts
-apps/worker/src/     queues/, workers/, worker.ts   ← separate entrypoint, same modules
+
+apps/web/src/
+├── core/
+│   ├── schema-form/     ← THE renderer. SchemaForm, FieldRenderer,
+│   │                       field-types/ (13), compile-validator.ts
+│   ├── schema-table/    ← generic grid from column definitions
+│   ├── navigation/      ← renders GET /menus
+│   ├── permissions/     ← usePermission, <Can/>
+│   └── api/             ← TanStack Query client, error handling, auth interceptor
+├── modules/             auth, masters, purchase   ← thin. Screens compose core/.
+├── app/                 router, layout, providers
+└── mocks/               MSW handlers
+
+apps/worker/src/     queues/, workers/, worker.ts   ← separate entrypoint
 packages/contracts/  shared Zod schemas + types (api ↔ web)
 ```
 
 ## Working style
 
-- **Small, verifiable steps.** One concern per commit. Don't build three engines in one pass.
-- **Tests alongside code**, not after. Testcontainers with real Postgres/Redis — **never mock the DB.** Mocked repos hide exactly the constraint/locking/precision bugs that matter in an ERP.
-- **Verify library APIs against current docs before using them.** Training data goes stale; Drizzle and Express 5 both move. If unsure of an API, check rather than guess.
-- **When the spec is ambiguous, stop and ask.** Don't invent business rules. The source spec is `docs/spec/Purchase-V2.md`.
-- **Record decisions** in `docs/adr/` as you make them.
+- **Small, verifiable steps.** One concern per commit.
+- **Tests alongside code.** Testcontainers with real Postgres/Redis — **never mock the DB.** Mocked repos hide the exact constraint/locking/precision bugs that matter in an ERP.
+- **Verify library APIs against current docs before using them.** Training data goes stale; Drizzle, Express 5, AntD v5, React Router v7 and TanStack Query v5 all move. Check rather than guess.
+- **When the spec is ambiguous, stop and ask.** Don't invent business rules. Source: `docs/spec/Purchase-V2.md` — including its §5 open questions, which are NOT answered yet.
+- **Record decisions** in `docs/adr/`.
 - Conventional commits. Never commit secrets.
 
 ## Do not
 
 - Add dependencies without asking
 - Use `any`, or `as` to silence a type error
-- Scatter `if (status === 'draft')` — that's the workflow engine's job
-- Scatter `if (user.role === 'admin')` — that's the RBAC middleware's job
+- Scatter `if (status === 'draft')` — that's the workflow engine
+- Scatter `if (user.role === 'admin')` — that's the RBAC middleware
 - Write `SET search_path` outside `get-db.ts`
 - Hard-delete anything
 - Build Tier-3 custom fields
+- Hardcode a field label or a route in `apps/web`
+- `parseFloat` an amount
 - Optimize before it's measured
