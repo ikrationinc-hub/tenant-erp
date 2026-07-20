@@ -359,7 +359,10 @@ describe("modules/platform: tenant administration", () => {
   it(
     "GET .../modules lists the full catalogue with enabled flags; PATCH toggles one and persists",
     async () => {
-      const provisioned = await provisionActiveTenant("modules-flow");
+      // "menus" explicitly requested - it's not in ALWAYS_ENABLED_MODULE_KEYS
+      // (only health/auth are), so a tenant provisioned with modules: []
+      // would never have it enabled to begin with.
+      const provisioned = await provisionActiveTenant("modules-flow", ["menus"]);
       const platformAdmin = await seedPlatformAdmin();
       const tokens = await loginPlatformAdmin(platformAdmin);
       const httpApp = app();
