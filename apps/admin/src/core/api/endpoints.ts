@@ -9,4 +9,5 @@ export const endpoints = {
   suspendTenant: (id: string) => `/tenants/${id}/suspend`,
   reactivateTenant: (id: string) => `/tenants/${id}/reactivate`,
   tenantModules: (id: string) => `/tenants/${id}/modules`,
+  moduleCatalogue: "/modules",
 } as const;

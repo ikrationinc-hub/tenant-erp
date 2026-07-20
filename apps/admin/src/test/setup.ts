@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { server } from "../mocks/server";
+import { resetMockTenantState } from "../mocks/handlers";
 import { queryClient } from "../core/api/query-client";
 import { useAdminStore } from "../core/store/admin-store";
 
@@ -22,6 +23,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   cleanup();
   server.resetHandlers();
+  resetMockTenantState();
   queryClient.clear();
   useAdminStore.setState({ accessToken: null, refreshToken: null, admin: null });
   window.localStorage.clear();

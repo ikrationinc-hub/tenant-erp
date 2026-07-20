@@ -120,6 +120,18 @@ export const tenantStatusUpdateResponseSchema = z.object({
 });
 export type TenantStatusUpdateResponse = z.infer<typeof tenantStatusUpdateResponseSchema>;
 
+/** GET /api/v1/platform/modules - the static catalogue, no tenant context, no "enabled" flag. */
+export const moduleCatalogueEntrySchema = z.object({
+  key: z.string(),
+  name: z.string(),
+});
+export type ModuleCatalogueEntry = z.infer<typeof moduleCatalogueEntrySchema>;
+
+export const moduleCatalogueResponseSchema = z.object({
+  modules: z.array(moduleCatalogueEntrySchema),
+});
+export type ModuleCatalogueResponse = z.infer<typeof moduleCatalogueResponseSchema>;
+
 /** One entry of the full module catalogue (RESOLVED_MODULES), flagged enabled/disabled for a given tenant. */
 export const tenantModuleCatalogueEntrySchema = z.object({
   key: z.string(),

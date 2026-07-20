@@ -252,11 +252,32 @@ describe("modules/platform: tenant administration", () => {
         request(httpApp).post(`/api/v1/platform/tenants/${tenantId}/reactivate`),
         request(httpApp).get(`/api/v1/platform/tenants/${tenantId}/modules`),
         request(httpApp).patch(`/api/v1/platform/tenants/${tenantId}/modules`).send({ moduleKey: "menus", enabled: false }),
+        request(httpApp).get("/api/v1/platform/modules"),
       ]);
 
       for (const res of results) {
         expect(res.status).toBe(401);
       }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "GET /platform/modules returns the static module catalogue with no tenant context",
+    async () => {
+      const platformAdmin = await seedPlatformAdmin();
+      const tokens = await loginPlatformAdmin(platformAdmin);
+
+      const res = await request(app())
+        .get("/api/v1/platform/modules")
+        .set("Authorization", `Bearer ${tokens.accessToken}`);
+      expect(res.status).toBe(200);
+
+      const modules = z
+        .object({ modules: z.array(z.object({ key: z.string(), name: z.string() })) })
+        .parse(res.body).modules;
+      expect(modules.some((m) => m.key === "menus")).toBe(true);
+      expect(modules.some((m) => m.key === "auth")).toBe(true);
     },
     TEST_TIMEOUT_MS,
   );

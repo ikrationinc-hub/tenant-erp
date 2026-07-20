@@ -14,6 +14,8 @@ platformRouter.post("/auth/refresh", platformController.refresh);
 platformRouter.post("/auth/logout", platformAdminAuthMiddleware, platformController.logout);
 platformRouter.get("/auth/me", platformAdminAuthMiddleware, platformController.me);
 
+platformRouter.get("/modules", platformAdminAuthMiddleware, platformController.listModuleCatalogue);
+
 platformRouter.get("/tenants", platformAdminAuthMiddleware, platformController.listAllTenants);
 platformRouter.post("/tenants", platformAdminAuthMiddleware, platformController.createTenant);
 platformRouter.get("/tenants/:id", platformAdminAuthMiddleware, platformController.getTenant);

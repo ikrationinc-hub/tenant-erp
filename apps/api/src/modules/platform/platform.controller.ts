@@ -102,6 +102,22 @@ export async function createTenant(req: Request, res: Response, next: NextFuncti
   }
 }
 
+/**
+ * GET /platform/modules - the static module catalogue (key + name), with no
+ * tenant context at all. ADM-4 needs this to populate the onboarding form's
+ * module multi-select before a tenant exists to have per-tenant enabled
+ * flags - unlike GET /tenants/:id/modules, there's no "enabled" here.
+ */
+export function listModuleCatalogue(_req: Request, res: Response, next: NextFunction): void {
+  try {
+    requirePlatformAdminId();
+    const modules = RESOLVED_MODULES.map((manifest) => ({ key: manifest.key, name: manifest.name }));
+    res.status(200).json({ modules });
+  } catch (error) {
+    next(error);
+  }
+}
+
 /** GET /platform/tenants - metadata + aggregate counts only, never a browse of tenant business data (ADM-2 task item 1). */
 export async function listAllTenants(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {

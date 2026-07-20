@@ -1,16 +1,20 @@
 import { http, HttpResponse } from "msw";
 import {
+  moduleCatalogueResponseSchema,
   platformLoginResponseSchema,
   platformMeResponseSchema,
   platformRefreshResponseSchema,
   tenantDetailResponseSchema,
   tenantListResponseSchema,
-  tenantModulesResponseSchema,
+  tenantModuleCatalogueEntrySchema,
+  type ModuleCatalogueResponse,
   type PlatformLoginResponse,
   type PlatformMeResponse,
+  type ProvisionTenantRequest,
+  type SetTenantModuleRequest,
   type TenantDetailResponse,
   type TenantListResponse,
-  type TenantModulesResponse,
+  type TenantModuleCatalogueEntry,
 } from "@hyperion/contracts";
 import { endpoints } from "../core/api/endpoints";
 
@@ -34,12 +38,15 @@ const mockLoginResponse: PlatformLoginResponse = platformLoginResponseSchema.par
   admin: mockAdmin,
 });
 
+const EXISTING_TENANT_ID = "11111111-1111-4111-8111-111111111111";
+const EXISTING_TENANT_SLUG = "hyperion";
+
 const mockTenants: TenantListResponse = tenantListResponseSchema.parse({
   tenants: [
     {
-      id: "11111111-1111-4111-8111-111111111111",
+      id: EXISTING_TENANT_ID,
       name: "Hyperion Metals Trading",
-      slug: "hyperion",
+      slug: EXISTING_TENANT_SLUG,
       schemaName: "tenant_hyperion",
       status: "active",
       createdAt: "2026-01-15T09:00:00.000Z",
@@ -51,9 +58,9 @@ const mockTenants: TenantListResponse = tenantListResponseSchema.parse({
 });
 
 const mockTenantDetail: TenantDetailResponse = tenantDetailResponseSchema.parse({
-  id: "11111111-1111-4111-8111-111111111111",
+  id: EXISTING_TENANT_ID,
   name: "Hyperion Metals Trading",
-  slug: "hyperion",
+  slug: EXISTING_TENANT_SLUG,
   schemaName: "tenant_hyperion",
   status: "active",
   createdAt: "2026-01-15T09:00:00.000Z",
@@ -61,14 +68,33 @@ const mockTenantDetail: TenantDetailResponse = tenantDetailResponseSchema.parse(
   modules: [],
 });
 
-const mockTenantModules: TenantModulesResponse = tenantModulesResponseSchema.parse({
+const mockModuleCatalogue: ModuleCatalogueResponse = moduleCatalogueResponseSchema.parse({
   modules: [
-    { key: "health", name: "Health", enabled: true },
-    { key: "auth", name: "Authentication", enabled: true },
-    { key: "users", name: "User Management", enabled: true },
-    { key: "menus", name: "Navigation Menus", enabled: true },
+    { key: "health", name: "Health" },
+    { key: "auth", name: "Authentication" },
+    { key: "users", name: "User Management" },
+    { key: "menus", name: "Navigation Menus" },
   ],
 });
+
+const initialTenantModules: TenantModuleCatalogueEntry[] = mockModuleCatalogue.modules.map((m) =>
+  tenantModuleCatalogueEntrySchema.parse({ ...m, enabled: true }),
+);
+
+/**
+ * Mutable, module-scoped state so PATCH .../modules actually persists across
+ * a subsequent GET within one test (ADM-4's "module toggle persists").
+ * apps/admin/src/test/setup.ts resets this in afterEach - MSW's own
+ * server.resetHandlers() only removes server.use() overrides, not state
+ * closed over by a handler.
+ */
+let tenantModulesState: TenantModuleCatalogueEntry[] = [...initialTenantModules];
+let tenantStatus: TenantDetailResponse["status"] = "active";
+
+export function resetMockTenantState(): void {
+  tenantModulesState = [...initialTenantModules];
+  tenantStatus = "active";
+}
 
 export const handlers = [
   http.post(`${API_BASE}${endpoints.login}`, () => HttpResponse.json(mockLoginResponse)),
@@ -82,7 +108,64 @@ export const handlers = [
   ),
   http.post(`${API_BASE}${endpoints.logout}`, () => new HttpResponse(null, { status: 204 })),
   http.get(`${API_BASE}${endpoints.me}`, () => HttpResponse.json(mockAdmin)),
-  http.get(`${API_BASE}${endpoints.tenants}`, () => HttpResponse.json(mockTenants)),
-  http.get(`${API_BASE}${endpoints.tenant(":id")}`, () => HttpResponse.json(mockTenantDetail)),
-  http.get(`${API_BASE}${endpoints.tenantModules(":id")}`, () => HttpResponse.json(mockTenantModules)),
+
+  http.get(`${API_BASE}${endpoints.moduleCatalogue}`, () => HttpResponse.json(mockModuleCatalogue)),
+
+  http.get(`${API_BASE}${endpoints.tenants}`, () =>
+    HttpResponse.json({
+      tenants: mockTenants.tenants.map((t) => (t.id === EXISTING_TENANT_ID ? { ...t, status: tenantStatus } : t)),
+    }),
+  ),
+  // NOT tenantModulesState here - GET /tenants/:id's `modules` field is
+  // tenantModuleRowSchema (raw db rows: id/tenantId/moduleKey/enabled/
+  // timestamps), a different shape from the catalogue entries (key/name/
+  // enabled) GET /tenants/:id/modules returns below. TenantDetailDrawer
+  // reads modules from that second endpoint, never this one.
+  http.get(`${API_BASE}${endpoints.tenant(":id")}`, () =>
+    HttpResponse.json({ ...mockTenantDetail, status: tenantStatus }),
+  ),
+
+  // Sentinel slug, deliberately NOT one of mockTenants' known slugs - it
+  // represents a slug that raced with another provisioning request and
+  // became taken between the operator loading the list and submitting (the
+  // client-side availability check in OnboardTenantModal only catches
+  // slugs already visible in that list, so this is the only way to
+  // exercise the server's 409 path through the UI).
+  http.post(`${API_BASE}${endpoints.tenants}`, async ({ request }) => {
+    const body = (await request.json()) as ProvisionTenantRequest;
+    if (body.slug === "already-taken") {
+      return HttpResponse.json(
+        { error: { code: "CONFLICT", message: `Tenant "${body.slug}" already exists in an unexpected state: provisioning` } },
+        { status: 409 },
+      );
+    }
+    return HttpResponse.json({
+      tenantId: "22222222-2222-4222-8222-222222222222",
+      schemaName: `tenant_${body.slug.replace(/-/g, "_")}`,
+      companyId: "33333333-3333-4333-8333-333333333333",
+      branchId: "44444444-4444-4444-8444-444444444444",
+      adminUserId: "55555555-5555-4555-8555-555555555555",
+      created: true,
+    });
+  }),
+
+  http.post(`${API_BASE}${endpoints.suspendTenant(":id")}`, () => {
+    tenantStatus = "suspended";
+    return HttpResponse.json({ ...mockTenants.tenants[0], status: tenantStatus });
+  }),
+  http.post(`${API_BASE}${endpoints.reactivateTenant(":id")}`, () => {
+    tenantStatus = "active";
+    return HttpResponse.json({ ...mockTenants.tenants[0], status: tenantStatus });
+  }),
+
+  http.get(`${API_BASE}${endpoints.tenantModules(":id")}`, () =>
+    HttpResponse.json({ modules: tenantModulesState }),
+  ),
+  http.patch(`${API_BASE}${endpoints.tenantModules(":id")}`, async ({ request }) => {
+    const body = (await request.json()) as SetTenantModuleRequest;
+    tenantModulesState = tenantModulesState.map((m) =>
+      m.key === body.moduleKey ? { ...m, enabled: body.enabled } : m,
+    );
+    return HttpResponse.json({ modules: tenantModulesState });
+  }),
 ];
