@@ -9,3 +9,6 @@ export * from "./platform-admin.js";
 export * from "./menus.js";
 export * from "./entity-list.js";
 export * from "./permissions.js";
+export * from "./users-admin.js";
+export * from "./permission-catalogue.js";
+export * from "./role-permissions.js";

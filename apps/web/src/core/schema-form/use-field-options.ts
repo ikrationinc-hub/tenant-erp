@@ -6,6 +6,11 @@ import { endpoints, withQuery } from "../api/endpoints";
 
 const NO_DEPENDENCY = "__schema_form_no_dependency__";
 
+/** "roles" isn't a core/masters/registry.ts master (it's RBAC, FE-5.5) but is options-sourced the same way - routed to GET /roles/options instead of GET /masters/roles/options. */
+function resolveOptionsEndpoint(master: string): string {
+  return master === "roles" ? `${endpoints.roles}/options` : endpoints.masterOptions(master);
+}
+
 export interface FieldOptionsResult {
   options: MasterOption[];
   isLoading: boolean;
@@ -41,7 +46,7 @@ export function useFieldOptions(
     queryKey: ["field-options", masterKey, parentValue, searchTerm ?? ""],
     queryFn: () =>
       apiFetch(
-        withQuery(endpoints.masterOptions(masterKey), {
+        withQuery(resolveOptionsEndpoint(masterKey), {
           parentValue: parentValue || undefined,
           search: searchTerm || undefined,
         }),

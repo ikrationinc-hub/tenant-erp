@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
@@ -7,6 +7,7 @@ import { Alert, Button, Card, Space, Spin, Form as AntForm } from "antd";
 import { fieldDefinitionsResponseSchema, type FieldDefinitionsResponse } from "@hyperion/contracts";
 import { apiFetch } from "../api/client";
 import { endpoints } from "../api/endpoints";
+import { notifyError, toToastPayload } from "../api/error-toast";
 import { compileValidator } from "./compile-validator";
 import { buildDefaultValues } from "./default-values";
 import { FieldRenderer } from "./FieldRenderer";
@@ -75,9 +76,22 @@ function SchemaFormBody({
     resolver: zodResolver(validator),
     defaultValues,
   });
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const submit = handleSubmit(async (values) => {
-    await onSubmit(values);
+    setSubmitError(null);
+    try {
+      await onSubmit(values);
+    } catch (error) {
+      // A plain async handler, not a useMutation - `void submit()` below
+      // would otherwise discard the rejection outright and a thrown
+      // ApiError (e.g. BE-7's 403 on an approval-holding provisioned role)
+      // would never reach the user. Same payload shape as the global toast
+      // (query-client.ts), so both channels agree on the same message.
+      const payload = toToastPayload(error);
+      notifyError(payload);
+      setSubmitError(payload.description ?? payload.message);
+    }
   });
 
   const sections = resolveFieldSections(schema);
@@ -92,6 +106,7 @@ function SchemaFormBody({
             ))}
           </Card>
         ))}
+        {submitError && <Alert type="error" showIcon message={submitError} />}
         {mode !== "view" && (
           <Button type="primary" htmlType="submit">
             Save

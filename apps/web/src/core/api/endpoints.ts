@@ -12,6 +12,25 @@ export const endpoints = {
   myPermissions: "/users/me/permissions",
   masterOptions: (master: string) => `/masters/${master}/options`,
   menus: "/menus",
+
+  // --- FE-5.5: tenant-admin surface -----------------------------------------
+  companies: "/companies",
+  branches: "/branches",
+  users: "/users",
+  suspendUser: (id: string) => `/users/${id}/suspend`,
+  reactivateUser: (id: string) => `/users/${id}/reactivate`,
+  setUserRoles: (id: string) => `/users/${id}/roles`,
+  inviteUser: "/users/invite",
+  provisionUser: "/users/provision",
+  resendInvitation: (id: string) => `/users/invitations/${id}/resend`,
+  revokeInvitation: (id: string) => `/users/invitations/${id}/revoke`,
+  roles: "/roles",
+  permissionCatalogue: "/permissions",
+  roleGrantedPermissions: (roleId: string) => `/roles/${roleId}/permissions`,
+  grantRolePermission: (roleId: string) => `/roles/${roleId}/permissions`,
+  revokeRolePermission: (roleId: string, permissionKey: string) =>
+    `/roles/${roleId}/permissions/${encodeURIComponent(permissionKey)}`,
+  roleFieldPermissions: (roleId: string) => `/roles/${roleId}/field-permissions`,
 } as const;
 
 /** Appends a query string, skipping undefined values - `?tenantCode=` for an unset optional field is just noise. */

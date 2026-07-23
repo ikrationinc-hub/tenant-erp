@@ -8,6 +8,10 @@ export function asBoolean(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
 }
 
+export function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
 export interface UploadedFileValue {
   uid: string;
   name: string;

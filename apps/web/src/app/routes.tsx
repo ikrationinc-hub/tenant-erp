@@ -8,6 +8,7 @@ import { AppShell } from "./layout/AppShell";
 import { BootstrapStatus } from "./BootstrapStatus";
 import { DynamicRoutes } from "../core/navigation/DynamicRoutes";
 import { resolveMasterScreen } from "../modules/masters/master-registry";
+import { resolveAdminScreen } from "../modules/admin/admin-registry";
 import { SchemaFormDevPage } from "./dev/SchemaFormDevPage";
 import { SchemaTableDevPage } from "./dev/SchemaTableDevPage";
 
@@ -41,7 +42,12 @@ export const routes: RouteObject[] = [
             element: <AppShell />,
             children: [
               { index: true, element: <BootstrapStatus /> },
-              { path: "*", element: <DynamicRoutes resolveScreen={resolveMasterScreen} /> },
+              {
+                path: "*",
+                element: (
+                  <DynamicRoutes resolveScreen={(entry) => resolveMasterScreen(entry) ?? resolveAdminScreen(entry)} />
+                ),
+              },
             ],
           },
         ],

@@ -31,6 +31,8 @@ export function buildDefaultValues(
         values[field.fieldKey] = initialValues[field.fieldKey];
       } else if (field.defaultValue !== undefined && field.defaultValue !== null) {
         values[field.fieldKey] = field.defaultValue;
+      } else if (resolveFieldType(field) === "Dropdown" && field.multiple) {
+        values[field.fieldKey] = [];
       } else {
         values[field.fieldKey] = EMPTY_VALUE_BY_TYPE[resolveFieldType(field)];
       }

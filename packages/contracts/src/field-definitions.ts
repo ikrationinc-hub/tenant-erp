@@ -78,6 +78,13 @@ export const optionsSourceSchema = z.union([z.string(), optionsSourceObjectSchem
     if (typeof value !== "string") {
       return value;
     }
+    // "roles" isn't a master (no core/masters/registry.ts entry - it's a
+    // first-class RBAC concept, FE-5.5) but is options-sourced the same
+    // way; use-field-options.ts routes master: "roles" to GET
+    // /roles/options instead of /masters/roles/options.
+    if (value === "roles") {
+      return { type: "master", master: "roles" };
+    }
     const [prefix, rest] = value.split(":");
     if (prefix === "masters" && rest) {
       return { type: "master", master: rest };
@@ -116,6 +123,8 @@ export const fieldDefinitionSchema = z.object({
   isSystem: z.boolean(),
   sortOrder: z.number().int(),
   defaultValue: z.unknown().nullable().optional(),
+  /** Dropdown only - a role picker etc. renders as a multi-select and stores an array, not a single string. No backend equivalent yet; set only by apps/web's own admin screens (modules/admin). */
+  multiple: z.boolean().optional(),
   optionsSource: optionsSourceSchema.nullable().optional(),
   visibilityCondition: visibilityConditionSchema.nullable().optional(),
   validation: z.record(z.string(), z.unknown()).nullable().optional(),

@@ -31,6 +31,7 @@ import {
 } from "../core/schema-table/dev-fixture";
 import { MASTER_REGISTRY } from "../modules/masters/master-registry";
 import { mastersHandlers, resolveMasterFieldDefinitions } from "./masters-handlers";
+import { adminHandlers, resolveAdminFieldDefinitions } from "./admin-handlers";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -129,26 +130,17 @@ const mockFieldDefinitions: FieldDefinitionsResponse = fieldDefinitionsResponseS
 const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
   menus: [
     { id: "m-dashboard", key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard", sortOrder: 1, children: [] },
-    {
-      id: "m-users",
-      key: "users",
-      label: "Users",
-      path: null,
-      icon: "users",
-      sortOrder: 2,
-      children: [
-        { id: "m-users-list", key: "users.list", label: "All Users", path: "/users", icon: null, sortOrder: 1, children: [] },
-        { id: "m-users-invite", key: "users.invite", label: "Invite User", path: "/users/invite", icon: null, sortOrder: 2, children: [] },
-      ],
-    },
-    { id: "m-roles", key: "roles", label: "Roles", path: "/roles", icon: "shield", sortOrder: 3, children: [] },
+    { id: "m-companies", key: "companies", label: "Companies", path: "/companies", icon: "database", sortOrder: 2, children: [] },
+    { id: "m-branches", key: "branches", label: "Branches", path: "/branches", icon: "database", sortOrder: 3, children: [] },
+    { id: "m-users", key: "users", label: "Users", path: "/users", icon: "users", sortOrder: 4, children: [] },
+    { id: "m-roles", key: "roles", label: "Roles", path: "/roles", icon: "shield", sortOrder: 5, children: [] },
     {
       id: "m-masters",
       key: "masters",
       label: "Masters",
       path: null,
       icon: "database",
-      sortOrder: 4,
+      sortOrder: 6,
       // Generated from the same registry MasterScreen resolves against
       // (modules/masters/master-registry.tsx) - the real backend seeds one
       // menu row per master the same way (core/provisioning/
@@ -170,7 +162,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Purchase",
       path: null,
       icon: "shopping-cart",
-      sortOrder: 5,
+      sortOrder: 7,
       children: [
         {
           id: "m-purchase-orders",
@@ -190,7 +182,17 @@ const mockPermissions: MyPermissionsResponse = myPermissionsResponseSchema.parse
   permissions: [
     "users.user.read",
     "users.user.create",
-    "roles.role.read",
+    "users.user.update",
+    "users.user.provision",
+    "admin.company.read",
+    "admin.company.create",
+    "admin.company.update",
+    "admin.branch.read",
+    "admin.branch.create",
+    "admin.branch.update",
+    "admin.role.read",
+    "admin.role.create",
+    "admin.role.update",
     "purchase.po.read",
     "purchase.po.approve",
     // Full CRUD on every master - matches core/masters/factory.ts's
@@ -218,6 +220,11 @@ const MASTER_OPTIONS: Record<string, MasterOption[]> = {
   warehouses: [
     { value: "wh-1", label: "Jebel Ali Warehouse" },
     { value: "wh-2", label: "Singapore Bonded Warehouse" },
+  ],
+  currencies: [
+    { value: "aed", label: "UAE Dirham" },
+    { value: "sgd", label: "Singapore Dollar" },
+    { value: "usd", label: "US Dollar" },
   ],
 };
 
@@ -254,6 +261,10 @@ export const handlers = [
     const masterFields = resolveMasterFieldDefinitions(module, entity);
     if (masterFields) {
       return HttpResponse.json(masterFields);
+    }
+    const adminFields = resolveAdminFieldDefinitions(module, entity);
+    if (adminFields) {
+      return HttpResponse.json(adminFields);
     }
     return HttpResponse.json(mockFieldDefinitions);
   }),
@@ -308,4 +319,5 @@ export const handlers = [
     return HttpResponse.json(masterOptionsResponseSchema.parse({ options: filtered }));
   }),
   ...mastersHandlers,
+  ...adminHandlers,
 ];

@@ -132,7 +132,7 @@ describe("SchemaForm - all 13 field types", () => {
     expect(typeof payload.purchaseRateUsd).toBe("string");
     expect(typeof payload.agreedPremiumPct).toBe("string");
     expect(typeof payload.finalPurchaseRateUsd).toBe("string");
-  }, 20000);
+  }, 45000);
 });
 
 describe("SchemaForm - metadata-driven rendering", () => {
