@@ -29,6 +29,12 @@ const REAL_MIGRATION_VERSIONS = [
   "0011_chubby_blockbuster",
   "0012_dry_robbie_robertson",
   "0013_faulty_black_tarantula",
+  "0014_shiny_lilandra",
+  "0015_lumpy_karnak",
+  "0016_slim_hellion",
+  "0017_serious_ricochet",
+  "0018_loose_mastermind",
+  "0019_lucky_sleeper",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

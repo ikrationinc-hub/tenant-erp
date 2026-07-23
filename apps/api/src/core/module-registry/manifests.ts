@@ -1,7 +1,10 @@
+import { attachmentsRouter } from "../../modules/attachments/attachments.routes.js";
 import { authRouter } from "../../modules/auth/auth.routes.js";
 import { fieldDefinitionsRouter } from "../../modules/field-definitions/field-definitions.routes.js";
 import { healthRouter } from "../../modules/health/health.routes.js";
 import { menusRouter } from "../../modules/menus/menus.routes.js";
+import { purchaseRouter } from "../../modules/purchase/purchase.routes.js";
+import { suppliersRouter } from "../../modules/suppliers/suppliers.routes.js";
 import { usersRouter } from "../../modules/users/users.routes.js";
 import { ALL_MASTER_PERMISSIONS, mastersRouter } from "../masters/registry.js";
 import { permissionEntry } from "../rbac/types.js";
@@ -105,14 +108,11 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     version: "1.0.0",
     routes: mastersRouter,
     permissions: [
-      // supplier/customer are full business entities (Supplier Creation's
-      // own richer field set - docs/spec/Purchase-V2.md §1), not simple
-      // code/name masters - declared ahead of their own future module,
-      // same as before this task, not built by core/masters/registry.ts.
-      permissionEntry("masters", "supplier", "create", "Create a supplier master record"),
-      permissionEntry("masters", "supplier", "read", "View supplier master records"),
-      permissionEntry("masters", "supplier", "update", "Edit a supplier master record"),
-      permissionEntry("masters", "supplier", "delete", "Remove a supplier master record"),
+      // customer remains a stub - not built yet, declared ahead of its
+      // own future module. supplier used to be declared here too, but now
+      // has a real implementation (see the "suppliers" manifest below) -
+      // module="suppliers", not "masters", is its real permission
+      // namespace.
       permissionEntry("masters", "customer", "create", "Create a customer master record"),
       permissionEntry("masters", "customer", "read", "View customer master records"),
       permissionEntry("masters", "customer", "update", "Edit a customer master record"),
@@ -130,18 +130,60 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     ],
   },
   {
+    key: "storage",
+    name: "Storage & Attachments",
+    version: "1.0.0",
+    routes: attachmentsRouter,
+    permissions: [
+      permissionEntry("storage", "attachment", "create", "Upload a file attachment"),
+      permissionEntry("storage", "attachment", "read", "View/download a file attachment"),
+    ],
+    dependsOn: ["auth"],
+    migrations: ["0014_shiny_lilandra"],
+  },
+  {
+    key: "suppliers",
+    name: "Supplier Master",
+    version: "1.0.0",
+    routes: suppliersRouter,
+    permissions: [
+      permissionEntry("suppliers", "supplier", "create", "Create a supplier"),
+      permissionEntry("suppliers", "supplier", "read", "View suppliers"),
+      permissionEntry("suppliers", "supplier", "update", "Edit a supplier, or activate/deactivate it"),
+    ],
+    // "masters": suppliers.supplier_type_id/country_id/city_id/payment_term_id/currency_id all FK into core/masters tables.
+    dependsOn: ["auth", "roles", "masters"],
+    migrations: ["0014_shiny_lilandra"],
+  },
+  {
     key: "purchase",
     name: "Purchase",
     version: "1.0.0",
-    // Not built yet (90-day plan, week 9+).
+    // Built incrementally, session by session (docs/spec/Purchase-V2.md Sub
+    // Tab 2 + 3 - "the big one", deliberately split rather than attempted in
+    // one pass, now complete): (a) header+shipment, (b) items+pricing, (c)
+    // allocation+costs (attachments needed no new code - core/storage's
+    // existing entity-agnostic module already covers FR-110), (d) LME +
+    // hedging, and (e) workflow + stock (this session) are all live.
+    // "delete" stays declared but unexercised - no FR in this spec ever
+    // asked for one, and it costs nothing to leave the permission stable
+    // for whenever it's actually built.
+    routes: purchaseRouter,
     permissions: [
       permissionEntry("purchase", "po", "create", "Create a purchase order"),
       permissionEntry("purchase", "po", "read", "View purchase orders"),
       permissionEntry("purchase", "po", "update", "Edit a draft purchase order"),
       permissionEntry("purchase", "po", "approve", "Approve a purchase order"),
+      permissionEntry("purchase", "po", "post", "Post an approved purchase order"),
       permissionEntry("purchase", "po", "delete", "Delete a draft purchase order"),
     ],
-    dependsOn: ["auth", "roles", "masters"],
-    migrations: [],
+    dependsOn: ["auth", "roles", "masters", "suppliers", "storage"],
+    migrations: [
+      "0015_lumpy_karnak",
+      "0016_slim_hellion",
+      "0017_serious_ricochet",
+      "0018_loose_mastermind",
+      "0019_lucky_sleeper",
+    ],
   },
 ];

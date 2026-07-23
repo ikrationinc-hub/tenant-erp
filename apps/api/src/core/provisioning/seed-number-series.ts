@@ -18,7 +18,12 @@ interface DefaultSeries {
 }
 
 /** Just enough to prove the mechanism works out of the box - a real tenant configures the rest via core/numbering directly once Purchase (or another numbered document type) has real routes. */
-const DEFAULT_SERIES: DefaultSeries[] = [{ docType: "PO", prefixPattern: "PO-{FY}-{0000}", padding: 4 }];
+const DEFAULT_SERIES: DefaultSeries[] = [
+  { docType: "PO", prefixPattern: "PO-{FY}-{0000}", padding: 4 },
+  // FR-002 (docs/spec/Purchase-V2.md Sub Tab 1): supplier code is auto-generated,
+  // company-wide (no fiscal year in the pattern - a supplier isn't a fiscal document).
+  { docType: "SUPPLIER", prefixPattern: "SUP-{0000}", padding: 4 },
+];
 
 /** Idempotent: number_series' own (company, branch, doc_type, fiscal_year) unique constraint (nullsNotDistinct) makes a second insert for the same series a no-op via onConflictDoNothing - re-running provisioning never resets an in-flight counter. */
 export async function seedDefaultNumberSeries(input: SeedNumberSeriesInput): Promise<void> {
