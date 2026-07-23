@@ -174,3 +174,31 @@ export const provisionTenantResponseSchema = z.object({
   created: z.boolean(),
 });
 export type ProvisionTenantResponse = z.infer<typeof provisionTenantResponseSchema>;
+
+// --- GET /api/v1/platform/health (ADM-5) - infrastructure only, no business metrics --------
+
+export const platformHealthTenantStatusSchema = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  status: tenantStatusSchema,
+  schemaPresent: z.boolean(),
+  lastMigrationVersion: z.string().optional(),
+  upToDate: z.boolean(),
+});
+export type PlatformHealthTenantStatus = z.infer<typeof platformHealthTenantStatusSchema>;
+
+export const platformHealthResponseSchema = z.object({
+  api: z.object({
+    status: z.literal("up"),
+    version: z.string(),
+    uptimeSeconds: z.number(),
+  }),
+  postgres: z.object({
+    reachable: z.boolean(),
+    pool: z.object({ total: z.number(), idle: z.number(), waiting: z.number() }),
+  }),
+  redis: z.object({ reachable: z.boolean() }),
+  worker: z.object({ reachable: z.boolean(), lastHeartbeatAt: z.string().nullable() }),
+  tenants: z.array(platformHealthTenantStatusSchema),
+});
+export type PlatformHealthResponse = z.infer<typeof platformHealthResponseSchema>;

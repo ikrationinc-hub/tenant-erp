@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import request from "supertest";
+import { sql } from "drizzle-orm";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createApp } from "../../../app.js";
-import { closeDbPool } from "../../../config/db.js";
+import { closeDbPool, db } from "../../../config/db.js";
 import { closeRedis } from "../../../config/redis.js";
 import { signAccessToken } from "../../../core/auth/jwt.js";
 import { hashPassword } from "../../../core/auth/password.js";
@@ -11,6 +12,7 @@ import { signPlatformAdminToken } from "../../../core/platform-auth/jwt.js";
 import { resetMailer, setMailer } from "../../../core/notification/mailer.js";
 import { provisionTenant } from "../../../core/provisioning/provision-tenant.js";
 import { closeTenantDbPool } from "../../../database/get-db.js";
+import { getLatestTenantMigrationVersion } from "../../../database/migration-runner.js";
 import { insertPlatformAdmin } from "../platform.repository.js";
 
 const TEST_TIMEOUT_MS = 120_000;
@@ -418,6 +420,104 @@ describe("modules/platform: tenant administration", () => {
         .set("Authorization", authHeader)
         .send({ moduleKey: "not-a-real-module", enabled: true });
       expect(unknownModuleRes.status).toBe(404);
+    },
+    TEST_TIMEOUT_MS,
+  );
+});
+
+describe("modules/platform: health", () => {
+  afterEach(() => {
+    resetMailer();
+  });
+
+  it(
+    "401s without a platform-admin token",
+    async () => {
+      const res = await request(app()).get("/api/v1/platform/health");
+      expect(res.status).toBe(401);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "reports infra reachability and per-tenant migration status, with no business data anywhere in the payload",
+    async () => {
+      const provisioned = await provisionActiveTenant("health-check");
+      const platformAdmin = await seedPlatformAdmin();
+      const tokens = await loginPlatformAdmin(platformAdmin);
+
+      const res = await request(app())
+        .get("/api/v1/platform/health")
+        .set("Authorization", `Bearer ${tokens.accessToken}`);
+      expect(res.status).toBe(200);
+
+      const body = z
+        .object({
+          api: z.object({ status: z.literal("up"), version: z.string(), uptimeSeconds: z.number() }),
+          postgres: z.object({
+            reachable: z.boolean(),
+            pool: z.object({ total: z.number(), idle: z.number(), waiting: z.number() }),
+          }),
+          redis: z.object({ reachable: z.boolean() }),
+          worker: z.object({ reachable: z.boolean(), lastHeartbeatAt: z.string().nullable() }),
+          tenants: z.array(
+            z.object({
+              id: z.string(),
+              slug: z.string(),
+              status: z.string(),
+              schemaPresent: z.boolean(),
+              lastMigrationVersion: z.string().optional(),
+              upToDate: z.boolean(),
+            }),
+          ),
+        })
+        .parse(res.body);
+
+      // Real round-trips against the actual test containers, not just "the client exists".
+      expect(body.postgres.reachable).toBe(true);
+      expect(body.redis.reachable).toBe(true);
+
+      const tenantRow = body.tenants.find((t) => t.id === provisioned.tenantId);
+      expect(tenantRow).toBeDefined();
+      expect(tenantRow?.schemaPresent).toBe(true);
+      expect(tenantRow?.upToDate).toBe(true);
+
+      // No business data anywhere - only infra/metadata keys, nothing named
+      // after a purchase, revenue, or user-level field.
+      expect(JSON.stringify(body)).not.toMatch(/purchase|revenue|invoice/i);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "flags a tenant stuck on an old migration version as not up to date",
+    async () => {
+      const provisioned = await provisionActiveTenant("health-lagging");
+      const platformAdmin = await seedPlatformAdmin();
+      const tokens = await loginPlatformAdmin(platformAdmin);
+
+      // Simulate a lagging schema: delete the journal's actual latest
+      // version from this tenant's own schema_migrations bookkeeping
+      // table, fully schema-qualified - exactly what getTenantMigrationHealth
+      // reads. NOT "order by applied_at desc limit 1" - every migration in
+      // one provisioning run shares an applied_at (same transaction, same
+      // now()), so that order is undefined; go by the known latest version
+      // string instead.
+      const latestVersion = getLatestTenantMigrationVersion();
+      await db.execute(
+        sql`delete from ${sql.identifier(provisioned.schemaName)}.schema_migrations where version = ${latestVersion}`,
+      );
+
+      const res = await request(app())
+        .get("/api/v1/platform/health")
+        .set("Authorization", `Bearer ${tokens.accessToken}`);
+      expect(res.status).toBe(200);
+
+      const body = z
+        .object({ tenants: z.array(z.object({ id: z.string(), upToDate: z.boolean() })) })
+        .parse(res.body);
+      const tenantRow = body.tenants.find((t) => t.id === provisioned.tenantId);
+      expect(tenantRow?.upToDate).toBe(false);
     },
     TEST_TIMEOUT_MS,
   );

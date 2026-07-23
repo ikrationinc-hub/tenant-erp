@@ -252,6 +252,54 @@ export async function applyPendingTenantMigrations(
   );
 }
 
+/** Read by GET /api/v1/platform/health (ADM-5) - the version every tenant should be on. */
+export function getLatestTenantMigrationVersion(): string | undefined {
+  return readTenantMigrationFiles().at(-1)?.version;
+}
+
+export interface TenantMigrationHealthStatus {
+  schemaPresent: boolean;
+  lastAppliedVersion: string | undefined;
+}
+
+/**
+ * Read-only, for GET /api/v1/platform/health (ADM-5) - deliberately NOT
+ * withTenantSchemaAdmin, which `create schema if not exists`s as a side
+ * effect (fine for actually migrating, wrong for a health probe that must
+ * report "schema missing" as a fact, not silently create one). Both queries
+ * are fully schema-qualified against the platform superuser connection,
+ * with no session-scoped state to reset - this is infra bookkeeping
+ * (schema_migrations), not a read of tenant business data.
+ */
+export async function getTenantMigrationHealth(schemaName: string): Promise<TenantMigrationHealthStatus> {
+  const schemaCheck = await db.execute<{ exists: boolean }>(
+    sql`select exists(select 1 from pg_catalog.pg_namespace where nspname = ${schemaName}) as "exists"`,
+  );
+  const schemaPresent = schemaCheck.rows[0]?.exists ?? false;
+  if (!schemaPresent) {
+    return { schemaPresent: false, lastAppliedVersion: undefined };
+  }
+
+  try {
+    const result = await db.execute<{ version: string }>(
+      sql`select version from ${sql.identifier(schemaName)}.${sql.identifier(SCHEMA_MIGRATIONS_TABLE)}`,
+    );
+    // NOT "order by applied_at desc limit 1": every migration applied in
+    // the same provisioning run shares one `applied_at` (all inserted
+    // inside applyPendingMigrationsWithDb's single transaction, so
+    // Postgres's now() is identical for each row) - that tie makes
+    // timestamp order undefined. journal order is the real ordering, so
+    // find the applied set's furthest-along entry in that order instead.
+    const applied = new Set(result.rows.map((row) => row.version));
+    const journalOrder = readTenantMigrationFiles().map((file) => file.version);
+    const lastAppliedVersion = journalOrder.filter((version) => applied.has(version)).at(-1);
+    return { schemaPresent: true, lastAppliedVersion };
+  } catch {
+    // Schema exists but schema_migrations doesn't yet - e.g. mid-provision.
+    return { schemaPresent: true, lastAppliedVersion: undefined };
+  }
+}
+
 export type TenantMigrationStatus = "up-to-date" | "migrated" | "failed";
 
 export interface TenantMigrationResult {

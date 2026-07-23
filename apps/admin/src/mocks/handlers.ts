@@ -1,6 +1,7 @@
 import { http, HttpResponse } from "msw";
 import {
   moduleCatalogueResponseSchema,
+  platformHealthResponseSchema,
   platformLoginResponseSchema,
   platformMeResponseSchema,
   platformRefreshResponseSchema,
@@ -8,6 +9,7 @@ import {
   tenantListResponseSchema,
   tenantModuleCatalogueEntrySchema,
   type ModuleCatalogueResponse,
+  type PlatformHealthResponse,
   type PlatformLoginResponse,
   type PlatformMeResponse,
   type ProvisionTenantRequest,
@@ -80,6 +82,23 @@ const mockModuleCatalogue: ModuleCatalogueResponse = moduleCatalogueResponseSche
 const initialTenantModules: TenantModuleCatalogueEntry[] = mockModuleCatalogue.modules.map((m) =>
   tenantModuleCatalogueEntrySchema.parse({ ...m, enabled: true }),
 );
+
+const mockHealth: PlatformHealthResponse = platformHealthResponseSchema.parse({
+  api: { status: "up", version: "1.0.0", uptimeSeconds: 3725 },
+  postgres: { reachable: true, pool: { total: 10, idle: 8, waiting: 0 } },
+  redis: { reachable: true },
+  worker: { reachable: true, lastHeartbeatAt: "2026-01-15T09:00:00.000Z" },
+  tenants: [
+    {
+      id: EXISTING_TENANT_ID,
+      slug: EXISTING_TENANT_SLUG,
+      status: "active",
+      schemaPresent: true,
+      lastMigrationVersion: "0013_faulty_black_tarantula",
+      upToDate: true,
+    },
+  ],
+});
 
 /**
  * Mutable, module-scoped state so PATCH .../modules actually persists across
@@ -168,4 +187,6 @@ export const handlers = [
     );
     return HttpResponse.json({ modules: tenantModulesState });
   }),
+
+  http.get(`${API_BASE}${endpoints.health}`, () => HttpResponse.json(mockHealth)),
 ];

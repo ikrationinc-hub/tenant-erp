@@ -53,12 +53,19 @@ export function OnboardTenantModal({ open, onClose, existingTenants }: OnboardTe
     if (slugTaken) {
       return;
     }
-    const result = await provisionMutation.mutateAsync(values);
-    notification.success({
-      message: result.created ? "Tenant created" : "Tenant re-provisioned",
-      description: `Admin invited to ${values.adminEmail}`,
-    });
-    onClose();
+    try {
+      const result = await provisionMutation.mutateAsync(values);
+      notification.success({
+        message: result.created ? "Tenant created" : "Tenant re-provisioned",
+        description: `Admin invited to ${values.adminEmail}`,
+      });
+      onClose();
+    } catch {
+      // Already surfaced reactively via provisionMutation.error/isError
+      // above - mutateAsync rejects on failure (unlike mutate), and
+      // `onOk={() => void onSubmit()}` would otherwise leave that
+      // rejection unhandled.
+    }
   });
 
   const errorMessage =

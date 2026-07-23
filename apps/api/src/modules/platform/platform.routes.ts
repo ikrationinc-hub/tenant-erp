@@ -16,6 +16,8 @@ platformRouter.get("/auth/me", platformAdminAuthMiddleware, platformController.m
 
 platformRouter.get("/modules", platformAdminAuthMiddleware, platformController.listModuleCatalogue);
 
+platformRouter.get("/health", platformAdminAuthMiddleware, platformController.getHealth);
+
 platformRouter.get("/tenants", platformAdminAuthMiddleware, platformController.listAllTenants);
 platformRouter.post("/tenants", platformAdminAuthMiddleware, platformController.createTenant);
 platformRouter.get("/tenants/:id", platformAdminAuthMiddleware, platformController.getTenant);

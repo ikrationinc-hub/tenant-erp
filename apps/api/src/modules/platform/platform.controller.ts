@@ -6,6 +6,7 @@ import { setModuleEnabled } from "../../core/module-registry/tenant-modules.js";
 import { verifyPlatformAdminToken } from "../../core/platform-auth/jwt.js";
 import { provisionTenant } from "../../core/provisioning/provision-tenant.js";
 import * as platformAuthService from "./platform-auth.service.js";
+import { getPlatformHealth } from "./platform-health.service.js";
 import { findTenantById, listTenantModules, listTenants, updateTenantStatus } from "./platform.repository.js";
 import {
   platformLoginSchema,
@@ -196,6 +197,17 @@ export async function getTenantModules(req: Request, res: Response, next: NextFu
     }));
 
     res.status(200).json({ modules });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/** GET /platform/health - infrastructure status only (ADM-5). No business metrics anywhere in this payload. */
+export async function getHealth(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    requirePlatformAdminId();
+    const result = await getPlatformHealth();
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }

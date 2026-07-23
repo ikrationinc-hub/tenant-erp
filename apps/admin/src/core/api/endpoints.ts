@@ -10,4 +10,5 @@ export const endpoints = {
   reactivateTenant: (id: string) => `/tenants/${id}/reactivate`,
   tenantModules: (id: string) => `/tenants/${id}/modules`,
   moduleCatalogue: "/modules",
+  health: "/health",
 } as const;
