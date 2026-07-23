@@ -11,6 +11,7 @@ import { compileValidator } from "./compile-validator";
 import { buildDefaultValues } from "./default-values";
 import { FieldRenderer } from "./FieldRenderer";
 import type { SchemaFormMode } from "./types";
+import { resolveFieldSections } from "../field-definitions/resolve-sections";
 
 export type { SchemaFormMode } from "./types";
 
@@ -79,18 +80,16 @@ function SchemaFormBody({
     await onSubmit(values);
   });
 
-  const sortedSections = [...schema.sections].sort((a, b) => a.sortOrder - b.sortOrder);
+  const sections = resolveFieldSections(schema);
 
   return (
     <AntForm layout="vertical" onFinish={() => void submit()}>
       <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-        {sortedSections.map((section) => (
-          <Card key={section.key} title={section.label} size="small">
-            {[...section.fields]
-              .sort((a, b) => a.sortOrder - b.sortOrder)
-              .map((field) => (
-                <FieldRenderer key={field.fieldKey} field={field} control={control} mode={mode} />
-              ))}
+        {sections.map((section) => (
+          <Card key={section.key} title={section.label || undefined} size="small">
+            {section.fields.map((field) => (
+              <FieldRenderer key={field.fieldKey} field={field} control={control} mode={mode} />
+            ))}
           </Card>
         ))}
         {mode !== "view" && (

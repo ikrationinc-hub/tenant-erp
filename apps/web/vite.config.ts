@@ -10,8 +10,10 @@ export default defineConfig({
     css: false,
     // The default 5000ms gets tight once several renderApp() suites (real
     // router + MSW + userEvent) run in parallel across worker processes -
-    // a resource-contention flake, not a logic bug. 15s gives real CI/dev
-    // machines headroom without masking an actually-hung test.
-    testTimeout: 15000,
+    // a resource-contention flake, not a logic bug (confirmed: this dev
+    // machine runs multiple unrelated projects/sessions concurrently,
+    // sustained load average 5+). 30s gives real CI/dev machines headroom
+    // without masking an actually-hung test.
+    testTimeout: 30000,
   },
 });

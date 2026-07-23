@@ -7,6 +7,7 @@ import { RequireFullScope } from "./guards/RequireFullScope";
 import { AppShell } from "./layout/AppShell";
 import { BootstrapStatus } from "./BootstrapStatus";
 import { DynamicRoutes } from "../core/navigation/DynamicRoutes";
+import { resolveMasterScreen } from "../modules/masters/master-registry";
 import { SchemaFormDevPage } from "./dev/SchemaFormDevPage";
 import { SchemaTableDevPage } from "./dev/SchemaTableDevPage";
 
@@ -40,7 +41,7 @@ export const routes: RouteObject[] = [
             element: <AppShell />,
             children: [
               { index: true, element: <BootstrapStatus /> },
-              { path: "*", element: <DynamicRoutes /> },
+              { path: "*", element: <DynamicRoutes resolveScreen={resolveMasterScreen} /> },
             ],
           },
         ],

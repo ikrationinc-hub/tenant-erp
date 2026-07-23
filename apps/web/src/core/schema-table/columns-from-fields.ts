@@ -1,5 +1,6 @@
 import type { TableColumnsType } from "antd";
 import type { FieldDefinitionsResponse } from "@hyperion/contracts";
+import { resolveFieldSections } from "../field-definitions/resolve-sections";
 import type { EntityRow, SchemaTableColumnOverride } from "./types";
 
 /**
@@ -15,13 +16,9 @@ export function columnsFromFieldDefinitions(
 ): TableColumnsType<EntityRow> {
   const overrideByFieldKey = new Map(overrides.map((override) => [override.fieldKey, override]));
 
-  // No `isVisible` filter here: per field-definitions.ts, a field the
-  // caller can't view is omitted from the response entirely (not
-  // present-but-flagged) - every field that arrives has already passed
-  // that gate server-side (frontend rule 4).
-  const fields = schema.sections
-    .flatMap((section) => section.fields)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
+  // resolveFieldSections already drops isVisible:false fields and flattens
+  // the section grouping - a flat grid never cared about sections anyway.
+  const fields = resolveFieldSections(schema).flatMap((section) => section.fields);
 
   return fields.map((field) => {
     const override = overrideByFieldKey.get(field.fieldKey);

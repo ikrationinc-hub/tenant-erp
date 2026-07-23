@@ -22,7 +22,7 @@ function field(
 ): FieldDefinition {
   return {
     tier: "fixed",
-    dataType: "string",
+    dataType: "text",
     isMandatory: false,
     isEditable: true,
     isSystem: false,
