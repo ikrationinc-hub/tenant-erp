@@ -1,12 +1,14 @@
 import type { ReactElement } from "react";
 import { Outlet } from "react-router-dom";
-import { Layout, Menu, Typography } from "antd";
+import { Layout, Typography } from "antd";
 import { useAppStore } from "../../core/store/app-store";
+import { NavigationMenu } from "../../core/navigation/NavigationMenu";
+import { MenuBreadcrumbs } from "../../core/navigation/MenuBreadcrumbs";
 import { HeaderBar } from "./HeaderBar";
 
 const { Sider, Header, Content } = Layout;
 
-/** Dense trading-desk chrome, not a marketing site. Nav is intentionally empty - GET /menus wires it up in FE-4 (frontend rule 2). */
+/** Dense trading-desk chrome, not a marketing site. Nav renders GET /menus (frontend rule 2, FE-4). */
 export function AppShell(): ReactElement {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
@@ -25,7 +27,7 @@ export function AppShell(): ReactElement {
         >
           {sidebarCollapsed ? "H" : "Hyperion"}
         </div>
-        <Menu mode="inline" items={[]} />
+        <NavigationMenu />
       </Sider>
       <Layout>
         <Header
@@ -42,6 +44,7 @@ export function AppShell(): ReactElement {
           <HeaderBar />
         </Header>
         <Content style={{ padding: 16 }}>
+          <MenuBreadcrumbs />
           <Outlet />
         </Content>
       </Layout>

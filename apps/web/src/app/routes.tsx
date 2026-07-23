@@ -6,18 +6,23 @@ import { RequireAuth } from "./guards/RequireAuth";
 import { RequireFullScope } from "./guards/RequireFullScope";
 import { AppShell } from "./layout/AppShell";
 import { BootstrapStatus } from "./BootstrapStatus";
+import { DynamicRoutes } from "../core/navigation/DynamicRoutes";
 import { SchemaFormDevPage } from "./dev/SchemaFormDevPage";
+import { SchemaTableDevPage } from "./dev/SchemaTableDevPage";
 
-/** Storybook-free renderer check (FE-3) - never shipped in a production build. */
+/** Storybook-free renderer checks (FE-3, FE-4) - never shipped in a production build. */
 const devRoutes: RouteObject[] = import.meta.env.DEV
-  ? [{ path: "/_dev/schema-form", element: <SchemaFormDevPage /> }]
+  ? [
+      { path: "/_dev/schema-form", element: <SchemaFormDevPage /> },
+      { path: "/_dev/schema-table", element: <SchemaTableDevPage /> },
+    ]
   : [];
 
 /**
- * Empty of hardcoded BUSINESS routes (frontend rule 2) - FE-4 replaces the
- * "/" subtree with routes generated from GET /menus. Everything here is
- * shell/auth scaffolding: login, invitation acceptance, forced password
- * change, and the guards that gate access to the shell itself.
+ * Empty of hardcoded BUSINESS routes (frontend rule 2). "/" is the fixed
+ * dashboard landing page; every other path under the shell is matched at
+ * runtime against the live GET /menus tree by DynamicRoutes - a path
+ * outside that tree is a 404, not a blank screen.
  */
 export const routes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
@@ -33,7 +38,10 @@ export const routes: RouteObject[] = [
           {
             path: "/",
             element: <AppShell />,
-            children: [{ index: true, element: <BootstrapStatus /> }],
+            children: [
+              { index: true, element: <BootstrapStatus /> },
+              { path: "*", element: <DynamicRoutes /> },
+            ],
           },
         ],
       },

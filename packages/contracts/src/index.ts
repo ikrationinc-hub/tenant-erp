@@ -6,3 +6,6 @@ export * from "./users.js";
 export * from "./scope.js";
 export * from "./master-options.js";
 export * from "./platform-admin.js";
+export * from "./menus.js";
+export * from "./entity-list.js";
+export * from "./permissions.js";

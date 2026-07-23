@@ -4,8 +4,11 @@ import {
   fieldDefinitionsResponseSchema,
   loginResponseSchema,
   masterOptionsResponseSchema,
+  menuTreeResponseSchema,
   meResponseSchema,
   myCompaniesResponseSchema,
+  myPermissionsResponseSchema,
+  paginatedRowsResponseSchema,
   refreshResponseSchema,
   validateInvitationResponseSchema,
   type ChangePasswordResponse,
@@ -13,11 +16,19 @@ import {
   type LoginResponse,
   type MasterOption,
   type MeResponse,
+  type MenuTreeResponse,
   type MyCompaniesResponse,
+  type MyPermissionsResponse,
   type ValidateInvitationResponse,
 } from "@hyperion/contracts";
 import { endpoints } from "../core/api/endpoints";
 import { schemaFormDevFixture } from "../core/schema-form/dev-fixture";
+import {
+  DEV_ENTITY_LIST_ENDPOINT,
+  schemaTableDevFieldDefinitions,
+  schemaTableDevRows,
+  type DevEntityRow,
+} from "../core/schema-table/dev-fixture";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -112,6 +123,85 @@ const mockFieldDefinitions: FieldDefinitionsResponse = fieldDefinitionsResponseS
   ],
 });
 
+/** Mirrors the shape (not the exact ids) of apps/api/src/core/provisioning/seed-menu-tree.ts's default tenant tree - already permission/module-filtered, per resolve.ts, so the mock represents what a fully-privileged demo admin would receive. */
+const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
+  menus: [
+    { id: "m-dashboard", key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard", sortOrder: 1, children: [] },
+    {
+      id: "m-users",
+      key: "users",
+      label: "Users",
+      path: null,
+      icon: "users",
+      sortOrder: 2,
+      children: [
+        { id: "m-users-list", key: "users.list", label: "All Users", path: "/users", icon: null, sortOrder: 1, children: [] },
+        { id: "m-users-invite", key: "users.invite", label: "Invite User", path: "/users/invite", icon: null, sortOrder: 2, children: [] },
+      ],
+    },
+    { id: "m-roles", key: "roles", label: "Roles", path: "/roles", icon: "shield", sortOrder: 3, children: [] },
+    {
+      id: "m-masters",
+      key: "masters",
+      label: "Masters",
+      path: null,
+      icon: "database",
+      sortOrder: 4,
+      children: [
+        {
+          id: "m-masters-suppliers",
+          key: "masters.suppliers",
+          label: "Suppliers",
+          path: "/masters/suppliers",
+          icon: null,
+          sortOrder: 1,
+          children: [],
+        },
+        {
+          id: "m-masters-customers",
+          key: "masters.customers",
+          label: "Customers",
+          path: "/masters/customers",
+          icon: null,
+          sortOrder: 2,
+          children: [],
+        },
+      ],
+    },
+    {
+      id: "m-purchase",
+      key: "purchase",
+      label: "Purchase",
+      path: null,
+      icon: "shopping-cart",
+      sortOrder: 5,
+      children: [
+        {
+          id: "m-purchase-orders",
+          key: "purchase.orders",
+          label: "Purchase Orders",
+          path: "/purchase/orders",
+          icon: null,
+          sortOrder: 1,
+          children: [],
+        },
+      ],
+    },
+  ],
+});
+
+const mockPermissions: MyPermissionsResponse = myPermissionsResponseSchema.parse({
+  permissions: [
+    "users.user.read",
+    "users.user.create",
+    "roles.role.read",
+    "masters.supplier.read",
+    "masters.customer.read",
+    "purchase.po.read",
+    "purchase.po.approve",
+  ],
+});
+
 const MASTER_OPTIONS: Record<string, MasterOption[]> = {
   countries: [
     { value: "ae", label: "United Arab Emirates" },
@@ -152,7 +242,46 @@ export const handlers = [
     if (params.module === schemaFormDevFixture.module && params.entity === schemaFormDevFixture.entity) {
       return HttpResponse.json(schemaFormDevFixture);
     }
+    if (
+      params.module === schemaTableDevFieldDefinitions.module &&
+      params.entity === schemaTableDevFieldDefinitions.entity
+    ) {
+      return HttpResponse.json(schemaTableDevFieldDefinitions);
+    }
     return HttpResponse.json(mockFieldDefinitions);
+  }),
+  http.get(`${API_BASE}${endpoints.menus}`, () => HttpResponse.json(mockMenuTree)),
+  http.get(`${API_BASE}${endpoints.myPermissions}`, () => HttpResponse.json(mockPermissions)),
+  http.get(`${API_BASE}${DEV_ENTITY_LIST_ENDPOINT}`, ({ request }) => {
+    const url = new URL(request.url);
+    const page = Number(url.searchParams.get("page") ?? "1");
+    const pageSize = Number(url.searchParams.get("pageSize") ?? "20");
+    const search = url.searchParams.get("search")?.toLowerCase();
+    const isActiveParam = url.searchParams.get("isActive");
+    const sortBy = url.searchParams.get("sortBy");
+    const sortDir = url.searchParams.get("sortDir");
+
+    let rows = [...schemaTableDevRows];
+    if (search) {
+      rows = rows.filter(
+        (row) => row.name.toLowerCase().includes(search) || row.code.toLowerCase().includes(search),
+      );
+    }
+    if (isActiveParam !== null) {
+      rows = rows.filter((row) => String(row.isActive) === isActiveParam);
+    }
+    if (sortBy === "name" || sortBy === "code") {
+      const key: "name" | "code" = sortBy;
+      rows.sort((a, b) => {
+        const cmp = a[key].localeCompare(b[key]);
+        return sortDir === "desc" ? -cmp : cmp;
+      });
+    }
+
+    const total = rows.length;
+    const items: DevEntityRow[] = rows.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
+
+    return HttpResponse.json(paginatedRowsResponseSchema.parse({ items, total, page, pageSize }));
   }),
   http.get(`${API_BASE}${endpoints.masterOptions(":master")}`, ({ params, request }) => {
     const master = typeof params.master === "string" ? params.master : "";

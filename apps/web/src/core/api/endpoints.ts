@@ -9,7 +9,9 @@ export const endpoints = {
   acceptInvitation: (token: string) => `/invitations/${token}/accept`,
   changePassword: "/users/me/password",
   myCompanies: "/users/me/companies",
+  myPermissions: "/users/me/permissions",
   masterOptions: (master: string) => `/masters/${master}/options`,
+  menus: "/menus",
 } as const;
 
 /** Appends a query string, skipping undefined values - `?tenantCode=` for an unset optional field is just noise. */
