@@ -29,10 +29,14 @@ const envSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().min(1, "S3_SECRET_ACCESS_KEY is required"),
   S3_BUCKET: z.string().min(1, "S3_BUCKET is required"),
 
+  CLAMAV_HOST: z.string().min(1, "CLAMAV_HOST is required"),
+  CLAMAV_PORT: z.coerce.number().int().positive().default(3310),
+
   RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
   MAIL_FROM_ADDRESS: z.string().email("MAIL_FROM_ADDRESS must be a valid email address"),
   MAIL_FROM_NAME: z.string().min(1, "MAIL_FROM_NAME is required"),
-  APP_BASE_URL: z.string().min(1, "APP_BASE_URL is required"),
+  /** Origin of apps/web (the frontend), used to build links in emails - never this API's own origin. */
+  WEB_APP_BASE_URL: z.string().min(1, "WEB_APP_BASE_URL is required"),
 
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 });

@@ -5,15 +5,9 @@ export interface InviteEmailInput {
   to: string;
   companyName: string;
   token: string;
+  tenantSlug: string;
 }
 
-/**
- * The link points at a not-yet-built frontend route (this is a backend-only
- * prototype - see CLAUDE.md). A frontend would call GET
- * /api/v1/invitations/:token first to render the "you're invited" screen,
- * then POST .../accept with the chosen password; the raw token in this URL
- * is what makes both of those calls possible.
- */
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -24,7 +18,14 @@ function escapeHtml(value: string): string {
 }
 
 export function buildInviteEmail(input: InviteEmailInput): SendMailInput {
-  const acceptUrl = `${env.APP_BASE_URL}/accept-invite?token=${encodeURIComponent(input.token)}`;
+  /**
+   * tenantCode is required here (not just a dev convenience): production
+   * resolves tenants from a subdomain (see tenant-resolver.ts), which an
+   * emailed link that must work regardless of how the recipient reaches it
+   * cannot rely on - so every invite link is self-contained via this query
+   * param instead of assuming the click lands on the right subdomain.
+   */
+  const acceptUrl = `${env.WEB_APP_BASE_URL}/accept-invitation/${encodeURIComponent(input.token)}?tenantCode=${encodeURIComponent(input.tenantSlug)}`;
   const safeCompanyName = escapeHtml(input.companyName);
 
   return {

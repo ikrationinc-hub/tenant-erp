@@ -110,7 +110,7 @@ function firstSentEmail(mailer: CapturedMailer): SendMailInput {
 }
 
 function extractToken(email: SendMailInput): string {
-  const match = /token=([^\s"<]+)/.exec(email.text);
+  const match = /\/accept-invitation\/([^\s"<?]+)/.exec(email.text);
   if (!match?.[1]) {
     throw new Error("no token found in captured email");
   }

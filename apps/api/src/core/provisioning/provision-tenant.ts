@@ -133,6 +133,7 @@ async function inviteProvisionedAdmin(
   adminEmail: string,
   adminRoleId: string,
   companyName: string,
+  tenantSlug: string,
 ): Promise<void> {
   const { token, tokenHash } = generateInviteToken();
 
@@ -155,7 +156,7 @@ async function inviteProvisionedAdmin(
     });
   });
 
-  await getMailer().send(buildInviteEmail({ to: adminEmail, companyName, token }));
+  await getMailer().send(buildInviteEmail({ to: adminEmail, companyName, token, tenantSlug }));
 }
 
 async function applyModuleEnablement(tenantId: string, schemaName: string, requestedModules: string[]): Promise<void> {
@@ -210,7 +211,15 @@ async function provisionNewTenant(
 
     await applyModuleEnablement(tenant.id, schemaName, input.modules);
 
-    await inviteProvisionedAdmin(schemaName, companyId, adminUserId, input.adminEmail, roleIdsByName.Admin, input.name);
+    await inviteProvisionedAdmin(
+      schemaName,
+      companyId,
+      adminUserId,
+      input.adminEmail,
+      roleIdsByName.Admin,
+      input.name,
+      input.slug,
+    );
 
     const [activated] = await db
       .update(tenants)

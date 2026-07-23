@@ -1,0 +1,4516 @@
+{
+  "info": {
+    "_postman_id": "93c90932-9404-4355-8da8-ae58c5bfd125",
+    "name": "Hyperion ERP API",
+    "description": "Multi-tenant commodity trading ERP - backend API (apps/api).\n\n## Environments / variables\n- `baseUrlRoot` — origin only, e.g. `http://localhost:3000` (used by /health, which is mounted outside /api/v1).\n- `baseUrl` — `{{baseUrlRoot}}/api/v1`, used by everything else.\n- `accessToken` / `refreshToken` — tenant user session. Auto-populated by the *Auth > Login* and *Auth > Refresh* requests' Tests scripts - just run Login once and every other tenant request in this collection picks it up automatically.\n- `platformAccessToken` / `platformRefreshToken` — same auto-capture, but from *Platform Admin / Auth > Login*.\n- `tenantCode` — a tenant's slug. Required on login/invite-accept endpoints when there's no subdomain to resolve it from (i.e. always, on localhost).\n\n## Two completely separate auth worlds\nPlatform-admin endpoints (`/platform/**`) and tenant endpoints (everything else) are signed with different JWT secrets. A platform-admin token is rejected by tenant routes and vice versa - don't mix `accessToken` and `platformAccessToken` up.\n\n## Conventions worth knowing before you poke at this\n- Money/quantity/rate fields are always **decimal strings** on the wire (`\"25.500000\"`), never JSON numbers - see Purchase > Add purchase item.\n- List endpoints are paginated: `{ items, total, page, pageSize }`.\n- Nothing is ever hard-deleted; \"delete\"/\"deactivate\" endpoints soft-delete or flip `isActive`.\n- Most POST/PATCH bodies are `.strict()` - an unrecognized field is a 422, not a silently-dropped no-op.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrlRoot}}/health",
+              "host": [
+                "{{baseUrlRoot}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Liveness probe. Not versioned under /api/v1 - mounted at the app root.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Unauthenticated. Note the URL has no /api/v1 prefix (see baseUrlRoot variable)."
+    },
+    {
+      "name": "Platform Admin / Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"platform-admin@example.com\",\n  \"password\": \"correct-horse-battery-staple\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/platform/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Rate-limited by IP (platformLoginIpRateLimiter). On success, sets a JWT signed with PLATFORM_JWT_SECRET - a completely separate secret/signing path from tenant auth tokens, so one can never be replayed against the other's endpoints.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body.accessToken) pm.collectionVariables.set('platformAccessToken', body.accessToken);",
+                  "  if (body.refreshToken) pm.collectionVariables.set('platformRefreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{platformRefreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/platform/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Rotates the refresh token. Reusing an already-rotated refresh token revokes the whole token family.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body.accessToken) pm.collectionVariables.set('platformAccessToken', body.accessToken);",
+                  "  if (body.refreshToken) pm.collectionVariables.set('platformRefreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{platformRefreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/platform/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the refresh token family and denylists the current access token's jti."
+          },
+          "response": []
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/platform/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Returns the calling platform admin's own profile."
+          },
+          "response": []
+        }
+      ],
+      "description": "Platform-admin authentication - entirely separate from tenant user auth below (different JWT secret, different login endpoint, different rate limiter).",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{platformAccessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Platform Admin / Tenants",
+      "item": [
+        {
+          "name": "List module catalogue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/platform/modules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "modules"
+              ]
+            },
+            "description": "Static module catalogue (key + name), no tenant context - used to populate the tenant-creation form's module multi-select."
+          },
+          "response": []
+        },
+        {
+          "name": "List tenants",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/platform/tenants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "tenants"
+              ]
+            },
+            "description": "Metadata + aggregate module/user counts per tenant. Never a browse of tenant business data."
+          },
+          "response": []
+        },
+        {
+          "name": "Create tenant (provision)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Acme Metals Trading\",\n  \"slug\": \"acme-metals\",\n  \"adminEmail\": \"admin@acme-example.com\",\n  \"adminName\": \"Ada Admin\",\n  \"modules\": [\n    \"users\",\n    \"suppliers\",\n    \"purchase\",\n    \"masters\",\n    \"storage\",\n    \"field-definitions\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/platform/tenants",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "tenants"
+              ]
+            },
+            "description": "Creates the tenant schema, runs tenant migrations, seeds roles/menus/field-definitions/number-series/reference-masters, creates the first company + branch, enables the requested modules, and emails the admin an invite link. Idempotent on slug: re-running with the same slug on an already-active tenant is a no-op (200, not 201). `slug` must be lowercase letters/numbers/hyphens only."
+          },
+          "response": []
+        },
+        {
+          "name": "Get tenant by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/platform/tenants/84c539c4-d57c-4a04-8f88-da09eed41991",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "tenants",
+                "84c539c4-d57c-4a04-8f88-da09eed41991"
+              ]
+            },
+            "description": "Tenant metadata + its enabled modules. 404 if unknown."
+          },
+          "response": []
+        },
+        {
+          "name": "Suspend tenant",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/platform/tenants/84c539c4-d57c-4a04-8f88-da09eed41991/suspend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "tenants",
+                "84c539c4-d57c-4a04-8f88-da09eed41991",
+                "suspend"
+              ]
+            },
+            "description": "409 if the tenant is not currently active. A suspended tenant's users can no longer log in."
+          },
+          "response": []
+        },
+        {
+          "name": "Reactivate tenant",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/platform/tenants/84c539c4-d57c-4a04-8f88-da09eed41991/reactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "tenants",
+                "84c539c4-d57c-4a04-8f88-da09eed41991",
+                "reactivate"
+              ]
+            },
+            "description": "409 if the tenant is not currently suspended."
+          },
+          "response": []
+        },
+        {
+          "name": "Get tenant modules",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/platform/tenants/84c539c4-d57c-4a04-8f88-da09eed41991/modules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "tenants",
+                "84c539c4-d57c-4a04-8f88-da09eed41991",
+                "modules"
+              ]
+            },
+            "description": "The full module catalogue, each entry flagged enabled/disabled for this specific tenant."
+          },
+          "response": []
+        },
+        {
+          "name": "Patch tenant module (enable/disable)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"moduleKey\": \"purchase\",\n  \"enabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/platform/tenants/84c539c4-d57c-4a04-8f88-da09eed41991/modules",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "platform",
+                "tenants",
+                "84c539c4-d57c-4a04-8f88-da09eed41991",
+                "modules"
+              ]
+            },
+            "description": "Toggles one module on/off for the tenant. 404 if moduleKey isn't in the static catalogue."
+          },
+          "response": []
+        }
+      ],
+      "description": "All routes require a platform-admin bearer token (never a tenant user token - enforced by a distinct JWT secret).",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{platformAccessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"admin@acme-example.com\",\n  \"password\": \"correct-horse-battery-staple\",\n  \"tenantCode\": \"acme-metals\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "`identifier` accepts email OR mobile (provisioned ops users have no email). `tenantCode` is resolved from the request's subdomain in production; on localhost there is no subdomain to infer it from, so pass it explicitly here even though the field is technically optional. A must-change-password account gets back ONLY an access token scoped to \"password_change\" (no refreshToken) - see mustChangePassword in the response.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body.accessToken) pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  if (body.refreshToken) pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Rotates the refresh token. Reusing an already-rotated refresh token revokes the whole token family (all sessions for that login).",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body.accessToken) pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  if (body.refreshToken) pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the refresh token family and denylists the current access token's jti."
+          },
+          "response": []
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "The calling user's own profile (id, email, name, companyId, status)."
+          },
+          "response": []
+        }
+      ],
+      "description": "Tenant end-user authentication. All non-login/refresh routes require the tenant bearer access token.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Users & Invitations",
+      "item": [
+        {
+          "name": "Invite user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"new.user@acme-example.com\",\n  \"mobile\": \"+971501234567\",\n  \"name\": \"New User\",\n  \"roles\": [\n    \"c37b58d8-6c4a-41e8-b8ad-e90f8de0563a\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/invite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "invite"
+              ]
+            },
+            "description": "Requires users.user.create permission. `.strict()` body - sending `password` here is REJECTED (422), not silently dropped: admins never set a new user's password, only the invitee does via accept-invitation. Emails an invite link valid 72h, single-use."
+          },
+          "response": []
+        },
+        {
+          "name": "Provision user (no email)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Warehouse Operator\",\n  \"mobile\": \"+971509876543\",\n  \"tempPassword\": \"TempPass123!\",\n  \"roles\": [\n    \"c37b58d8-6c4a-41e8-b8ad-e90f8de0563a\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/provision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "provision"
+              ]
+            },
+            "description": "For accounts with no email (e.g. warehouse/ops staff) - admin sets a temp password directly instead of an email invite. Forces must_change_password on first login. 403 if any of `roles` carries a financial-approval permission (self-set credentials required for approvals)."
+          },
+          "response": []
+        },
+        {
+          "name": "Resend invitation",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/invitations/b98c912c-99a2-4f2a-a768-f350e918b8e8/resend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "invitations",
+                "b98c912c-99a2-4f2a-a768-f350e918b8e8",
+                "resend"
+              ]
+            },
+            "description": "Issues a new token + expiry for a still-pending invitation and re-sends the email. 409 if the invitation isn't pending."
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke invitation",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/invitations/b98c912c-99a2-4f2a-a768-f350e918b8e8/revoke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "invitations",
+                "b98c912c-99a2-4f2a-a768-f350e918b8e8",
+                "revoke"
+              ]
+            },
+            "description": "Invalidates a pending invitation so its token can no longer be accepted. 409 if not pending."
+          },
+          "response": []
+        },
+        {
+          "name": "Change my password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"NewStrongerPassword456!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "password"
+              ]
+            },
+            "description": "The one endpoint a \"password_change\"-scoped token (see Login) is allowed to reach - clears must_change_password and returns a fresh full-scope token pair. Works for a normal full-scoped session too."
+          },
+          "response": []
+        },
+        {
+          "name": "Validate invitation (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invitations/{{invitationToken}}?tenantCode=acme-metals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invitations",
+                "{{invitationToken}}"
+              ],
+              "query": [
+                {
+                  "key": "tenantCode",
+                  "value": "acme-metals",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Unauthenticated - the invitee has no session yet. `tenantCode` is required on localhost (no subdomain to resolve the tenant from); returns the invitee's email + company name so the accept-invite screen can render \"You've been invited to join X\".",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Accept invitation (public)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"MyChosenPassword789!\",\n  \"tenantCode\": \"acme-metals\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invitations/{{invitationToken}}/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invitations",
+                "{{invitationToken}}",
+                "accept"
+              ]
+            },
+            "description": "Sets the invitee's password and activates the account. The token is single-use and expires 72h after issue.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Admin-authenticated user management, plus the two public (unauthenticated) invitation endpoints an invitee hits before ever having a session.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Menus",
+      "item": [
+        {
+          "name": "Get menu tree",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/menus",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "menus"
+              ]
+            },
+            "description": "Renders the left-nav tree for the calling user - which modules/menu items they can see, already filtered by tenant module-enablement + RBAC. Never gated behind its own module toggle (it's the mechanism that reports what's available at all)."
+          },
+          "response": []
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Field Definitions",
+      "item": [
+        {
+          "name": "Get field definitions for a module/entity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/field-definitions/purchase/purchase",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "field-definitions",
+                "purchase",
+                "purchase"
+              ]
+            },
+            "description": "Drives the schema-driven form renderer: GET /field-definitions/:module/:entity -> <SchemaForm/>. `:module`/`:entity` are e.g. \"purchase\"/\"purchase\", \"suppliers\"/\"supplier\"."
+          },
+          "response": []
+        },
+        {
+          "name": "Update a field definition (Tier 2 override)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Other Charges (AED)\",\n  \"isVisible\": true,\n  \"isMandatory\": false,\n  \"sortOrder\": 40\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/field-definitions/7adf67fe-2399-462d-a3cd-143c1547933e",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "field-definitions",
+                "7adf67fe-2399-462d-a3cd-143c1547933e"
+              ]
+            },
+            "description": "Tier 2 configurable-field override only: label/visibility/mandatory/sort order. `.strict()` body - dataType/fieldKey/tier/isSystem are structurally absent, never overridable, so sending them is a 422."
+          },
+          "response": []
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Masters (reference data)",
+      "item": [
+        {
+          "name": "Countrys",
+          "item": [
+            {
+              "name": "List Countrys",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/countries?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "countries"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.country.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Country options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/countries/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "countries",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Country by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/countries/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "countries",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Country",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Country\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/countries",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "countries"
+                  ]
+                },
+                "description": "Requires masters.country.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Country",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Country (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/countries/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "countries",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.country.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Country",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/countries/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "countries",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Country",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/countries/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "countries",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Citys",
+          "item": [
+            {
+              "name": "List Citys",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/cities?page=1&pageSize=20&search=&isActive=true&parentValue=4334b4b5-ee70-41d0-b535-253c53f124ce",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "cities"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    },
+                    {
+                      "key": "parentValue",
+                      "value": "4334b4b5-ee70-41d0-b535-253c53f124ce",
+                      "description": "Cascading filter: a country id",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.city.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List City options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/cities/options?search=&parentValue=4334b4b5-ee70-41d0-b535-253c53f124ce",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "cities",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "parentValue",
+                      "value": "4334b4b5-ee70-41d0-b535-253c53f124ce",
+                      "description": "Cascading filter: a country id",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get City by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/cities/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "cities",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create City",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample City\",\n  \"isActive\": true,\n  \"sortOrder\": 10,\n  \"countryId\": \"4334b4b5-ee70-41d0-b535-253c53f124ce\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/cities",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "cities"
+                  ]
+                },
+                "description": "Requires masters.city.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update City",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample City (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/cities/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "cities",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.city.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate City",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/cities/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "cities",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate City",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/cities/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "cities",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Currencys",
+          "item": [
+            {
+              "name": "List Currencys",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/currencies?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "currencies"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.currency.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Currency options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/currencies/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "currencies",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Currency by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/currencies/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "currencies",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Currency",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Currency\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/currencies",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "currencies"
+                  ]
+                },
+                "description": "Requires masters.currency.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Currency",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Currency (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/currencies/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "currencies",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.currency.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Currency",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/currencies/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "currencies",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Currency",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/currencies/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "currencies",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Payment Terms",
+          "item": [
+            {
+              "name": "List Payment Terms",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/payment-terms?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "payment-terms"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.payment_term.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Payment Term options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/payment-terms/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "payment-terms",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Payment Term by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/payment-terms/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "payment-terms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Payment Term",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Payment Term\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/payment-terms",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "payment-terms"
+                  ]
+                },
+                "description": "Requires masters.payment_term.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Payment Term",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Payment Term (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/payment-terms/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "payment-terms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.payment_term.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Payment Term",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/payment-terms/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "payment-terms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Payment Term",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/payment-terms/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "payment-terms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "UOMs",
+          "item": [
+            {
+              "name": "List UOMs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/uom?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "uom"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.uom.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List UOM options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/uom/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "uom",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get UOM by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/uom/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "uom",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create UOM",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample UOM\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/uom",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "uom"
+                  ]
+                },
+                "description": "Requires masters.uom.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update UOM",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample UOM (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/uom/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "uom",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.uom.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate UOM",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/uom/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "uom",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate UOM",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/uom/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "uom",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Ports",
+          "item": [
+            {
+              "name": "List Ports",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/ports?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "ports"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.port.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Port options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/ports/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "ports",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Port by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/ports/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "ports",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Port",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Port\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/ports",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "ports"
+                  ]
+                },
+                "description": "Requires masters.port.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Port",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Port (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/ports/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "ports",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.port.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Port",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/ports/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "ports",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Port",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/ports/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "ports",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Warehouses",
+          "item": [
+            {
+              "name": "List Warehouses",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/warehouses?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "warehouses"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.warehouse.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Warehouse options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/warehouses/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "warehouses",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Warehouse by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/warehouses/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "warehouses",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Warehouse",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Warehouse\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/warehouses",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "warehouses"
+                  ]
+                },
+                "description": "Requires masters.warehouse.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Warehouse",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Warehouse (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/warehouses/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "warehouses",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.warehouse.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Warehouse",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/warehouses/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "warehouses",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Warehouse",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/warehouses/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "warehouses",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Incoterms",
+          "item": [
+            {
+              "name": "List Incoterms",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/incoterms?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "incoterms"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.incoterm.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Incoterm options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/incoterms/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "incoterms",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Incoterm by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/incoterms/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "incoterms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Incoterm",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Incoterm\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/incoterms",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "incoterms"
+                  ]
+                },
+                "description": "Requires masters.incoterm.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Incoterm",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Incoterm (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/incoterms/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "incoterms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.incoterm.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Incoterm",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/incoterms/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "incoterms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Incoterm",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/incoterms/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "incoterms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Items",
+          "item": [
+            {
+              "name": "List Items",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/items?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "items"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.item.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Item options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/items/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "items",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Item by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/items/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "items",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Item",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Item\",\n  \"isActive\": true,\n  \"sortOrder\": 10,\n  \"itemType\": \"metals\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/items",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "items"
+                  ]
+                },
+                "description": "Requires masters.item.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Item",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Item (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/items/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "items",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.item.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Item",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/items/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "items",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Item",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/items/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "items",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Item Grades",
+          "item": [
+            {
+              "name": "List Item Grades",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/item-grades?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "item-grades"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.item_grade.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Item Grade options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/item-grades/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "item-grades",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Item Grade by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/item-grades/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "item-grades",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Item Grade",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Item Grade\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/item-grades",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "item-grades"
+                  ]
+                },
+                "description": "Requires masters.item_grade.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Item Grade",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Item Grade (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/item-grades/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "item-grades",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.item_grade.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Item Grade",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/item-grades/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "item-grades",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Item Grade",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/item-grades/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "item-grades",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Vessels",
+          "item": [
+            {
+              "name": "List Vessels",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/vessels?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "vessels"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.vessel.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Vessel options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/vessels/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "vessels",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Vessel by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/vessels/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "vessels",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Vessel",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Vessel\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/vessels",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "vessels"
+                  ]
+                },
+                "description": "Requires masters.vessel.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Vessel",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Vessel (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/vessels/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "vessels",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.vessel.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Vessel",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/vessels/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "vessels",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Vessel",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/vessels/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "vessels",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Transport Modes",
+          "item": [
+            {
+              "name": "List Transport Modes",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/transport-modes?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "transport-modes"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.transport_mode.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Transport Mode options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/transport-modes/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "transport-modes",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Transport Mode by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/transport-modes/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "transport-modes",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Transport Mode",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Transport Mode\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/transport-modes",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "transport-modes"
+                  ]
+                },
+                "description": "Requires masters.transport_mode.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Transport Mode",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Transport Mode (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/transport-modes/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "transport-modes",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.transport_mode.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Transport Mode",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/transport-modes/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "transport-modes",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Transport Mode",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/transport-modes/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "transport-modes",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "LME Exchanges",
+          "item": [
+            {
+              "name": "List LME Exchanges",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/lme-exchanges?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "lme-exchanges"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.lme_exchange.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List LME Exchange options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/lme-exchanges/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "lme-exchanges",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get LME Exchange by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/lme-exchanges/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "lme-exchanges",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create LME Exchange",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample LME Exchange\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/lme-exchanges",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "lme-exchanges"
+                  ]
+                },
+                "description": "Requires masters.lme_exchange.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update LME Exchange",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample LME Exchange (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/lme-exchanges/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "lme-exchanges",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.lme_exchange.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate LME Exchange",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/lme-exchanges/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "lme-exchanges",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate LME Exchange",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/lme-exchanges/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "lme-exchanges",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Hedge Platforms",
+          "item": [
+            {
+              "name": "List Hedge Platforms",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/hedge-platforms?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "hedge-platforms"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.hedge_platform.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Hedge Platform options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/hedge-platforms/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "hedge-platforms",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Hedge Platform by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/hedge-platforms/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "hedge-platforms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Hedge Platform",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Hedge Platform\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/hedge-platforms",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "hedge-platforms"
+                  ]
+                },
+                "description": "Requires masters.hedge_platform.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Hedge Platform",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Hedge Platform (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/hedge-platforms/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "hedge-platforms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.hedge_platform.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Hedge Platform",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/hedge-platforms/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "hedge-platforms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Hedge Platform",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/hedge-platforms/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "hedge-platforms",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Supplier Types",
+          "item": [
+            {
+              "name": "List Supplier Types",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/supplier-types?page=1&pageSize=20&search=&isActive=true",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "supplier-types"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "disabled": false
+                    },
+                    {
+                      "key": "pageSize",
+                      "value": "20",
+                      "disabled": false
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "isActive",
+                      "value": "true",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Paginated, searchable, filterable by isActive. Requires masters.supplier_type.read."
+              },
+              "response": []
+            },
+            {
+              "name": "List Supplier Type options (for dropdowns)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/supplier-types/options?search=",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "supplier-types",
+                    "options"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true
+                    }
+                  ]
+                },
+                "description": "Lightweight { value, label } list of active rows only - what a form's <Select/> binds to."
+              },
+              "response": []
+            },
+            {
+              "name": "Get Supplier Type by id",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/supplier-types/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "supplier-types",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Supplier Type",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"SAMPLE-01\",\n  \"name\": \"Sample Supplier Type\",\n  \"isActive\": true,\n  \"sortOrder\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/supplier-types",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "supplier-types"
+                  ]
+                },
+                "description": "Requires masters.supplier_type.create. code+name are unique per company while not soft-deleted."
+              },
+              "response": []
+            },
+            {
+              "name": "Update Supplier Type",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Sample Supplier Type (renamed)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/masters/supplier-types/803a178a-2d9c-405d-8e43-b6b06585674c",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "supplier-types",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c"
+                  ]
+                },
+                "description": "Requires masters.supplier_type.update. Partial update - only sent fields change."
+              },
+              "response": []
+            },
+            {
+              "name": "Activate Supplier Type",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/supplier-types/803a178a-2d9c-405d-8e43-b6b06585674c/activate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "supplier-types",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "activate"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Deactivate Supplier Type",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/masters/supplier-types/803a178a-2d9c-405d-8e43-b6b06585674c/deactivate",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "masters",
+                    "supplier-types",
+                    "803a178a-2d9c-405d-8e43-b6b06585674c",
+                    "deactivate"
+                  ]
+                },
+                "description": "No hard delete (CLAUDE.md rule 8) - deactivating hides it from option/dropdown lists while preserving existing references."
+              },
+              "response": []
+            }
+          ]
+        }
+      ],
+      "description": "One generic CRUD pattern (core/masters/factory.ts) instantiated 15 times. Every master shares the same 7-endpoint shape: list, options, get, create, update, activate, deactivate. Only Countries is annotated in full detail below; the rest follow byte-for-byte the same contract with a different URL segment.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Attachments",
+      "item": [
+        {
+          "name": "Upload attachment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/attachments/supplier/4013466c-aec4-40b4-af33-3e2745d3fe9f/taxCertificate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attachments",
+                "supplier",
+                "4013466c-aec4-40b4-af33-3e2745d3fe9f",
+                "taxCertificate"
+              ]
+            },
+            "description": "multipart/form-data, not JSON - exactly one file part. Scanned by ClamAV before acceptance (infected -> rejected + audited). Content-type/size enforced against an allowlist. :entity/:entityId/:fieldKey identify what the file attaches to (e.g. supplier/<id>/taxCertificate).",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get download URL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/attachments/0fa75825-ce45-4b4a-a41e-0b3038c206e8/download-url",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attachments",
+                "0fa75825-ce45-4b4a-a41e-0b3038c206e8",
+                "download-url"
+              ]
+            },
+            "description": "Returns a short-lived presigned MinIO/S3 URL - never proxies the file bytes through the API itself."
+          },
+          "response": []
+        },
+        {
+          "name": "List attachments for an entity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/attachments?entity=supplier&entityId=4013466c-aec4-40b4-af33-3e2745d3fe9f&page=1&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "attachments"
+              ],
+              "query": [
+                {
+                  "key": "entity",
+                  "value": "supplier",
+                  "disabled": false
+                },
+                {
+                  "key": "entityId",
+                  "value": "4013466c-aec4-40b4-af33-3e2745d3fe9f",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Suppliers",
+      "item": [
+        {
+          "name": "List suppliers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/suppliers?page=1&pageSize=20&search=&status=active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "suppliers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "disabled": false
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "FR-006. Requires suppliers.supplier.read."
+          },
+          "response": []
+        },
+        {
+          "name": "List supplier options (for dropdowns)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/suppliers/options?search=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "suppliers",
+                "options"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get supplier by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/suppliers/4013466c-aec4-40b4-af33-3e2745d3fe9f",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "suppliers",
+                "4013466c-aec4-40b4-af33-3e2745d3fe9f"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create supplier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Global Metals Trading LLC\",\n  \"supplierTypeId\": \"c7ff5cec-658f-463f-8439-0f83cfc45def\",\n  \"countryId\": \"4334b4b5-ee70-41d0-b535-253c53f124ce\",\n  \"cityId\": \"9ae20af2-e856-463a-bce1-6f47e94ceadd\",\n  \"address\": \"Warehouse 12, Jebel Ali Free Zone\",\n  \"taxRegistrationNo\": \"TRN-100123456700003\",\n  \"paymentTermId\": \"c90b5fc4-79b1-4fc4-95c2-fd2216461765\",\n  \"currencyId\": \"e5a10728-1b93-43ce-b342-57f88dab9d92\",\n  \"remarks\": \"Preferred supplier for LME-grade copper cathodes\",\n  \"contacts\": [\n    {\n      \"contactPerson\": \"John Doe\",\n      \"mobile\": \"+971501112222\",\n      \"email\": \"john.doe@supplier-example.com\"\n    }\n  ],\n  \"banks\": [\n    {\n      \"details\": \"Emirates NBD, IBAN AE070331234567890123456\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/suppliers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "suppliers"
+              ]
+            },
+            "description": "FR-001..FR-005. code is auto-generated via the numbering engine - never sent. name must be unique among non-deleted suppliers (FR-005, 409 on duplicate). contacts/banks are optional nested arrays."
+          },
+          "response": []
+        },
+        {
+          "name": "Update supplier",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"Updated remarks after credit review\",\n  \"contacts\": [\n    {\n      \"contactPerson\": \"John Doe\",\n      \"mobile\": \"+971501112222\",\n      \"email\": \"john.doe@supplier-example.com\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/suppliers/4013466c-aec4-40b4-af33-3e2745d3fe9f",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "suppliers",
+                "4013466c-aec4-40b4-af33-3e2745d3fe9f"
+              ]
+            },
+            "description": "FR-003. Partial update. NOTE: when `contacts` or `banks` is present, the ENTIRE collection is replaced (old rows soft-deleted, new ones inserted) - not merged item-by-item."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete (soft) supplier",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/suppliers/4013466c-aec4-40b4-af33-3e2745d3fe9f",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "suppliers",
+                "4013466c-aec4-40b4-af33-3e2745d3fe9f"
+              ]
+            },
+            "description": "Soft delete only (deleted_at) - never a hard delete. Frees the supplier's name for reuse (FR-005's uniqueness is WHERE deleted_at IS NULL)."
+          },
+          "response": []
+        },
+        {
+          "name": "Activate supplier",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/suppliers/4013466c-aec4-40b4-af33-3e2745d3fe9f/activate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "suppliers",
+                "4013466c-aec4-40b4-af33-3e2745d3fe9f",
+                "activate"
+              ]
+            },
+            "description": "FR-004."
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate supplier",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/suppliers/4013466c-aec4-40b4-af33-3e2745d3fe9f/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "suppliers",
+                "4013466c-aec4-40b4-af33-3e2745d3fe9f",
+                "deactivate"
+              ]
+            },
+            "description": "FR-004. An inactive supplier is hidden from options/dropdowns but existing purchases referencing it are unaffected."
+          },
+          "response": []
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Purchase",
+      "item": [
+        {
+          "name": "List purchases",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchases?page=1&pageSize=20&search=&status=draft",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "purchases"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20",
+                  "disabled": false
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "draft",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Requires purchase.po.read. status filter: draft | approved | posted."
+          },
+          "response": []
+        },
+        {
+          "name": "Get purchase by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchases/f475ecee-8ea6-4c1f-b83f-88e9d287a53b",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "purchases",
+                "f475ecee-8ea6-4c1f-b83f-88e9d287a53b"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create purchase",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"purchaseDate\": \"2026-07-30\",\n  \"branchId\": \"d19d9358-e3eb-4f2d-bc18-1672efd18a11\",\n  \"buyerId\": \"56af5722-acd6-4c9e-9eb8-33957959beeb\",\n  \"supplierId\": \"4013466c-aec4-40b4-af33-3e2745d3fe9f\",\n  \"supplierInvoiceNo\": \"INV-2026-5521\",\n  \"supplierReferenceNo\": \"PO-REF-778\",\n  \"shipment\": {\n    \"lotNumber\": \"LOT-2026-0042\",\n    \"containerNumber\": \"MSCU1234567\",\n    \"blNo\": \"BL-998877\",\n    \"loadingDate\": \"2026-08-01\",\n    \"transportModeId\": \"d31de69a-2a25-41c6-81d3-b5c7ff1b3287\",\n    \"vesselId\": \"9827238e-6ca5-4ad8-9db8-7f43b2d543f3\",\n    \"voyageNumber\": \"V.221E\",\n    \"portOfLoadingId\": \"56d28b2d-795d-4d88-909b-59c854b8e275\",\n    \"portOfDischargeId\": \"56d28b2d-795d-4d88-909b-59c854b8e275\",\n    \"warehouseId\": \"8fd9e599-edb4-4d93-b069-74aad711a4c3\",\n    \"incotermId\": \"5da48b11-bf9b-4408-b037-be20b5ddc411\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/purchases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "purchases"
+              ]
+            },
+            "description": "FR-101. purchaseNumber is auto-generated (gapless, via number_series + SELECT FOR UPDATE in the same transaction) - never sent. status starts at \"draft\" and is exclusively system-controlled (workflow engine, not yet built). Header + Supplier Details + nested Shipment Details created together."
+          },
+          "response": []
+        },
+        {
+          "name": "Update purchase",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierInvoiceNo\": \"INV-2026-5521-A\",\n  \"shipment\": {\n    \"voyageNumber\": \"V.221F\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/purchases/f475ecee-8ea6-4c1f-b83f-88e9d287a53b",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "purchases",
+                "f475ecee-8ea6-4c1f-b83f-88e9d287a53b"
+              ]
+            },
+            "description": "All fields optional - only what's sent changes. `shipment`, when present, is a PARTIAL MERGE into the existing 1:1 shipment row (unlike suppliers' contacts/banks, which replace wholesale). Blocked once the purchase is posted (posted documents are immutable - correction is reversal + re-entry)."
+          },
+          "response": []
+        },
+        {
+          "name": "Add purchase item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemId\": \"48d4f253-97df-4649-8e01-00e3a8a61af0\",\n  \"gradeId\": \"5333d3f0-c343-409a-91ff-f331a0e5e4c8\",\n  \"quantity\": \"25.500000\",\n  \"uomId\": \"e1637be5-9ae3-413b-ad91-6a306906d04a\",\n  \"purchaseRateUsd\": \"8450.500000\",\n  \"exchangeRate\": \"3.672500\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/purchases/f475ecee-8ea6-4c1f-b83f-88e9d287a53b/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "purchases",
+                "f475ecee-8ea6-4c1f-b83f-88e9d287a53b",
+                "items"
+              ]
+            },
+            "description": "FR-104/FR-105/FR-106. quantity/rate/exchangeRate travel as DECIMAL STRINGS, never JSON numbers (CLAUDE.md rule 1) - do not send these as bare numbers. purchaseAmountUsd/purchaseAmountAed are server-calculated and never accepted here."
+          },
+          "response": []
+        },
+        {
+          "name": "Update purchase item",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": \"26.000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/purchases/f475ecee-8ea6-4c1f-b83f-88e9d287a53b/items/107f5928-fb22-42d1-b55e-676f33081df2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "purchases",
+                "f475ecee-8ea6-4c1f-b83f-88e9d287a53b",
+                "items",
+                "107f5928-fb22-42d1-b55e-676f33081df2"
+              ]
+            },
+            "description": "All fields optional. Same decimal-string rule as Add purchase item."
+          },
+          "response": []
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrlRoot",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "tenantCode",
+      "value": "acme-metals",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "platformAccessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "platformRefreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invitationToken",
+      "value": "",
+      "type": "string",
+      "description": "Paste the token from an invite email's /accept-invitation/:token link."
+    }
+  ]
+}

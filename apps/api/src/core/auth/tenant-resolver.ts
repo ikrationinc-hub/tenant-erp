@@ -5,6 +5,7 @@ import { tenants } from "../../database/platform/schema.js";
 export interface ResolvedTenant {
   id: string;
   schemaName: string;
+  slug: string;
 }
 
 /**
@@ -40,7 +41,7 @@ export async function resolveTenantForLogin(
   for (const slug of slugCandidates) {
     const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug)).limit(1);
     if (tenant && tenant.status === "active") {
-      return { id: tenant.id, schemaName: tenant.schemaName };
+      return { id: tenant.id, schemaName: tenant.schemaName, slug: tenant.slug };
     }
   }
 
@@ -59,5 +60,5 @@ export async function getActiveTenantById(tenantId: string): Promise<ResolvedTen
   if (!tenant || tenant.status !== "active") {
     return undefined;
   }
-  return { id: tenant.id, schemaName: tenant.schemaName };
+  return { id: tenant.id, schemaName: tenant.schemaName, slug: tenant.slug };
 }

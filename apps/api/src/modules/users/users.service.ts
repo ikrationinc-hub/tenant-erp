@@ -3,7 +3,7 @@ import { ConflictError, ForbiddenError, NotFoundError, UnauthorizedError } from 
 import { assertPasswordMeetsPolicy } from "../../core/auth/password-policy.js";
 import { hashPassword } from "../../core/auth/password.js";
 import { generateInviteToken, hashInviteToken, INVITE_TOKEN_TTL_MS } from "../../core/auth/invite-token.js";
-import { resolveTenantForLogin } from "../../core/auth/tenant-resolver.js";
+import { getActiveTenantById, resolveTenantForLogin } from "../../core/auth/tenant-resolver.js";
 import { insertAuditLog } from "../../core/audit/write.js";
 import { getMailer } from "../../core/notification/mailer.js";
 import { buildInviteEmail } from "../../core/notification/templates/invite-email.js";
@@ -119,8 +119,12 @@ export async function inviteUser(ctx: RequestContext, input: InviteUserInput): P
     };
   });
 
+  const tenant = await getActiveTenantById(scope.tenantId);
+  if (!tenant) {
+    throw new NotFoundError("Tenant not found");
+  }
   await getMailer().send(
-    buildInviteEmail({ to: input.email, companyName, token: invitation.rawToken }),
+    buildInviteEmail({ to: input.email, companyName, token: invitation.rawToken, tenantSlug: tenant.slug }),
   );
 
   return { invitationId: invitation.id, userId };
@@ -243,8 +247,17 @@ export async function resendInvitation(
     return { email: invitation.email, token, expiresAt, companyName };
   });
 
+  const tenant = await getActiveTenantById(scope.tenantId);
+  if (!tenant) {
+    throw new NotFoundError("Tenant not found");
+  }
   await getMailer().send(
-    buildInviteEmail({ to: result.email, companyName: result.companyName, token: result.token }),
+    buildInviteEmail({
+      to: result.email,
+      companyName: result.companyName,
+      token: result.token,
+      tenantSlug: tenant.slug,
+    }),
   );
 
   return { expiresAt: result.expiresAt };

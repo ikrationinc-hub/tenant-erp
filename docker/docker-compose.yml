@@ -49,7 +49,26 @@ services:
       timeout: 5s
       retries: 10
 
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+    # Definition download on first boot can take a few minutes - clamd
+    # doesn't start listening until it's done, so the healthcheck (not a
+    # fixed startup delay) is what core/storage/scanner.ts's callers
+    # should actually wait on.
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 5m
+
 volumes:
   postgres_data:
   redis_data:
   minio_data:
+  clamav_data:
