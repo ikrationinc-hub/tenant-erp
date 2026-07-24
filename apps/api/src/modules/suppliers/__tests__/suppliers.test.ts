@@ -134,13 +134,13 @@ async function seedSupplierTenant(label: string): Promise<SeededSupplierTenant> 
   return { schemaName: tenant.schemaName, companyId, userId, accessToken: token, masters };
 }
 
-function basePayload(masters: SeededSupplierTenant["masters"], name: string) {
+function basePayload(refs: SeededSupplierTenant["masters"], name: string) {
   return {
     name,
-    supplierTypeId: masters.supplierTypeId,
-    countryId: masters.countryId,
-    paymentTermId: masters.paymentTermId,
-    currencyId: masters.currencyId,
+    supplierTypeId: refs.supplierTypeId,
+    countryId: refs.countryId,
+    paymentTermId: refs.paymentTermId,
+    currencyId: refs.currencyId,
   };
 }
 

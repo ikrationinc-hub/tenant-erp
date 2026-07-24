@@ -26,6 +26,8 @@ export interface DefineMasterModuleConfig<
   entity: string;
   /** e.g. "countries" - the URL segment this master mounts at, and the :master value GET /api/v1/masters/:master/options dispatches on. */
   urlSegment: string;
+  /** e.g. "Countries" - the menu label (core/provisioning/seed-menu-tree.ts generates one menu node per master from this list, never hand-duplicated - the exact drift this label field exists to prevent). */
+  label: string;
   table: T;
   createSchema: z.ZodType<TCreate>;
   updateSchema: z.ZodType<TUpdate>;
@@ -40,6 +42,7 @@ export interface DefineMasterModuleConfig<
 export interface MasterModule {
   entity: string;
   urlSegment: string;
+  label: string;
   router: Router;
   /** The GET .../options handler, mounted separately by registry.ts at the shared GET /api/v1/masters/:master/options route (dispatched by urlSegment), not nested under `router`. */
   listOptions: RequestHandler;
@@ -140,6 +143,7 @@ export function defineMasterModule<
   return {
     entity: config.entity,
     urlSegment: config.urlSegment,
+    label: config.label,
     router,
     listOptions: controller.listOptions,
     permissions,

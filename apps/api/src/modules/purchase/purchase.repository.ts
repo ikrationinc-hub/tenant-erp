@@ -71,6 +71,20 @@ export async function findPurchaseById(tx: TenantTx, companyId: string, id: stri
   return row;
 }
 
+/** Exact-match lookup by supplierInvoiceNo - not part of any real FR, but a stable natural key scripts/seed-dev.ts uses to stay idempotent (purchase_number itself is only known after creation, since it's numbering-engine-generated). */
+export async function findPurchaseBySupplierInvoiceNo(
+  tx: TenantTx,
+  companyId: string,
+  supplierInvoiceNo: string,
+): Promise<PurchaseRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(purchases)
+    .where(and(eq(purchases.supplierInvoiceNo, supplierInvoiceNo), eq(purchases.companyId, companyId), isNull(purchases.deletedAt)))
+    .limit(1);
+  return row;
+}
+
 export async function insertPurchase(tx: TenantTx, values: PurchaseInsert): Promise<PurchaseRow> {
   const [row] = await tx.insert(purchases).values(values).returning();
   if (!row) {

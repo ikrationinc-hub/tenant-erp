@@ -244,7 +244,7 @@ describe("permission engine (core/rbac)", () => {
       });
 
       expect(resolved.permissions.has("purchase.po.approve")).toBe(true);
-      expect(resolved.permissions.has("masters.supplier.delete")).toBe(false);
+      expect(resolved.permissions.has("masters.country.update")).toBe(false);
     },
     TEST_TIMEOUT_MS,
   );

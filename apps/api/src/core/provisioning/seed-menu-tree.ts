@@ -1,3 +1,4 @@
+import { MASTER_MODULES } from "../masters/registry.js";
 import { createMenu } from "../menu-engine/mutations.js";
 
 export interface SeedMenuTreeInput {
@@ -17,31 +18,65 @@ interface DefaultMenuItem {
 }
 
 /**
+ * The masters children are GENERATED from core/masters/registry.ts's
+ * MASTER_MODULES, one node per master - never 16 hand-written entries.
+ * This is the exact discipline whose absence caused the bug this file was
+ * rewritten to fix: DEFAULT_MENU_TREE below drifted from what apps/web
+ * actually resolves (docs/CLAUDE-CODE-PROMPTS.md's "Fix the seeded menu
+ * tree" task) because masters were hand-listed here (two of them, wrong)
+ * instead of generated from the one place that actually knows the full
+ * set. Mirrors apps/web/src/mocks/handlers.ts's mockMenuTree, which
+ * generates the equivalent list from its own MASTER_REGISTRY the same
+ * way - that file is the accurate target shape apps/web has actually
+ * been built and tested against.
+ */
+function buildMastersChildren(): DefaultMenuItem[] {
+  return MASTER_MODULES.map((module) => ({
+    key: `masters.${module.urlSegment}`,
+    label: module.label,
+    path: `/masters/${module.urlSegment}`,
+    requiredPermission: `masters.${module.entity}.read`,
+  }));
+}
+
+/**
  * A starting point every tenant gets, not a final navigation - a real
- * tenant's admin edits this via core/menu-engine/mutations.ts once masters
- * and purchase have real routes. `moduleKey` matches core/module-registry/
- * manifests.ts's keys exactly; `requiredPermission` matches core/rbac's
- * catalogue exactly - both are validated for real (not just by
- * convention) by core/menu-engine/resolve.ts at render time, so a typo
- * here just means the item silently never appears, not a crash.
+ * tenant's admin edits this via core/menu-engine/mutations.ts.
+ * `moduleKey` matches core/module-registry/manifests.ts's keys exactly;
+ * `requiredPermission` matches core/rbac's catalogue exactly - both are
+ * validated for real (not just by convention) by core/menu-engine/
+ * resolve.ts at render time, so a typo here just means the item silently
+ * never appears, not a crash. Suppliers is its own top-level module
+ * (FE-6: contacts/banks sub-tables, activate/deactivate, its own
+ * permission namespace "suppliers.supplier.*") - it does NOT live under
+ * Masters, unlike the 16 generic masters (which do, including
+ * "customers": a real master since prompt 16, not a placeholder).
  */
 const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
   { key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard" },
   {
+    key: "companies",
+    label: "Companies",
+    path: "/companies",
+    icon: "database",
+    moduleKey: "admin",
+    requiredPermission: "admin.company.read",
+  },
+  {
+    key: "branches",
+    label: "Branches",
+    path: "/branches",
+    icon: "database",
+    moduleKey: "admin",
+    requiredPermission: "admin.branch.read",
+  },
+  {
     key: "users",
     label: "Users",
+    path: "/users",
     icon: "users",
     moduleKey: "users",
     requiredPermission: "users.user.read",
-    children: [
-      { key: "users.list", label: "All Users", path: "/users", requiredPermission: "users.user.read" },
-      {
-        key: "users.invite",
-        label: "Invite User",
-        path: "/users/invite",
-        requiredPermission: "users.user.create",
-      },
-    ],
   },
   {
     key: "roles",
@@ -52,24 +87,19 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     requiredPermission: "admin.role.read",
   },
   {
+    key: "suppliers",
+    label: "Suppliers",
+    path: "/suppliers",
+    icon: "shop",
+    moduleKey: "suppliers",
+    requiredPermission: "suppliers.supplier.read",
+  },
+  {
     key: "masters",
     label: "Masters",
     icon: "database",
     moduleKey: "masters",
-    children: [
-      {
-        key: "masters.suppliers",
-        label: "Suppliers",
-        path: "/masters/suppliers",
-        requiredPermission: "masters.supplier.read",
-      },
-      {
-        key: "masters.customers",
-        label: "Customers",
-        path: "/masters/customers",
-        requiredPermission: "masters.customer.read",
-      },
-    ],
+    children: buildMastersChildren(),
   },
   {
     key: "purchase",

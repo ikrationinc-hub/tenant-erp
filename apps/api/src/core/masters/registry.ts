@@ -45,6 +45,7 @@ const noExtraUpdateSchema = masterCreateBaseSchema.partial().strict();
 export const countryModule = defineMasterModule({
   entity: "country",
   urlSegment: "countries",
+  label: "Countries",
   table: countries,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -56,6 +57,7 @@ const cityUpdateSchema = masterCreateBaseSchema.partial().extend({ countryId: z.
 export const cityModule = defineMasterModule({
   entity: "city",
   urlSegment: "cities",
+  label: "Cities",
   table: cities,
   createSchema: cityCreateSchema,
   updateSchema: cityUpdateSchema,
@@ -72,6 +74,7 @@ export const cityModule = defineMasterModule({
 export const currencyModule = defineMasterModule({
   entity: "currency",
   urlSegment: "currencies",
+  label: "Currencies",
   table: currencies,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -80,6 +83,7 @@ export const currencyModule = defineMasterModule({
 export const paymentTermModule = defineMasterModule({
   entity: "payment_term",
   urlSegment: "payment-terms",
+  label: "Payment Terms",
   table: paymentTerms,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -88,6 +92,7 @@ export const paymentTermModule = defineMasterModule({
 export const uomModule = defineMasterModule({
   entity: "uom",
   urlSegment: "uom",
+  label: "Units of Measure",
   table: uom,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -96,6 +101,7 @@ export const uomModule = defineMasterModule({
 export const portModule = defineMasterModule({
   entity: "port",
   urlSegment: "ports",
+  label: "Ports",
   table: ports,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -104,6 +110,7 @@ export const portModule = defineMasterModule({
 export const warehouseModule = defineMasterModule({
   entity: "warehouse",
   urlSegment: "warehouses",
+  label: "Warehouses",
   table: warehouses,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -112,6 +119,7 @@ export const warehouseModule = defineMasterModule({
 export const incotermModule = defineMasterModule({
   entity: "incoterm",
   urlSegment: "incoterms",
+  label: "Incoterms",
   table: incoterms,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -124,6 +132,7 @@ const itemUpdateSchema = masterCreateBaseSchema.partial().extend({ itemType: ite
 export const itemModule = defineMasterModule({
   entity: "item",
   urlSegment: "items",
+  label: "Items",
   table: items,
   createSchema: itemCreateSchema,
   updateSchema: itemUpdateSchema,
@@ -133,6 +142,7 @@ export const itemModule = defineMasterModule({
 export const itemGradeModule = defineMasterModule({
   entity: "item_grade",
   urlSegment: "item-grades",
+  label: "Item Grades",
   table: itemGrades,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -141,6 +151,7 @@ export const itemGradeModule = defineMasterModule({
 export const vesselModule = defineMasterModule({
   entity: "vessel",
   urlSegment: "vessels",
+  label: "Vessels",
   table: vessels,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -149,6 +160,7 @@ export const vesselModule = defineMasterModule({
 export const transportModeModule = defineMasterModule({
   entity: "transport_mode",
   urlSegment: "transport-modes",
+  label: "Transport Modes",
   table: transportModes,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -157,6 +169,7 @@ export const transportModeModule = defineMasterModule({
 export const lmeExchangeModule = defineMasterModule({
   entity: "lme_exchange",
   urlSegment: "lme-exchanges",
+  label: "LME Exchanges",
   table: lmeExchanges,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -165,6 +178,7 @@ export const lmeExchangeModule = defineMasterModule({
 export const hedgePlatformModule = defineMasterModule({
   entity: "hedge_platform",
   urlSegment: "hedge-platforms",
+  label: "Hedge Platforms",
   table: hedgePlatforms,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -173,6 +187,7 @@ export const hedgePlatformModule = defineMasterModule({
 export const supplierTypeModule = defineMasterModule({
   entity: "supplier_type",
   urlSegment: "supplier-types",
+  label: "Supplier Types",
   table: supplierTypes,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
@@ -191,6 +206,7 @@ export const supplierTypeModule = defineMasterModule({
 export const customerModule = defineMasterModule({
   entity: "customer",
   urlSegment: "customers",
+  label: "Customers",
   table: customers,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,

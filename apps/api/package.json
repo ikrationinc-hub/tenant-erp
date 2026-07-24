@@ -16,7 +16,8 @@
     "db:tenant:generate": "drizzle-kit generate --config=drizzle.tenant.config.ts",
     "check:tenant-boundary": "node scripts/check-search-path-boundary.mjs",
     "migrate:tenants": "tsx scripts/migrate-tenants.ts",
-    "seed:platform-admin": "tsx scripts/seed-platform-admin.ts"
+    "seed:platform-admin": "tsx scripts/seed-platform-admin.ts",
+    "seed:dev": "tsx --env-file=../../.env scripts/seed-dev.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1090.0",

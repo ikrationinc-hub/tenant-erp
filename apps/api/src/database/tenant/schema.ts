@@ -231,7 +231,7 @@ export const loginHistoryRelations = relations(loginHistory, ({ one }) => ({
 
 // --- RBAC ---------------------------------------------------------------
 // permission keys are namespaced module.entity.action, e.g.
-// "purchase.po.approve", "masters.supplier.create". `permissions` is a
+// "purchase.po.approve", "masters.country.create". `permissions` is a
 // shared catalogue (no company_id): the same key means the same thing for
 // every company in the tenant. What a company's roles actually grant is
 // role_permissions/field_permissions, which ARE company-scoped (via roles).
