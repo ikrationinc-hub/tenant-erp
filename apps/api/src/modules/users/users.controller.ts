@@ -118,6 +118,16 @@ export async function acceptInvitation(req: Request, res: Response, next: NextFu
   }
 }
 
+export async function myCompanies(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const companies = await usersService.myCompanies(ctx);
+    res.status(200).json({ companies });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function list(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const ctx = requireContext();

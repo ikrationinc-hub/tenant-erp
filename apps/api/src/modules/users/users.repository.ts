@@ -1,7 +1,7 @@
 import { and, asc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import type { TenantTx } from "../../database/get-db.js";
 import type { PaginatedRows } from "../../core/masters/types.js";
-import { companies, invitations, userRoles, users } from "../../database/tenant/schema.js";
+import { branches, companies, invitations, userRoles, users } from "../../database/tenant/schema.js";
 
 export type UserRow = typeof users.$inferSelect;
 export type InvitationRow = typeof invitations.$inferSelect;
@@ -374,4 +374,40 @@ export async function findCompanyName(tx: TenantTx, companyId: string): Promise<
     .where(eq(companies.id, companyId))
     .limit(1);
   return company?.name;
+}
+
+export interface MyCompanyRow {
+  id: string;
+  name: string;
+}
+
+/**
+ * GET /users/me/companies (task item: "the header's company/branch
+ * switcher", packages/contracts/src/scope.ts). Queries companies/branches
+ * directly rather than importing modules/companies'/modules/branches' own
+ * repositories - same precedent as findCompanyName above, since these are
+ * core schema tables, not another module's private concern.
+ *
+ * Always exactly one company: users.company_id is a single NOT NULL FK
+ * (schema.ts's own doc comment) - there is no user-to-many-companies
+ * mapping table in this schema, so "my companies" is always a one-element
+ * array today. Returning an array (not a single object) is still the
+ * right contract shape - a future multi-company-per-user model would be
+ * additive, not a breaking response-shape change.
+ */
+export async function findMyCompany(tx: TenantTx, companyId: string): Promise<MyCompanyRow | undefined> {
+  const [company] = await tx
+    .select({ id: companies.id, name: companies.name })
+    .from(companies)
+    .where(and(eq(companies.id, companyId), isNull(companies.deletedAt)))
+    .limit(1);
+  return company;
+}
+
+export async function listMyCompanyBranches(tx: TenantTx, companyId: string): Promise<MyCompanyRow[]> {
+  return tx
+    .select({ id: branches.id, name: branches.name })
+    .from(branches)
+    .where(and(eq(branches.companyId, companyId), eq(branches.status, "active"), isNull(branches.deletedAt)))
+    .orderBy(asc(branches.name));
 }

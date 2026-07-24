@@ -28,11 +28,13 @@ import {
   findCompanyName,
   findInvitationById,
   findInvitationByTokenHash,
+  findMyCompany,
   findUserByCompanyAndEmail,
   findUserByIdInCompany,
   insertInvitation,
   insertInvitedUser,
   insertProvisionedUser,
+  listMyCompanyBranches,
   listUsers as listUsersRepo,
   markInvitationAccepted,
   markInvitationRevoked,
@@ -399,6 +401,32 @@ export async function myPermissions(ctx: RequestContext): Promise<string[]> {
   requireTenantScope(ctx);
   const resolved = await resolvePermissions(ctx);
   return [...resolved.permissions];
+}
+
+export interface MyCompaniesCompany {
+  id: string;
+  name: string;
+  branches: { id: string; name: string }[];
+}
+
+/**
+ * Powers the header's company/branch switcher (packages/contracts/src/
+ * scope.ts). Always a single-element array today: users.company_id is a
+ * single NOT NULL FK, not a many-to-many mapping (users.repository.ts's
+ * doc comment on findMyCompany) - the array shape is future-proofing the
+ * contract, not evidence multi-company access exists yet.
+ */
+export async function myCompanies(ctx: RequestContext): Promise<MyCompaniesCompany[]> {
+  const scope = requireTenantScope(ctx);
+
+  const [company, branches] = await withTenantDb(ctx, (tx) =>
+    Promise.all([findMyCompany(tx, scope.companyId), listMyCompanyBranches(tx, scope.companyId)]),
+  );
+  if (!company) {
+    throw new NotFoundError("Company not found");
+  }
+
+  return [{ id: company.id, name: company.name, branches }];
 }
 
 async function setStatus(

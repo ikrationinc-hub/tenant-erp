@@ -105,3 +105,12 @@ usersRouter.get(
   enforcePasswordChangeScope,
   usersController.myPermissions,
 );
+
+/** The header's company/branch switcher (packages/contracts/src/scope.ts) - same gating as the two /me endpoints above. */
+usersRouter.get(
+  "/me/companies",
+  scopeResolverMiddleware,
+  requireUsersModule,
+  enforcePasswordChangeScope,
+  usersController.myCompanies,
+);

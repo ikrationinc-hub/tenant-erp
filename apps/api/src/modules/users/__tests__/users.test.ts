@@ -16,7 +16,7 @@ import { hashInviteToken } from "../../../core/auth/invite-token.js";
 import { signAccessToken } from "../../../core/auth/jwt.js";
 import { createTenantSchema, type ProvisionedTenant } from "../../../core/tenant/provisioner.js";
 import { closeTenantDbPool, withTenantSchema } from "../../../database/get-db.js";
-import { companies, invitations, permissions, users } from "../../../database/tenant/schema.js";
+import { branches, companies, invitations, permissions, users } from "../../../database/tenant/schema.js";
 import { eq } from "drizzle-orm";
 
 const TEST_TIMEOUT_MS = 120_000;
@@ -94,6 +94,19 @@ function asSafeUser(res: { body: unknown }) {
 const myPermissionsResponseSchema = z.object({ permissions: z.array(z.string()) });
 function asMyPermissions(res: { body: unknown }) {
   return myPermissionsResponseSchema.parse(res.body);
+}
+
+const myCompaniesResponseSchema = z.object({
+  companies: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      branches: z.array(z.object({ id: z.string(), name: z.string() })),
+    }),
+  ),
+});
+function asMyCompanies(res: { body: unknown }) {
+  return myCompaniesResponseSchema.parse(res.body);
 }
 
 const changePasswordResponseSchema = z.object({
@@ -597,6 +610,39 @@ describe("user onboarding: invitations, provisioning, password-change scope", ()
       const afterRes = await request(app()).get("/api/v1/users/me/permissions").set("Authorization", `Bearer ${admin.accessToken}`);
       expect(afterRes.status).toBe(200);
       expect(asMyPermissions(afterRes).permissions).toEqual(expect.arrayContaining(["users.user.read", "admin.company.read"]));
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "GET /users/me/companies returns the caller's own company with its active branches, excluding an inactive one",
+    async () => {
+      const admin = await seedTenantWithAdmin("my-companies-flow", []);
+
+      const [activeBranch, inactiveBranch] = await withTenantSchema(admin.tenant.schemaName, async (tx) => {
+        const [active] = await tx
+          .insert(branches)
+          .values({ companyId: admin.companyId, name: "Dubai HQ", code: "DXB-HQ", status: "active", createdBy: admin.adminUserId })
+          .returning();
+        const [inactive] = await tx
+          .insert(branches)
+          .values({ companyId: admin.companyId, name: "Retired Branch", code: "RETIRED", status: "inactive", createdBy: admin.adminUserId })
+          .returning();
+        return [active, inactive];
+      });
+      if (!activeBranch || !inactiveBranch) {
+        throw new Error("failed to seed branches");
+      }
+
+      const res = await request(app()).get("/api/v1/users/me/companies").set("Authorization", `Bearer ${admin.accessToken}`);
+      expect(res.status).toBe(200);
+      const parsed = asMyCompanies(res);
+
+      expect(parsed.companies).toHaveLength(1);
+      const company = parsed.companies[0];
+      expect(company?.id).toBe(admin.companyId);
+      expect(company?.branches.some((b) => b.id === activeBranch.id)).toBe(true);
+      expect(company?.branches.some((b) => b.id === inactiveBranch.id)).toBe(false);
     },
     TEST_TIMEOUT_MS,
   );
