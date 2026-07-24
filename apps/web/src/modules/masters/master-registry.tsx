@@ -50,8 +50,11 @@ function findMasterByPath(path: string): MasterRegistryEntry | undefined {
   return MASTER_REGISTRY.find((master) => master.urlSegment === urlSegment);
 }
 
-/** DynamicRoutes' resolveScreen hook - a menu path outside this registry (e.g. "/masters/suppliers", the dedicated Supplier module) falls through to the generic placeholder untouched. */
-export function resolveMasterScreen(entry: FlatMenuEntry): ReactElement | null {
+/** DynamicRoutes' resolveScreen hook - a menu path outside this registry (e.g. "/masters/suppliers", the dedicated Supplier module) falls through to the generic placeholder untouched. Exact-match only: MasterScreen has no sub-paths of its own, so "/masters/countries/anything" must 404, not silently render the countries screen. */
+export function resolveMasterScreen(entry: FlatMenuEntry, pathname: string): ReactElement | null {
+  if (pathname !== entry.path) {
+    return null;
+  }
   const master = entry.path ? findMasterByPath(entry.path) : undefined;
   if (!master) {
     return null;

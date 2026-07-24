@@ -31,6 +31,29 @@ export const endpoints = {
   revokeRolePermission: (roleId: string, permissionKey: string) =>
     `/roles/${roleId}/permissions/${encodeURIComponent(permissionKey)}`,
   roleFieldPermissions: (roleId: string) => `/roles/${roleId}/field-permissions`,
+  userOptions: "/users/options",
+  branchOptions: "/branches/options",
+  customerOptions: "/customers/options",
+
+  // --- FE-6: Supplier + Purchase --------------------------------------------
+  suppliers: "/suppliers",
+  supplierOptions: "/suppliers/options",
+  activateSupplier: (id: string) => `/suppliers/${id}/activate`,
+  deactivateSupplier: (id: string) => `/suppliers/${id}/deactivate`,
+  purchases: "/purchases",
+  approvePurchase: (id: string) => `/purchases/${id}/approve`,
+  postPurchase: (id: string) => `/purchases/${id}/post`,
+  purchaseItems: (purchaseId: string) => `/purchases/${purchaseId}/items`,
+  purchaseItem: (purchaseId: string, itemId: string) => `/purchases/${purchaseId}/items/${itemId}`,
+  purchaseAllocations: (purchaseId: string) => `/purchases/${purchaseId}/allocations`,
+  purchaseCosts: (purchaseId: string) => `/purchases/${purchaseId}/costs`,
+  purchaseLmeRecords: (purchaseId: string) => `/purchases/${purchaseId}/lme-records`,
+  purchaseHedges: (purchaseId: string) => `/purchases/${purchaseId}/hedges`,
+  purchaseHedge: (purchaseId: string, hedgeId: string) => `/purchases/${purchaseId}/hedges/${hedgeId}`,
+  uploadAttachment: (entity: string, entityId: string, fieldKey: string) =>
+    `/attachments/${entity}/${entityId}/${fieldKey}`,
+  attachmentDownloadUrl: (id: string) => `/attachments/${id}/download-url`,
+  attachments: "/attachments",
 } as const;
 
 /** Appends a query string, skipping undefined values - `?tenantCode=` for an unset optional field is just noise. */

@@ -12,3 +12,5 @@ export * from "./permissions.js";
 export * from "./users-admin.js";
 export * from "./permission-catalogue.js";
 export * from "./role-permissions.js";
+export * from "./suppliers.js";
+export * from "./attachments.js";

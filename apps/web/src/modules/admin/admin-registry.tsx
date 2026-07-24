@@ -21,7 +21,10 @@ const ADMIN_SCREENS: Record<string, () => ReactElement> = {
   "/roles": () => <RoleListScreen />,
 };
 
-export function resolveAdminScreen(entry: FlatMenuEntry): ReactElement | null {
+export function resolveAdminScreen(entry: FlatMenuEntry, pathname: string): ReactElement | null {
+  if (pathname !== entry.path) {
+    return null;
+  }
   const render = entry.path ? ADMIN_SCREENS[entry.path] : undefined;
   return render ? render() : null;
 }

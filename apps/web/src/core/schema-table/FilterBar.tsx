@@ -1,7 +1,10 @@
 import type { ReactElement } from "react";
-import { Input, Select, Space } from "antd";
+import dayjs from "dayjs";
+import { DatePicker, Input, Select, Space } from "antd";
 import type { EntityListState } from "./use-entity-list-state";
 import type { SchemaTableFilter } from "./types";
+
+const DATE_FORMAT = "YYYY-MM-DD";
 
 function FilterControl({
   filter,
@@ -47,6 +50,35 @@ function FilterControl({
   );
 }
 
+function DateRangeFilterControl({
+  filter,
+  fromValue,
+  toValue,
+  onChangeFrom,
+  onChangeTo,
+}: {
+  filter: SchemaTableFilter;
+  fromValue: string | undefined;
+  toValue: string | undefined;
+  onChangeFrom: (value: string | undefined) => void;
+  onChangeTo: (value: string | undefined) => void;
+}): ReactElement {
+  const from = fromValue ? dayjs(fromValue, DATE_FORMAT) : null;
+  const to = toValue ? dayjs(toValue, DATE_FORMAT) : null;
+
+  return (
+    <DatePicker.RangePicker
+      aria-label={filter.label}
+      value={[from && from.isValid() ? from : null, to && to.isValid() ? to : null]}
+      onChange={(dates) => {
+        onChangeFrom(dates?.[0] ? dates[0].format(DATE_FORMAT) : undefined);
+        onChangeTo(dates?.[1] ? dates[1].format(DATE_FORMAT) : undefined);
+      }}
+      format={DATE_FORMAT}
+    />
+  );
+}
+
 export function FilterBar({
   filters,
   state,
@@ -68,14 +100,25 @@ export function FilterBar({
         allowClear
         style={{ width: 240 }}
       />
-      {filters.map((filter) => (
-        <FilterControl
-          key={filter.key}
-          filter={filter}
-          value={state.filters[filter.key]}
-          onChange={(value) => onFilterChange(filter.key, value)}
-        />
-      ))}
+      {filters.map((filter) =>
+        filter.type === "dateRange" ? (
+          <DateRangeFilterControl
+            key={filter.key}
+            filter={filter}
+            fromValue={state.filters[`${filter.key}From`]}
+            toValue={state.filters[`${filter.key}To`]}
+            onChangeFrom={(value) => onFilterChange(`${filter.key}From`, value)}
+            onChangeTo={(value) => onFilterChange(`${filter.key}To`, value)}
+          />
+        ) : (
+          <FilterControl
+            key={filter.key}
+            filter={filter}
+            value={state.filters[filter.key]}
+            onChange={(value) => onFilterChange(filter.key, value)}
+          />
+        ),
+      )}
     </Space>
   );
 }

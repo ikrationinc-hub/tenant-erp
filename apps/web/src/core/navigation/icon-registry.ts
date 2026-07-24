@@ -4,6 +4,7 @@ import {
   DashboardOutlined,
   DatabaseOutlined,
   SafetyOutlined,
+  ShopOutlined,
   ShoppingCartOutlined,
   TeamOutlined,
 } from "@ant-design/icons";
@@ -15,6 +16,7 @@ const ICONS: Record<string, ComponentType> = {
   shield: SafetyOutlined,
   database: DatabaseOutlined,
   "shopping-cart": ShoppingCartOutlined,
+  shop: ShopOutlined,
 };
 
 export function resolveMenuIcon(iconKey: string | null): ComponentType {

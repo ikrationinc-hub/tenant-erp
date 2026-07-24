@@ -9,6 +9,8 @@ import { BootstrapStatus } from "./BootstrapStatus";
 import { DynamicRoutes } from "../core/navigation/DynamicRoutes";
 import { resolveMasterScreen } from "../modules/masters/master-registry";
 import { resolveAdminScreen } from "../modules/admin/admin-registry";
+import { resolveSupplierScreen } from "../modules/suppliers/supplier-registry";
+import { resolvePurchaseScreen } from "../modules/purchase/purchase-registry";
 import { SchemaFormDevPage } from "./dev/SchemaFormDevPage";
 import { SchemaTableDevPage } from "./dev/SchemaTableDevPage";
 
@@ -45,7 +47,14 @@ export const routes: RouteObject[] = [
               {
                 path: "*",
                 element: (
-                  <DynamicRoutes resolveScreen={(entry) => resolveMasterScreen(entry) ?? resolveAdminScreen(entry)} />
+                  <DynamicRoutes
+                    resolveScreen={(entry, pathname) =>
+                      resolveMasterScreen(entry, pathname) ??
+                      resolveAdminScreen(entry, pathname) ??
+                      resolveSupplierScreen(entry, pathname) ??
+                      resolvePurchaseScreen(entry, pathname)
+                    }
+                  />
                 ),
               },
             ],

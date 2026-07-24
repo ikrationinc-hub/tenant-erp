@@ -78,16 +78,20 @@ export const optionsSourceSchema = z.union([z.string(), optionsSourceObjectSchem
     if (typeof value !== "string") {
       return value;
     }
-    // "roles" isn't a master (no core/masters/registry.ts entry - it's a
-    // first-class RBAC concept, FE-5.5) but is options-sourced the same
-    // way; use-field-options.ts routes master: "roles" to GET
-    // /roles/options instead of /masters/roles/options.
-    if (value === "roles") {
-      return { type: "master", master: "roles" };
-    }
     const [prefix, rest] = value.split(":");
     if (prefix === "masters" && rest) {
       return { type: "master", master: rest };
+    }
+    // A bare word with no colon (e.g. "roles", "suppliers", "branches",
+    // "users", "customers") names a non-masters options source - none of
+    // these have a core/masters/registry.ts entry, but they're
+    // options-sourced the same way. apps/web's use-field-options.ts
+    // resolveOptionsEndpoint is the one place that decides which real
+    // endpoint each of these maps to; this transform's only job is
+    // normalizing the wire string into the rich shape every consumer
+    // already expects.
+    if (!rest) {
+      return { type: "master", master: prefix };
     }
     return { type: "static", staticOptions: [] };
   },

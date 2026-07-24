@@ -433,6 +433,317 @@ Tests:
 
 ---
 
+## Prompt 15 — Admin API surface (companies, branches, users, roles, permissions)
+
+```
+FE-5.5 (docs/CLAUDE-CODE-PROMPTS-FRONTEND.md) already built the tenant-admin
+screens - Companies, Branches, Users, Roles, permission Transfer, field-
+permission matrix. They're running against MSW mocks because none of this
+has a REST layer yet. Your job is to build the real thing underneath them.
+
+You are NOT designing this API from scratch. apps/web already committed
+to an exact shape and is coded against it - treat these as the spec,
+not a suggestion:
+  - packages/contracts/src/{users-admin,permission-catalogue,role-permissions,entity-list}.ts
+    - the exact Zod request/response shapes
+  - apps/web/src/mocks/admin-handlers.ts
+    - the executable mock: exact status codes, exact field-definitions
+      shapes for the new entities, exact seed data shape
+  - apps/web/src/core/api/endpoints.ts
+    - the exact URL for every call below
+Match them url-for-url and field-for-field the same way core/masters/
+registry.ts's GET /masters/:master/options already matches
+packages/contracts/src/master-options.ts exactly - if something here is
+ambiguous, those files are the tie-breaker, not your judgment.
+
+=== DECISION NEEDED FIRST - ASK, DON'T GUESS ===
+Prompt 3 gave companies country_code/currency_code as plain ISO text
+columns (no FK). FE-5.5's frontend mock instead modeled Country/Currency
+as Dropdowns sourced from GET /masters/countries/options and
+GET /masters/currencies/options (which exist now - they didn't at prompt
+3 - and return {value: <master row id (uuid)>, label}, not a bare ISO
+code). Those two designs don't reconcile automatically: either
+companies keeps country_code/currency_code as scalars and the frontend
+field-definitions for "country"/"currency" stop being master-backed
+Dropdowns, or companies gets country_id/currency_id FK columns (a
+migration) and the Dropdown-via-master-options approach apps/web already
+built keeps working unmodified. Pick one and tell me which before
+writing the companies migration - don't silently invent a third option.
+Also: prompt 3's companies table has no tax_registration_no column;
+FE-5.5's field list needs one - add it in the same migration.
+
+=== COMPANIES / BRANCHES ===
+1. GET/POST /api/v1/companies, PATCH /api/v1/companies/:id - standard
+   paginated list + create + update. Response shape is
+   PaginatedRows<TRow> (packages/contracts/src/entity-list.ts) - the
+   exact same envelope core/masters/types.ts already returns, so this
+   can very plausibly BE a masters-factory instantiation (or reuse most
+   of its repository/controller shape) rather than a hand-rolled module.
+   No activate/deactivate route - status is just a field on the record,
+   edited through the normal PATCH.
+2. GET/POST /api/v1/branches, PATCH /api/v1/branches/:id - same envelope.
+   branches (name, code, status) is structurally almost identical to a
+   master (code/name/isActive) except `status` is a two-value enum, not
+   a boolean, and there's no separate activate/deactivate action. See if
+   core/masters/factory.ts's pattern extends to that cleanly; if forcing
+   it costs more than a bespoke thin module, say so and build the latter
+   instead (prompt 12's own rule: if the pattern isn't paying for itself,
+   stop and tell me).
+3. company_id is NEVER accepted from the request body on branch create -
+   inject it from ctx.tenantScope.companyId (backend rule 2). This is
+   the one thing FE-5.5's frontend is already relying on structurally
+   (it never renders a company_id field at all).
+4. Field-definitions: add "admin"/"company" and "admin"/"branch" entries
+   to core/field-engine/defaults.ts's FIELD_DEFAULTS, matching
+   apps/web/src/mocks/admin-handlers.ts's companyFieldDefinitions/
+   branchFieldDefinitions exactly (field keys, order, mandatory flags).
+
+=== USERS (admin surface beyond BE-7's invite/provision/resend/revoke) ===
+5. GET /api/v1/users - paginated, filterable by ?status= and ?roleId=,
+   matching mastersListQuerySchema's page/pageSize/search conventions.
+   Row shape needs: id, name, email, mobile, status, lastLoginAt,
+   roleIds, and (for a pending invite) invitationId + invitationExpiresAt
+   - apps/web's UserManagementScreen renders "Invited (pending)" +
+   expiry directly from those last two fields.
+6. PATCH /api/v1/users/:id/suspend, PATCH /api/v1/users/:id/reactivate -
+   same activate/deactivate shape as a master, just on the users table.
+7. PUT /api/v1/users/:id/roles {roleIds: uuid[]} - the full desired set;
+   compute the grant/revoke diff server-side against
+   core/rbac/mutations.ts's assignRoleToUser/revokeRoleFromUser (both
+   already exist and already bump role_version - reuse them, don't
+   reimplement).
+8. Field-definitions: add "users"/"user" (read-only display columns for
+   the list), "users"/"invite", "users"/"provision", and
+   "users"/"edit-roles" entries - the last three mirror BE-7's existing
+   inviteUserSchema/provisionUserSchema field-for-field, plus a
+   `roles`/`roleIds` field with `multiple: true` and
+   `optionsSource: "roles"` (a bare string, same convention as
+   "masters:countries" - core/field-engine's FieldDefault type may need
+   a `multiple` boolean added; see fieldDefinitionSchema in
+   packages/contracts/src/field-definitions.ts for the exact shape
+   apps/web already parses).
+9. GET /api/v1/roles/options - {options: [{value, label}]}, one entry
+   per role, same envelope as GET /masters/:master/options. This is what
+   the "roles" optionsSource above resolves against.
+
+=== ROLES / PERMISSIONS / FIELD PERMISSIONS ===
+core/rbac/mutations.ts already has the entire engine
+(createRole/grantPermissionToRole/revokePermissionFromRole/
+setFieldPermission), each already bumping role_version and writing an
+audit row in the same transaction. This section is a REST layer over
+functions that already exist - do not reimplement the role_version/
+audit logic, call them.
+
+10. GET/POST /api/v1/roles, PATCH /api/v1/roles/:id - list/create/rename.
+    PaginatedRows<TRow> envelope again.
+11. GET /api/v1/permissions - the full catalogue (every
+    PermissionCatalogueEntry: key, module, entity, action, description),
+    not one role's grants. Read it from wherever the permission catalogue
+    already lives post-prompt-9's module registry - do not hand-maintain
+    a second list.
+12. GET /api/v1/roles/:id/permissions -> {permissionKeys: string[]},
+    the role's current grants.
+13. POST /api/v1/roles/:id/permissions {permissionKey} - grant one,
+    calling grantPermissionToRole. DELETE
+    /api/v1/roles/:id/permissions/:permissionKey - revoke one, calling
+    revokePermissionFromRole. apps/web's PermissionAssignment (the AntD
+    Transfer) calls these once per moved item, not as a batch - match
+    that granularity, don't require a bulk endpoint.
+14. GET /api/v1/roles/:id/field-permissions?module=&entity= ->
+    {fieldPermissions: [{fieldKey, canView, canEdit}]} - only the rows
+    that have an explicit override (an unlisted field means "no
+    override", which apps/web's FieldPermissionMatrix already treats as
+    view+edit both true - don't send a row for every field, only actual
+    overrides).
+15. PUT /api/v1/roles/:id/field-permissions {module, entity, rows: [...]}-
+    upsert the whole batch for that (role, module, entity) in one
+    request, looping setFieldPermission (itself already a per-row
+    upsert) server-side.
+
+=== PERMISSION KEYS ===
+Use "admin" as the module for the new company/branch/role permissions
+(admin.company.read/create/update, admin.branch.*, admin.role.*),
+matching permissionEntry()'s existing module.entity.action convention
+and apps/web's mock catalogue (apps/web/src/mocks/admin-handlers.ts).
+users.user.update didn't exist before FE-5.5 either (only
+users.user.create/provision did) - add it, gating suspend/reactivate/
+set-roles.
+
+Tests: companies/branches CRUD (paginated, company_id never client-
+supplied); users list filters by status and role; suspend/reactivate/
+set-roles each update the right row and (for roles) actually change
+what resolve() returns on the next request; role create/rename;
+permission grant/revoke each bump role_version and take effect on the
+very next request (no TTL wait - same assertion prompt 6 already made
+for the underlying engine, now proven through the new REST layer);
+field-permission get/save round-trips; a field-permissions save that
+revokes can_view on purchase.pricing.purchase_rate_usd actually strips
+it from that role's next GET on that entity (this is FE-7's second demo
+proof - if this test doesn't pass, that demo doesn't work).
+
+Acceptance:
+- Every endpoint above matches its apps/web/src/core/api/endpoints.ts
+  URL and packages/contracts type exactly - swap apps/web's
+  VITE_USE_MOCKS flag off and FE-5.5's screens work against this,
+  unmodified
+- `grep -rn "role ===" apps/api/src` and `grep -rn "role.name ==" apps/api/src`
+  still return nothing outside core/rbac (prompt 6's rule still holds)
+- No `any`
+```
+
+---
+
+## Prompt 16 — Field-definitions for Supplier + Purchase, purchase list filters, attachments REST layer
+
+```
+FE-6 (docs/CLAUDE-CODE-PROMPTS-FRONTEND.md) built the Supplier and Purchase
+screens end to end - SchemaForm/SchemaTable driven, zero hardcoded labels,
+workflow (Draft -> Approved -> Posted) enforced client-side and permission-
+gated, attachments with real upload progress. It's running against MSW
+mocks for everything this prompt covers. As with prompt 15: apps/web
+already committed to an exact shape - treat these as the spec:
+  - apps/web/src/mocks/suppliers-handlers.ts (supplierFieldDefinitions -
+    the 11-field shape, field keys, order, mandatory flags)
+  - apps/web/src/mocks/purchase-handlers.ts (HEADER_FIELDS/COSTS_FIELDS/
+    ITEM_FIELDS/ALLOCATION_FIELDS/LME_RECORD_FIELDS/HEDGE_FIELDS - six
+    field-definitions entities, field keys, order, mandatory flags,
+    optionsSource strings)
+  - apps/web/src/mocks/attachments-handlers.ts and
+    packages/contracts/src/attachments.ts (the attachments REST shape)
+  - apps/web/src/core/api/endpoints.ts (the exact URL for every call below)
+
+=== SUPPLIER FIELD-DEFINITIONS ===
+1. Prompt 13 built the suppliers table and FR-001..006 but not a
+   core/field-engine/defaults.ts entry for module="suppliers"
+   entity="supplier" - GET /field-definitions/suppliers/supplier 404s (or
+   falls through to a default) today. Add it, matching
+   suppliers-handlers.ts's supplierFieldDefinitions field-for-field: code
+   (system, read-only), name, supplierTypeId (masters:supplier-types),
+   countryId (masters:countries), cityId (masters:cities, dependsOn
+   countryId), address, taxRegistrationNo, paymentTermId
+   (masters:payment-terms), currencyId (masters:currencies), remarks.
+
+=== PURCHASE FIELD-DEFINITIONS ===
+2. Prompt 14 built the purchase tables and workflow but only one
+   field-definitions entity is confirmed wired (whatever prompt 11/14
+   already did for "po"/costs - check before duplicating). Add the
+   remaining five, matching purchase-handlers.ts exactly:
+   - module="purchase" entity="header" (~24 fields: header info,
+     supplier/buyer, the full shipment sub-object flattened, and the 6
+     attachment fields - invoice/billOfLading/packingList/
+     certificateOfOrigin/otherDocuments/otherDocuments2 as FileUpload/
+     MultiUpload. apps/web splits this back into {header, shipment} on
+     submit - see PurchaseDetailScreen.tsx's splitHeaderPayload - so the
+     field KEYS must match createPurchaseSchema/updatePurchaseSchema's
+     nested shape once flattened, not just be close)
+   - module="purchase" entity="po" if not already covering
+     freight/insurance/customs/otherCharges/otherCharges2/otherCharges3
+     exactly (this is prompt 14's own Tier-2 "Other Charges" proof -
+     don't diverge from whatever field keys the money engine already uses)
+   - module="purchase" entity="item" (itemId, gradeId, quantity, uomId,
+     purchaseRateUsd, exchangeRate)
+   - module="purchase" entity="allocation" (reservedCustomerId,
+     allocationPct) - see the open question below before finalizing this
+     one
+   - module="purchase" entity="lme_record" (lmeExchangeId, metal,
+     lmePriceUsd, fixingDate, agreedPremiumPct)
+   - module="purchase" entity="hedge" (hedgePlatformId, contractNumber,
+     position [enum: buy/sell], quantity, rate, hedgeDate)
+
+=== DECISION NEEDED - Purchase-V2.md §5 open question #3, still open ===
+The spec itself hasn't answered whether Reserved Customer is one customer
+per purchase or an allocation split across several (§5, "Reserved Customer
+is a single field but Allocation % implies splitting across several. One
+customer, or many?"). FE-6 built the allocation panel as a repeatable list
+(many rows, each {reservedCustomerId, allocationPct}, summing implicitly)
+because that's the only shape that makes "Allocation %" meaningful at all,
+but this was a provisional frontend guess to have something to render, not
+a resolved design - don't treat it as settled. Also: §4's master list
+names "customers" as a stub master ("Reserved Customer needs the
+dropdown"), but FE-6 modeled it as a bespoke non-masters endpoint (see
+below) rather than a core/masters/registry.ts entry, purely because there
+was no customers table to point a masters entry at yet. Decide: (a) is
+purchase_allocations really a one-to-many child table, and (b) does
+"customers" become a real (if minimal) master, or does Reserved Customer
+stay a placeholder until Sales exists. Tell me before building either the
+table or the options endpoint.
+
+=== OPTIONS ENDPOINTS STILL MISSING ===
+3. Prompt 15 added GET /api/v1/roles/options but not the other three
+   apps/web's use-field-options.ts already routes to their own endpoint
+   (see its NON_MASTER_OPTIONS_ENDPOINTS map): GET /api/v1/users/options
+   and GET /api/v1/branches/options (both just {options: [{value, label}]}
+   over the existing users/branches tables - same envelope as
+   GET /masters/:master/options). Purchase header's buyerId and branchId
+   Dropdowns are unusable end to end without these.
+4. GET /api/v1/customers/options - blocked on the decision above. If
+   "customers" becomes a real master, this is just
+   GET /masters/customers/options and apps/web's optionsSource for
+   reservedCustomerId changes from the bare string "customers" to
+   "masters:customers" (a one-line fixture change on our side, tell me
+   which way you went so we make it).
+5. Prompt 13 already covers supplier availability in purchase
+   transactions (FR-006) - confirm GET /api/v1/suppliers/options exists
+   with the same {options: [{value, label}]} envelope; apps/web's
+   supplierOptions endpoint call assumes it does.
+
+=== PURCHASE LIST FILTERS ===
+6. GET /api/v1/purchases (prompt 14's list endpoint) needs four more
+   query params beyond whatever it already supports: ?status=,
+   ?supplierId=, ?branchId=, ?purchaseDateFrom=, ?purchaseDateTo= (date,
+   inclusive range on purchase_date). apps/web's PurchaseListScreen
+   filters on all of these today against MSW; none of them currently
+   exist on the real purchasesListQuerySchema. Every list endpoint is
+   paginated AND filtered server-side (CLAUDE.md rule 10) - this one
+   currently isn't, fully.
+
+=== ATTACHMENTS REST LAYER ===
+7. Prompt 13 built the storage engine (streaming upload, ClamAV,
+   checksum, presigned URLs) but pin down the exact routes apps/web is
+   already coded against - packages/contracts/src/attachments.ts is the
+   spec:
+   - POST /api/v1/attachments/:entity/:entityId/:fieldKey - multipart
+     form-data, field name "file". 201 with the full AttachmentRow
+     (id, companyId, entity, entityId, fieldKey, filename, contentType,
+     size, storageKey, checksum, scannedAt, createdAt, createdBy) on
+     success. A row only ever exists post-scan - an infected upload is
+     rejected (422, not a 201 with a "pending"/"infected" status) and
+     never inserted; there's no polling state to build.
+   - GET /api/v1/attachments/:id/download-url -> {url, expiresAt} - a
+     presigned MinIO GET, not a redirect (apps/web opens `url` in a new
+     tab itself).
+   - GET /api/v1/attachments?entity=&entityId= -> PaginatedRows<
+     AttachmentRow> - used to hydrate a purchase's existing attachments
+     when the edit screen first loads (today apps/web only shows what
+     was uploaded THIS session, since nothing re-fetches on mount -
+     confirm the endpoint exists so we can wire that read path in a
+     follow-up FE prompt).
+8. Permission keys already assumed by apps/web's mock catalogue:
+   storage.attachment.create, storage.attachment.read - confirm these
+   gate the two endpoints above (upload / download-url+list
+   respectively), matching permissionEntry()'s module.entity.action
+   convention.
+
+Tests: field-definitions round-trip for both new suppliers/supplier and
+all five new purchase entities (field keys, order, mandatory flags match
+the mocks above exactly); purchases list filters correctly by each of the
+four new params individually and combined; an infected upload is rejected
+before any attachments row exists and the real file content (not just
+filename) is what ClamAV scanned; a clean upload's presigned download URL
+actually resolves to the uploaded bytes; users/branches/suppliers options
+endpoints each return only active rows scoped to company_id.
+
+Acceptance:
+- Every field-definitions response matches apps/web's mock field-for-
+  field - swap apps/web's VITE_USE_MOCKS flag off and FE-6's Supplier and
+  Purchase screens render identically, unmodified
+- `grep -rn "customerId\|customer_id" apps/api/src/database` returns
+  nothing until the open question above is answered - don't let a table
+  get ahead of the decision
+```
+
+---
+
 ## After each prompt
 
 ```bash
@@ -455,5 +766,9 @@ git add -A && git commit -m "feat(scope): ..."
 | 8 | It will suggest a Postgres SEQUENCE. **Refuse.** Gapless is a legal requirement |
 | 11 | It will want to build Tier 3 "while it's in there". Refuse |
 | 14 | It will want floats "just for the intermediate calc". Refuse |
+| 15 | It will want to design the API shape fresh instead of reading apps/web's existing contracts/mocks first. Point it at packages/contracts and apps/web/src/mocks/admin-handlers.ts before it writes a single route |
+| 15 | It will skip the country_code/currency_code vs country_id/currency_id decision and just pick one. Make it stop and ask |
+| 16 | It will invent an answer to the Reserved Customer one-vs-many question (§5 #3) instead of stopping. The spec doesn't answer it - neither should Claude Code |
+| 16 | It will build a "scanning"/"pending" status for uploads because that's the common pattern elsewhere. Refuse - the scan is synchronous, a row only exists once it's clean |
 
 Everything on that list is in `CLAUDE.md`. If it drifts, the fix is to point at the rule — not to argue.

@@ -12,6 +12,7 @@ import { compileValidator } from "./compile-validator";
 import { buildDefaultValues } from "./default-values";
 import { FieldRenderer } from "./FieldRenderer";
 import type { SchemaFormMode } from "./types";
+import type { UploadContext } from "./field-types/types";
 import { resolveFieldSections } from "../field-definitions/resolve-sections";
 
 export type { SchemaFormMode } from "./types";
@@ -22,6 +23,8 @@ export interface SchemaFormProps {
   mode: SchemaFormMode;
   initialValues?: Record<string, unknown>;
   onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
+  /** FileUpload/MultiUpload fields need a real entity/entityId to attach to - absent (e.g. create mode, before the record has an id) they fall back to local-only tracking. */
+  uploadContext?: UploadContext;
 }
 
 /**
@@ -32,7 +35,14 @@ export interface SchemaFormProps {
  * decides what to show; the backend already intersected definitions with
  * the caller's field permissions (frontend rule 4).
  */
-export function SchemaForm({ module, entity, mode, initialValues, onSubmit }: SchemaFormProps): ReactElement {
+export function SchemaForm({
+  module,
+  entity,
+  mode,
+  initialValues,
+  onSubmit,
+  uploadContext,
+}: SchemaFormProps): ReactElement {
   const schemaQuery = useQuery({
     queryKey: ["field-definitions", module, entity],
     queryFn: () =>
@@ -48,7 +58,13 @@ export function SchemaForm({ module, entity, mode, initialValues, onSubmit }: Sc
   }
 
   return (
-    <SchemaFormBody schema={schemaQuery.data} mode={mode} initialValues={initialValues} onSubmit={onSubmit} />
+    <SchemaFormBody
+      schema={schemaQuery.data}
+      mode={mode}
+      initialValues={initialValues}
+      onSubmit={onSubmit}
+      uploadContext={uploadContext}
+    />
   );
 }
 
@@ -57,11 +73,13 @@ function SchemaFormBody({
   mode,
   initialValues,
   onSubmit,
+  uploadContext,
 }: {
   schema: FieldDefinitionsResponse;
   mode: SchemaFormMode;
   initialValues: Record<string, unknown> | undefined;
   onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
+  uploadContext: UploadContext | undefined;
 }): ReactElement {
   const validator = useMemo(() => compileValidator(schema), [schema]);
   const defaultValues = useMemo(
@@ -102,7 +120,7 @@ function SchemaFormBody({
         {sections.map((section) => (
           <Card key={section.key} title={section.label || undefined} size="small">
             {section.fields.map((field) => (
-              <FieldRenderer key={field.fieldKey} field={field} control={control} mode={mode} />
+              <FieldRenderer key={field.fieldKey} field={field} control={control} mode={mode} uploadContext={uploadContext} />
             ))}
           </Card>
         ))}

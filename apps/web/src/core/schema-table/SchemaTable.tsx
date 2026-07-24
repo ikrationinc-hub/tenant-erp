@@ -84,7 +84,10 @@ export function SchemaTable({
   actions = [],
   pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
 }: SchemaTableProps): ReactElement {
-  const filterKeys = useMemo(() => filters.map((filter) => filter.key), [filters]);
+  const filterKeys = useMemo(
+    () => filters.flatMap((filter) => (filter.type === "dateRange" ? [`${filter.key}From`, `${filter.key}To`] : [filter.key])),
+    [filters],
+  );
   const { state, setPage, setPageSize, setSort, setSearch, setFilter } = useEntityListState(filterKeys);
 
   const schemaQuery = useQuery({

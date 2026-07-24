@@ -3,6 +3,7 @@ import {
   fieldDefinitionsResponseSchema,
   paginatedRowsResponseSchema,
   type FieldDefinitionsResponse,
+  type MasterOption,
 } from "@hyperion/contracts";
 import { MASTER_REGISTRY } from "../modules/masters/master-registry";
 
@@ -33,6 +34,12 @@ const rowsByUrlSegment = new Map<string, MockMasterRow[]>(
 );
 
 let nextMockId = 1000;
+
+/** Options derived from the SAME seeded rows the masters list/CRUD handlers use - consulted by handlers.ts's generic /masters/:master/options handler for any master that doesn't need hand-authored, cross-referenced demo data (Country/City's cascading pair does, and stays hand-typed there). */
+export function resolveMasterRowOptions(urlSegment: string): MasterOption[] | undefined {
+  const rows = rowsByUrlSegment.get(urlSegment);
+  return rows?.map((row) => ({ value: row.id, label: row.name }));
+}
 
 /**
  * Mirrors core/masters/factory.ts's buildFieldDefaults: every master gets

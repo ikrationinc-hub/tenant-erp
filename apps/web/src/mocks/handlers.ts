@@ -30,8 +30,11 @@ import {
   type DevEntityRow,
 } from "../core/schema-table/dev-fixture";
 import { MASTER_REGISTRY } from "../modules/masters/master-registry";
-import { mastersHandlers, resolveMasterFieldDefinitions } from "./masters-handlers";
+import { mastersHandlers, resolveMasterFieldDefinitions, resolveMasterRowOptions } from "./masters-handlers";
 import { adminHandlers, resolveAdminFieldDefinitions } from "./admin-handlers";
+import { suppliersHandlers, resolveSupplierFieldDefinitions } from "./suppliers-handlers";
+import { purchaseHandlers, resolvePurchaseFieldDefinitions } from "./purchase-handlers";
+import { attachmentsHandlers } from "./attachments-handlers";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
@@ -134,13 +137,14 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
     { id: "m-branches", key: "branches", label: "Branches", path: "/branches", icon: "database", sortOrder: 3, children: [] },
     { id: "m-users", key: "users", label: "Users", path: "/users", icon: "users", sortOrder: 4, children: [] },
     { id: "m-roles", key: "roles", label: "Roles", path: "/roles", icon: "shield", sortOrder: 5, children: [] },
+    { id: "m-suppliers", key: "suppliers", label: "Suppliers", path: "/suppliers", icon: "shop", sortOrder: 6, children: [] },
     {
       id: "m-masters",
       key: "masters",
       label: "Masters",
       path: null,
       icon: "database",
-      sortOrder: 6,
+      sortOrder: 7,
       // Generated from the same registry MasterScreen resolves against
       // (modules/masters/master-registry.tsx) - the real backend seeds one
       // menu row per master the same way (core/provisioning/
@@ -162,7 +166,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Purchase",
       path: null,
       icon: "shopping-cart",
-      sortOrder: 7,
+      sortOrder: 8,
       children: [
         {
           id: "m-purchase-orders",
@@ -194,7 +198,15 @@ const mockPermissions: MyPermissionsResponse = myPermissionsResponseSchema.parse
     "admin.role.create",
     "admin.role.update",
     "purchase.po.read",
+    "purchase.po.create",
+    "purchase.po.update",
     "purchase.po.approve",
+    "purchase.po.post",
+    "suppliers.supplier.read",
+    "suppliers.supplier.create",
+    "suppliers.supplier.update",
+    "storage.attachment.create",
+    "storage.attachment.read",
     // Full CRUD on every master - matches core/masters/factory.ts's
     // permissionEntry("masters", entity, "create"|"read"|"update", ...).
     ...MASTER_REGISTRY.flatMap((master) => [
@@ -266,6 +278,14 @@ export const handlers = [
     if (adminFields) {
       return HttpResponse.json(adminFields);
     }
+    const supplierFields = resolveSupplierFieldDefinitions(module, entity);
+    if (supplierFields) {
+      return HttpResponse.json(supplierFields);
+    }
+    const purchaseFields = resolvePurchaseFieldDefinitions(module, entity);
+    if (purchaseFields) {
+      return HttpResponse.json(purchaseFields);
+    }
     return HttpResponse.json(mockFieldDefinitions);
   }),
   http.get(`${API_BASE}${endpoints.menus}`, () => HttpResponse.json(mockMenuTree)),
@@ -303,7 +323,7 @@ export const handlers = [
   }),
   http.get(`${API_BASE}${endpoints.masterOptions(":master")}`, ({ params, request }) => {
     const master = typeof params.master === "string" ? params.master : "";
-    const all = MASTER_OPTIONS[master] ?? [];
+    const all = MASTER_OPTIONS[master] ?? resolveMasterRowOptions(master) ?? [];
     const url = new URL(request.url);
     const parentValue = url.searchParams.get("parentValue");
     const search = url.searchParams.get("search")?.toLowerCase();
@@ -320,4 +340,7 @@ export const handlers = [
   }),
   ...mastersHandlers,
   ...adminHandlers,
+  ...suppliersHandlers,
+  ...purchaseHandlers,
+  ...attachmentsHandlers,
 ];

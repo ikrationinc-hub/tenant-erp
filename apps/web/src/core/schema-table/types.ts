@@ -20,7 +20,8 @@ export interface SchemaTableFilterOption {
 export interface SchemaTableFilter {
   key: string;
   label: string;
-  type: "select" | "text" | "boolean";
+  /** "dateRange" sends two params, `${key}From`/`${key}To` (both YYYY-MM-DD) - there's no single query param for a range. */
+  type: "select" | "text" | "boolean" | "dateRange";
   options?: SchemaTableFilterOption[];
 }
 

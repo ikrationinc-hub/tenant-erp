@@ -220,7 +220,7 @@ export function resolveAdminFieldDefinitions(module: string, entity: string): Fi
 
 // --- Mock data ---------------------------------------------------------------
 
-interface MockRow extends Record<string, unknown> {
+export interface MockRow extends Record<string, unknown> {
   id: string;
 }
 
@@ -323,8 +323,15 @@ const permissionCatalogue: PermissionCatalogueEntry[] = [
   { key: "admin.branch.create", module: "admin", entity: "branch", action: "create", description: "Add a branch" },
   { key: "admin.branch.update", module: "admin", entity: "branch", action: "update", description: "Edit a branch" },
   { key: "purchase.po.read", module: "purchase", entity: "po", action: "read", description: "View purchases" },
-  { key: "purchase.po.create", module: "purchase", entity: "po", action: "create", description: "Create a purchase" },
+  { key: "purchase.po.create", module: "purchase", entity: "po", action: "create", description: "Create a purchase, add items/allocations/LME records/hedges" },
+  { key: "purchase.po.update", module: "purchase", entity: "po", action: "update", description: "Edit a draft purchase, set additional costs, close a hedge" },
   { key: "purchase.po.approve", module: "purchase", entity: "po", action: "approve", description: "Approve a purchase" },
+  { key: "purchase.po.post", module: "purchase", entity: "po", action: "post", description: "Post an approved purchase" },
+  { key: "suppliers.supplier.read", module: "suppliers", entity: "supplier", action: "read", description: "View suppliers" },
+  { key: "suppliers.supplier.create", module: "suppliers", entity: "supplier", action: "create", description: "Create a supplier" },
+  { key: "suppliers.supplier.update", module: "suppliers", entity: "supplier", action: "update", description: "Edit, activate, or deactivate a supplier" },
+  { key: "storage.attachment.create", module: "storage", entity: "attachment", action: "create", description: "Upload an attachment" },
+  { key: "storage.attachment.read", module: "storage", entity: "attachment", action: "read", description: "Download an attachment" },
 ];
 
 const rolePermissions = new Map<string, Set<string>>([
@@ -349,7 +356,7 @@ const roleOptions: MasterOption[] = roles.map((role) => ({ value: role.id, label
 
 // --- Handlers -----------------------------------------------------------------
 
-function listHandler(rows: MockRow[]) {
+export function listHandler(rows: MockRow[]) {
   return ({ request }: { request: Request }) => {
     const url = new URL(request.url);
     const page = Number(url.searchParams.get("page") ?? "1");
@@ -377,7 +384,7 @@ function listHandler(rows: MockRow[]) {
   };
 }
 
-function createHandler(rows: MockRow[], prefix: string) {
+export function createHandler(rows: MockRow[], prefix: string) {
   return async ({ request }: { request: Request }) => {
     const body = (await request.json()) as Record<string, unknown>;
     const row: MockRow = { ...body, id: `${prefix}-${rows.length + 1}` };
@@ -386,7 +393,7 @@ function createHandler(rows: MockRow[], prefix: string) {
   };
 }
 
-function updateHandler(rows: MockRow[]) {
+export function updateHandler(rows: MockRow[]) {
   return async ({ params, request }: { params: { id?: string | readonly string[] }; request: Request }) => {
     const id = typeof params.id === "string" ? params.id : "";
     const row = rows.find((candidate) => candidate.id === id);
@@ -453,6 +460,12 @@ export const adminHandlers = [
   }),
 
   http.get(`${API_BASE}${endpoints.users}`, listHandler(users)),
+  http.get(`${API_BASE}${endpoints.userOptions}`, () =>
+    HttpResponse.json(masterOptionsResponseSchema.parse({ options: users.map((user) => ({ value: user.id, label: String(user.name) })) })),
+  ),
+  http.get(`${API_BASE}${endpoints.branchOptions}`, () =>
+    HttpResponse.json(masterOptionsResponseSchema.parse({ options: branches.map((branch) => ({ value: branch.id, label: String(branch.name) })) })),
+  ),
   http.patch(`${API_BASE}${endpoints.suspendUser(":id")}`, ({ params }) => {
     const row = users.find((candidate) => candidate.id === params.id);
     if (!row) {
