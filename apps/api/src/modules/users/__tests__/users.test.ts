@@ -91,6 +91,11 @@ function asSafeUser(res: { body: unknown }) {
   return safeUserResponseSchema.parse(res.body);
 }
 
+const myPermissionsResponseSchema = z.object({ permissions: z.array(z.string()) });
+function asMyPermissions(res: { body: unknown }) {
+  return myPermissionsResponseSchema.parse(res.body);
+}
+
 const changePasswordResponseSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),
@@ -565,6 +570,33 @@ describe("user onboarding: invitations, provisioning, password-change scope", ()
           .set("Authorization", `Bearer ${admin.accessToken}`),
       );
       expect(listByOldRole.items.some((row) => row.id === userId)).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "GET /users/me/permissions returns the caller's own resolved permission set, and it's immediately fresh after a grant",
+    async () => {
+      const admin = await seedTenantWithAdmin("my-permissions-flow", ["users.user.read"]);
+
+      const beforeRes = await request(app()).get("/api/v1/users/me/permissions").set("Authorization", `Bearer ${admin.accessToken}`);
+      expect(beforeRes.status).toBe(200);
+      expect(asMyPermissions(beforeRes).permissions).toEqual(["users.user.read"]);
+
+      const role = await createRole({
+        schemaName: admin.tenant.schemaName,
+        companyId: admin.companyId,
+        name: "extra-role",
+        createdBy: admin.adminUserId,
+      });
+      await assignRoleToUser(admin.tenant.schemaName, admin.companyId, admin.adminUserId, role.id, admin.adminUserId);
+      const permissionId = await findPermissionId(admin.tenant.schemaName, "admin.company.read");
+      await grantPermissionToRole(admin.tenant.schemaName, admin.companyId, role.id, permissionId, admin.adminUserId);
+
+      // Same access token - no re-login, no TTL wait.
+      const afterRes = await request(app()).get("/api/v1/users/me/permissions").set("Authorization", `Bearer ${admin.accessToken}`);
+      expect(afterRes.status).toBe(200);
+      expect(asMyPermissions(afterRes).permissions).toEqual(expect.arrayContaining(["users.user.read", "admin.company.read"]));
     },
     TEST_TIMEOUT_MS,
   );

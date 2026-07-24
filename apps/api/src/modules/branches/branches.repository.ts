@@ -47,6 +47,15 @@ export async function listBranches(
   };
 }
 
+/** Active-only, unpaginated, sorted for display - powers a dropdown (GET /api/v1/branches/options), e.g. Purchase's own branchId field. Same convention as core/masters/repository.ts's listOptions. */
+export async function listActiveBranches(tx: TenantTx, companyId: string): Promise<BranchRow[]> {
+  return tx
+    .select()
+    .from(branches)
+    .where(and(eq(branches.status, "active"), ...scopeConditions(companyId)))
+    .orderBy(asc(branches.name));
+}
+
 export async function findBranchById(tx: TenantTx, companyId: string, id: string): Promise<BranchRow | undefined> {
   const [row] = await tx
     .select()

@@ -29,11 +29,16 @@ const paginatedResponseSchema = z.object({
   pageSize: z.number(),
 });
 
+const optionsResponseSchema = z.object({ options: z.array(z.object({ value: z.string(), label: z.string() })) });
+
 function asBranch(res: { body: unknown }) {
   return branchRowSchema.parse(res.body);
 }
 function asPaginated(res: { body: unknown }) {
   return paginatedResponseSchema.parse(res.body);
+}
+function asOptions(res: { body: unknown }) {
+  return optionsResponseSchema.parse(res.body);
 }
 
 async function findPermissionId(schemaName: string, key: string): Promise<string> {
@@ -174,6 +179,31 @@ describe("modules/branches - tenant-admin API surface", () => {
       expect(updated.name).toBe("HQ Renamed");
       expect(updated.status).toBe("inactive");
       expect(updated.code).toBe("HQ-1");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "GET /branches/options returns only active branches for the caller's own company, and drops one once deactivated",
+    async () => {
+      const tenant = await seedTenant("options");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+
+      const created = asBranch(
+        await request(app).post("/api/v1/branches").set("Authorization", authHeader).send({ name: "Options Branch", code: "OPT-1" }),
+      );
+
+      const before = asOptions(await request(app).get("/api/v1/branches/options").set("Authorization", authHeader));
+      expect(before.options.some((o) => o.value === created.id && o.label === "Options Branch")).toBe(true);
+
+      await request(app)
+        .patch(`/api/v1/branches/${created.id}`)
+        .set("Authorization", authHeader)
+        .send({ status: "inactive" });
+
+      const after = asOptions(await request(app).get("/api/v1/branches/options").set("Authorization", authHeader));
+      expect(after.options.some((o) => o.value === created.id)).toBe(false);
     },
     TEST_TIMEOUT_MS,
   );

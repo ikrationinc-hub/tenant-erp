@@ -89,3 +89,19 @@ usersRouter.put(
  * tenant would toggle off. Works for a normal "full"-scoped session too.
  */
 usersRouter.post("/me/password", scopeResolverMiddleware, usersController.changePassword);
+
+/**
+ * FE-4's row-action gating: the requesting user's own resolved permission
+ * set, for UX only (frontend rule 4 - the backend remains the actual gate
+ * on every write, same as every requirePermission call elsewhere). Gated
+ * like GET /auth/me (enforcePasswordChangeScope, not exempt) - unlike
+ * /me/password this isn't the one endpoint a password-change-scoped token
+ * needs to reach.
+ */
+usersRouter.get(
+  "/me/permissions",
+  scopeResolverMiddleware,
+  requireUsersModule,
+  enforcePasswordChangeScope,
+  usersController.myPermissions,
+);

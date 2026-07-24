@@ -129,6 +129,16 @@ export async function list(req: Request, res: Response, next: NextFunction): Pro
   }
 }
 
+export async function myPermissions(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const permissions = await usersService.myPermissions(ctx);
+    res.status(200).json({ permissions });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function suspend(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const ctx = requireContext();

@@ -30,6 +30,16 @@ export async function list(req: Request, res: Response, next: NextFunction): Pro
   }
 }
 
+export async function listOptions(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const options = await branchesService.listOptions(ctx);
+    res.status(200).json({ options });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function create(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const ctx = requireContext();

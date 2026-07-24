@@ -10,6 +10,7 @@ import { getMailer } from "../../core/notification/mailer.js";
 import { buildInviteEmail } from "../../core/notification/templates/invite-email.js";
 import { assignRoleToUser, revokeRoleFromUser } from "../../core/rbac/mutations.js";
 import { findRoleIdsForUser, roleIdsExist, roleIdsHoldApprovalPermission } from "../../core/rbac/queries.js";
+import { resolve as resolvePermissions } from "../../core/rbac/resolve.js";
 import { withTenantDb, withTenantSchema, type TenantTx } from "../../database/get-db.js";
 import { issueTokenPair, type AuthTokens } from "../auth/auth.service.js";
 import type {
@@ -384,6 +385,20 @@ export async function changePassword(
 export async function listUsers(ctx: RequestContext, query: UsersListQuery): Promise<PaginatedRows<UserListRow>> {
   const scope = requireTenantScope(ctx);
   return withTenantDb(ctx, (tx) => listUsersRepo(tx, scope.companyId, query));
+}
+
+/**
+ * The requesting user's own resolved permission set (FE-4's row-action
+ * gating) - the exact same core/rbac/resolve.ts computation every
+ * protected request already runs server-side to gate itself, just handed
+ * back to the client for UX only. Frontend rule 4 still holds: this is
+ * never the actual enforcement, only what the UI uses to decide whether
+ * to render an action at all.
+ */
+export async function myPermissions(ctx: RequestContext): Promise<string[]> {
+  requireTenantScope(ctx);
+  const resolved = await resolvePermissions(ctx);
+  return [...resolved.permissions];
 }
 
 async function setStatus(

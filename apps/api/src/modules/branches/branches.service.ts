@@ -1,10 +1,17 @@
 import type { RequestContext } from "../../common/context/request-context.js";
 import { ConflictError, NotFoundError, UnauthorizedError } from "../../common/errors/index.js";
 import { insertAuditLog } from "../../core/audit/write.js";
-import type { PaginatedRows } from "../../core/masters/types.js";
+import type { MasterOption, PaginatedRows } from "../../core/masters/types.js";
 import { withTenantDb } from "../../database/get-db.js";
 import type { BranchRow, BranchesListParams } from "./branches.repository.js";
-import { findBranchByCode, findBranchById, insertBranch, listBranches, updateBranch } from "./branches.repository.js";
+import {
+  findBranchByCode,
+  findBranchById,
+  insertBranch,
+  listActiveBranches,
+  listBranches,
+  updateBranch,
+} from "./branches.repository.js";
 import type { CreateBranchInput, UpdateBranchInput } from "./branches.validator.js";
 
 function requireTenantScope(ctx: RequestContext) {
@@ -18,6 +25,12 @@ function requireTenantScope(ctx: RequestContext) {
 export async function list(ctx: RequestContext, params: BranchesListParams): Promise<PaginatedRows<BranchRow>> {
   const scope = requireTenantScope(ctx);
   return withTenantDb(ctx, (tx) => listBranches(tx, scope.companyId, params));
+}
+
+export async function listOptions(ctx: RequestContext): Promise<MasterOption[]> {
+  const scope = requireTenantScope(ctx);
+  const rows = await withTenantDb(ctx, (tx) => listActiveBranches(tx, scope.companyId));
+  return rows.map((row) => ({ value: row.id, label: row.name }));
 }
 
 /** company_id is NEVER accepted from the request body (task item 3, rule 2) - always ctx.tenantScope.companyId. */
