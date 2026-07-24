@@ -744,6 +744,128 @@ Acceptance:
 
 ---
 
+## Prompt 17 — Fix the seeded menu tree, close the last wiring gaps, seed real dev data
+
+```
+Context: apps/web is dropping VITE_USE_MOCKS as its default way of running
+(see FE-8, docs/CLAUDE-CODE-PROMPTS-FRONTEND.md) - from now on the app
+always talks to this API, in dev and in demos, not a fake one. Before
+that can work, a re-audit of everything prompt 16 asked for turned up
+good news and one real, serious bug.
+
+THE GOOD NEWS - already done, do not rebuild any of this:
+  - field-definitions for suppliers/supplier and all five purchase
+    sub-entities (header/po/item/allocation/lme_record/hedge) - all
+    present in core/field-engine/defaults.ts, field-for-field matching
+    apps/web's mocks
+  - purchasesListQuerySchema already has supplierId/branchId/
+    purchaseDateFrom/purchaseDateTo, and purchase.repository.ts actually
+    applies all of them
+  - GET /api/v1/users/options, /branches/options, /suppliers/options all
+    exist
+  - the attachments REST layer matches packages/contracts/src/
+    attachments.ts exactly
+  - "customers" became a real master (core/masters/registry.ts, entity=
+    "customer", urlSegment="customers") and purchase_allocations is a
+    real one-to-many child table - both open questions from prompt 16
+    are resolved, correctly
+
+THE BUG - core/provisioning/seed-menu-tree.ts's DEFAULT_MENU_TREE (what
+every newly provisioned tenant's navigation actually looks like) was
+written around prompt 9, before FE-5, FE-5.5, and FE-6 existed, and was
+never updated. Compare it against apps/web/src/mocks/handlers.ts's
+mockMenuTree - THAT is the accurate target shape (it's what apps/web has
+been developed and tested against this whole time), and the two have
+drifted apart badly:
+  - No "Companies" or "Branches" menu node exists AT ALL. CompanyScreen
+    and BranchScreen (FE-5.5, both fully built and working) are
+    completely unreachable through real navigation - not gated, just
+    absent.
+  - "Suppliers" is nested under Masters at /masters/suppliers, but FE-6
+    built Suppliers as its own top-level module at /suppliers (contacts/
+    banks sub-tables, activate/deactivate, FR-005 - a real screen, not a
+    generic master instantiation). apps/web's master-registry.tsx has no
+    "supplier" entry, so /masters/suppliers 404s even if someone reaches
+    it. It's currently harmless only by accident: the node's
+    requiredPermission is "masters.supplier.read", which doesn't exist in
+    the permission catalogue (suppliers is its own module, not masters -
+    manifests.ts says so explicitly) - so core/menu-engine/resolve.ts
+    silently drops the node for every user, including admins.
+  - Masters only lists "suppliers" (wrongly) and "customers" - the other
+    14 real masters (countries, cities, currencies, payment_terms, uom,
+    ports, warehouses, incoterms, items, item_grades, vessels,
+    transport_modes, lme_exchanges, hedge_platforms, supplier_types) have
+    no menu node. FE-5's "15 masters, one component" is built and works
+    - none of it is reachable by clicking around.
+  - "users.invite" is a standalone menu node at /users/invite, but FE-5.5
+    built inviting a user as a drawer inside UserManagementScreen, not a
+    separate page - apps/web/src/modules/admin/admin-registry.tsx has no
+    route for /users/invite, so this menu item 404s today.
+
+Fix DEFAULT_MENU_TREE to match mockMenuTree's shape exactly:
+  Dashboard (/dashboard) · Companies (/companies, admin.company.read) ·
+  Branches (/branches, admin.branch.read) · Users (/users,
+  users.user.read - drop the invite child node) · Roles (/roles,
+  admin.role.read) · Suppliers (/suppliers, suppliers.supplier.read,
+  icon "shop", top-level, NOT under masters) · Masters (parent, icon
+  "database") with one child per REMAINING master (everything except
+  suppliers/customers... no wait - customers stays under Masters,
+  matching apps/web/src/modules/masters/master-registry.tsx once FE-8
+  adds it there; only suppliers moves out) at /masters/<urlSegment>,
+  requiredPermission masters.<entity>.read, generated from
+  core/masters/registry.ts the same way the mock generates it from its
+  own MASTER_REGISTRY (a loop, not 16 hand-written nodes - same "don't
+  hand-duplicate" rule as prompt 12) · Purchase (parent) > Purchase
+  Orders (/purchase/orders, purchase.po.read) - this last one was
+  already correct, leave it.
+
+EXISTING TENANTS: seedDefaultMenuTree only runs at provisioning and
+isn't idempotent (its own doc comment says so). This is pre-launch - no
+real tenant exists yet - so the fix is to re-provision (or write a tiny
+one-off script that deletes and re-seeds a dev/demo tenant's menus rows)
+rather than a migration. Say which you did.
+
+=== DEMO/DEV SEED DATA ===
+Once apps/web stops falling back to MSW, a freshly provisioned tenant's
+Supplier and Purchase screens are correctly empty - which looks
+identical to "broken" from across the room. Add a small, idempotent dev-
+seed script (not the full FE-7 demo script, which is a later week-15
+task with realistic metals data, multiple roles, etc. - just enough to
+smoke-test with): 3-4 suppliers, and 3-4 purchases spanning all three
+statuses (at least one draft, one approved, one posted with items/costs/
+an LME record/a hedge so every panel in PurchaseDetailScreen has
+something to render). Gate it behind an explicit script
+(`pnpm seed:dev`), never run automatically on boot or during normal
+provisioning.
+
+=== REGRESSION GUARD ===
+Add a test that walks DEFAULT_MENU_TREE and asserts every leaf `path`
+matches something apps/web actually resolves - the cheapest version of
+this is a shared fixture: export the flat list of paths
+apps/web's route resolvers handle (masters via MASTER_REGISTRY,
+admin-registry.tsx's ADMIN_SCREENS keys, supplier-registry.tsx,
+purchase-registry.tsx) and diff it against the seeded tree's paths in a
+backend test. This is exactly the drift that just happened - catch it
+next time instead of finding it by clicking around.
+
+Tests: seeded menu tree resolves correctly for a fresh tenant (every
+node's requiredPermission is a real permission key - assert against the
+actual catalogue, not by inspection); Companies/Branches/Suppliers/every
+master/Purchase Orders each have a working node; the dev-seed script is
+idempotent (running it twice doesn't duplicate rows) and produces at
+least one purchase in each of draft/approved/posted.
+
+Acceptance:
+- A freshly provisioned tenant's GET /menus response, flattened, has a
+  path for every screen listed above - no exceptions
+- `grep -n "masters.supplier" apps/api/src` returns nothing (the stale
+  permission key is gone, not just unreachable)
+- `pnpm seed:dev` on a clean provisioned tenant leaves Suppliers and
+  Purchase Orders non-empty
+```
+
+---
+
 ## After each prompt
 
 ```bash
@@ -770,5 +892,8 @@ git add -A && git commit -m "feat(scope): ..."
 | 15 | It will skip the country_code/currency_code vs country_id/currency_id decision and just pick one. Make it stop and ask |
 | 16 | It will invent an answer to the Reserved Customer one-vs-many question (§5 #3) instead of stopping. The spec doesn't answer it - neither should Claude Code |
 | 16 | It will build a "scanning"/"pending" status for uploads because that's the common pattern elsewhere. Refuse - the scan is synchronous, a row only exists once it's clean |
+| 17 | It will want to hand-write 16 masters menu nodes instead of generating them from core/masters/registry.ts. Refuse, same as prompt 12 |
+| 17 | It will want to write a migration/backfill script for the menu-tree fix. Unnecessary pre-launch - re-provision the dev tenant instead |
+| 17 | It will want to make the dev-seed script run automatically on boot or provisioning "for convenience." Refuse - it's an explicit, separate command |
 
 Everything on that list is in `CLAUDE.md`. If it drifts, the fix is to point at the rule — not to argue.

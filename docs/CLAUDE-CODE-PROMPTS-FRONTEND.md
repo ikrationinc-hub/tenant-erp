@@ -243,6 +243,127 @@ Acceptance:
 
 ---
 
+## FE-8 — Kill dev-mode mocking, wire everything to the real backend
+
+```
+Run this AFTER backend prompt 17 (docs/CLAUDE-CODE-PROMPTS.md) has
+landed - it fixes the seeded menu tree, and this prompt's smoke-test
+step is worthless against the old, broken one.
+
+apps/web has two genuinely different uses of MSW. Only one of them is
+in scope here:
+  - apps/web/src/mocks/browser.ts + the VITE_USE_MOCKS flag - a fake
+    backend the whole app runs against in the browser. This is what
+    goes away. The backend is real and complete now (see prompt 17's
+    audit) - there is no remaining reason to develop or demo against a
+    fake one.
+  - apps/web/src/mocks/server.ts, used only inside *.test.tsx via
+    setup.ts - MSW as a controlled test double for Vitest component
+    tests. This is standard practice and is how every test since FE-1
+    is built (server.use() to script a scenario, e.g. FE-6's FR-005
+    duplicate-name test). It stays exactly as-is - do NOT delete
+    apps/web/src/mocks/*-handlers.ts or touch any *.test.tsx file's use
+    of `server`. Conflating these two is the single easiest way to turn
+    this prompt into an accidental test-suite rewrite - don't.
+
+=== STOP DEFAULTING TO MOCKS ===
+1. apps/web/.env and apps/admin/.env already have VITE_USE_MOCKS=false -
+   confirm that's actually true and nothing overrides it. Change
+   apps/web/.env.example and apps/admin/.env.example's VITE_USE_MOCKS
+   default from true to false too - a fresh clone should default to
+   "point me at a real API," not the other way around. Leave
+   apps/*/.env.test alone (VITE_USE_MOCKS=true there is correct - that's
+   the sanctioned test-only usage).
+2. Update this repo's README/dev-setup docs (wherever "pnpm dev" is
+   documented) to say a real apps/api + Postgres + Redis + MinIO stack
+   must be running - mock mode is no longer the documented way to work
+   on apps/web.
+
+=== FIX: the "customers" master ===
+3. Add { entity: "customer", urlSegment: "customers", label: "Customers" }
+   to apps/web/src/modules/masters/master-registry.tsx's MASTER_REGISTRY
+   - the real backend's field-definitions for purchase/allocation's
+   reservedCustomerId now sends optionsSource "masters:customers" (prompt
+   16's open question resolved this way), and the real seeded menu tree
+   (once prompt 17 lands) has a /masters/customers node. Without this
+   entry, both 404 against the real backend even though nothing else
+   needs to change - optionsSourceSchema and resolveOptionsEndpoint
+   already handle "masters:customers" generically.
+4. Once that's confirmed working end to end, delete the now-dead bespoke
+   path: endpoints.customerOptions, the customers row in use-field-
+   options.ts's NON_MASTER_OPTIONS_ENDPOINTS, and CUSTOMER_OPTIONS /
+   the /customers/options handler in apps/web/src/mocks/purchase-
+   handlers.ts (that mock only existed because the real master didn't).
+   Don't delete it speculatively before step 3 is verified working - if
+   it turns out the real backend's optionsSource for reservedCustomerId
+   is somehow still the bare string "customers", stop and say so rather
+   than silently keeping both paths alive.
+
+=== FIX: attachments don't hydrate on reopening a purchase ===
+5. PurchaseDetailScreen's FileUpload/MultiUpload fields only show what
+   was uploaded THIS session (rhf's in-memory value) - reopening an
+   existing purchase in edit mode shows "No file" even for attachments
+   uploaded earlier. Wire a GET /attachments?entity=purchase&entityId=
+   <id> fetch when mode=edit and hydrate each attachment field's initial
+   value from the matching fieldKey in the response (packages/contracts/
+   src/attachments.ts's listAttachmentsResponseSchema already covers
+   this envelope - it was speculatively built in FE-6 for exactly this).
+
+=== FULL SMOKE TEST AGAINST THE REAL STACK ===
+6. With a real apps/api + Postgres + Redis + MinIO + ClamAV running and
+   a freshly (re-)provisioned dev tenant (prompt 17's seed script), walk
+   every screen built so far and fix whatever's broken. This is the
+   actual point of this prompt - the two fixes above are the gaps
+   already known about; there will be more, found by actually clicking
+   through, not by reading code:
+   - Login, refresh-on-401, company/branch switch (FE-2)
+   - Every field type in a real form, not just the /_dev/schema-form
+     fixture (FE-3)
+   - Every one of the 16 masters, reachable from the real menu, CRUD +
+     activate/deactivate + cascading city→country (FE-5)
+   - Companies, Branches, Users (invite/provision/suspend/reactivate/
+     set-roles), Roles + permission Transfer + field-permission matrix,
+     and the field-permission demo (revoke can_view on a field for a
+     role, confirm it's actually gone from that role's next GET) (FE-5.5)
+   - Suppliers: create/edit, contacts/banks sub-tables, activate/
+     deactivate, FR-005 duplicate-name rejection with the REAL server
+     error message (not the mock's) (FE-6)
+   - Purchase: full create → items → allocations → costs (Tier-2 label
+     rename with a real PATCH, not a queryClient.setQueryData test
+     trick) → LME records → hedges → Approve → Post → read-only, with
+     real attachment uploads (real ClamAV - try one genuinely infected
+     test file, e.g. the EICAR test string, and confirm it's actually
+     rejected, not just the mock's filename-substring trick) (FE-6)
+   Every mismatch you find (a field-definitions field the real API
+   doesn't accept, a status code apps/web doesn't handle, a permission
+   key typo, a response shape that doesn't parse) - fix it. If a fix
+   needs a backend change, list it explicitly rather than working around
+   it client-side; small ones are fine to note in the commit, anything
+   nontrivial gets its own paragraph for me to hand to the backend
+   session.
+
+Tests: the two fixes above each get a real Vitest test using MSW as the
+test double (same as every other test in this suite - see the note
+above, this is not a contradiction); everything else in this step is
+manual verification against the live stack, not new automated tests -
+FE-7 (already documented below) is where the two architectural proofs
+become permanent Playwright tests.
+
+Acceptance:
+- `pnpm dev` (apps/web and apps/admin) with VITE_USE_MOCKS unset or
+  false, against a real running backend, works for every screen listed
+  above - clicking through end to end, no fake data anywhere
+- Every item in GET /menus's flattened tree navigates to a real,
+  working screen - zero 404s from clicking the sidebar
+- `grep -rn "VITE_USE_MOCKS=true" apps/web/.env.example apps/admin/.env.example`
+  returns nothing
+- apps/web/src/mocks/*.ts still exist, unchanged in shape, and every
+  existing *.test.tsx still passes - this prompt did not touch the test
+  suite
+```
+
+---
+
 ## Where it will fight you
 
 | Prompt | Likely friction |
@@ -253,6 +374,8 @@ Acceptance:
 | FE-3 | It will build a form-*builder* (drag-drop, field designer). Out of scope. 13 dumb components |
 | FE-4 | It will fetch-all and filter client-side. Backend rule 10. Refuse |
 | FE-6 | It will compute Purchase Amount in React "for responsiveness". Rule 3. The server computes |
+| FE-8 | It will treat "remove mocks" as "delete apps/web/src/mocks/ and rewrite every test." It doesn't touch the test suite - only the dev-mode VITE_USE_MOCKS path goes away |
+| FE-8 | It will silently work around a real backend mismatch client-side instead of naming it as a backend gap. Refuse - list it, don't paper over it |
 
 All of it is in `CLAUDE.md`. When it drifts, point at the rule — don't argue.
 
