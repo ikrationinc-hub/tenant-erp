@@ -61,8 +61,6 @@ async function seedTenantWithAdmin(label: string, permissionKeys: string[]): Pro
       .insert(companies)
       .values({
         name: `${label} Co`,
-        countryCode: "US",
-        currencyCode: "USD",
         fiscalYearStartMonth: 1,
         timezone: "America/New_York",
         createdBy: randomUUID(),

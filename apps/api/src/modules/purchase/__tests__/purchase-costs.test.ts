@@ -81,7 +81,7 @@ async function seedTenant(label: string, extraPermissionKeys: string[] = []): Pr
   const { companyId, userId, purchaseRefs } = await withTenantSchema(tenant.schemaName, async (tx) => {
     const [company] = await tx
       .insert(companies)
-      .values({ name: `${label} Co`, countryCode: "US", currencyCode: "USD", fiscalYearStartMonth: 1, timezone: "America/New_York", createdBy: randomUUID() })
+      .values({ name: `${label} Co`, fiscalYearStartMonth: 1, timezone: "America/New_York", createdBy: randomUUID() })
       .returning();
     if (!company) {
       throw new Error("failed to insert company");

@@ -23,8 +23,6 @@ async function seedCompany(label: string, fiscalYearStartMonth = 1): Promise<See
       .insert(companies)
       .values({
         name: `${label} Co`,
-        countryCode: "US",
-        currencyCode: "USD",
         fiscalYearStartMonth,
         timezone: "America/New_York",
         createdBy: randomUUID(),

@@ -1,14 +1,30 @@
 import type { NextFunction, Request, Response } from "express";
 import { getRequestContext } from "../../common/context/request-context.js";
 import { UnauthorizedError } from "../../common/errors/index.js";
+import type { UserRow } from "./users.repository.js";
 import * as usersService from "./users.service.js";
 import {
   acceptInvitationSchema,
   changePasswordSchema,
   inviteUserSchema,
   provisionUserSchema,
+  setUserRolesSchema,
+  usersListQuerySchema,
   validateInvitationQuerySchema,
 } from "./users.validator.js";
+
+/** Never serialize a raw UserRow - it carries passwordHash. Every response below is this shape, not the repository row directly. */
+function toSafeUser(row: UserRow) {
+  return {
+    id: row.id,
+    companyId: row.companyId,
+    email: row.email,
+    mobile: row.mobile,
+    name: row.name,
+    status: row.status,
+    lastLoginAt: row.lastLoginAt,
+  };
+}
 
 function requireContext() {
   const ctx = getRequestContext();
@@ -97,6 +113,51 @@ export async function acceptInvitation(req: Request, res: Response, next: NextFu
     const token = requireStringParam(req.params.token, "invitation token");
     await usersService.acceptInvitation(req.hostname, input.tenantCode, token, input);
     res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function list(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const query = usersListQuerySchema.parse(req.query);
+    const result = await usersService.listUsers(ctx, query);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function suspend(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const id = requireStringParam(req.params.id, "id");
+    const row = await usersService.suspendUser(ctx, id);
+    res.status(200).json(toSafeUser(row));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function reactivate(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const id = requireStringParam(req.params.id, "id");
+    const row = await usersService.reactivateUser(ctx, id);
+    res.status(200).json(toSafeUser(row));
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function setRoles(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const id = requireStringParam(req.params.id, "id");
+    const input = setUserRolesSchema.parse(req.body);
+    const row = await usersService.setUserRoles(ctx, id, input);
+    res.status(200).json({ ...toSafeUser(row), roleIds: input.roleIds });
   } catch (error) {
     next(error);
   }

@@ -12,8 +12,9 @@ import { seedDefaultNumberSeries } from "./seed-number-series.js";
 export interface ProvisionCompanyInput {
   tenantSlug: string;
   name: string;
-  countryCode: string;
-  currencyCode: string;
+  /** Optional: unlike provision-tenant.ts's default company, this path never seeds countries/currencies for the new company (see this function's own doc comment) - a caller can only supply an id if it already knows of one, e.g. a country/currency shared across the tenant's other companies. */
+  countryId?: string;
+  currencyId?: string;
   fiscalYearStartMonth: number;
   timezone: string;
   adminUserId: string;
@@ -45,8 +46,8 @@ export async function provisionCompany(input: ProvisionCompanyInput): Promise<Pr
       .insert(companies)
       .values({
         name: input.name,
-        countryCode: input.countryCode,
-        currencyCode: input.currencyCode,
+        ...(input.countryId !== undefined ? { countryId: input.countryId } : {}),
+        ...(input.currencyId !== undefined ? { currencyId: input.currencyId } : {}),
         fiscalYearStartMonth: input.fiscalYearStartMonth,
         timezone: input.timezone,
         createdBy: input.adminUserId,

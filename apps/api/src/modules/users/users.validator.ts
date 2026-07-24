@@ -52,3 +52,21 @@ export const changePasswordSchema = z
   })
   .strict();
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+/** Matches mastersListQuerySchema's page/pageSize/search conventions (task item 5), plus the two admin-list-specific filters. */
+export const usersListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(20),
+  search: z.string().min(1).optional(),
+  status: z.enum(["invited", "active", "suspended"]).optional(),
+  roleId: z.string().uuid().optional(),
+});
+export type UsersListQuery = z.infer<typeof usersListQuerySchema>;
+
+/** Mirrors packages/contracts/src/users-admin.ts's setUserRolesRequestSchema - the full desired set, diffed server-side (task item 7). */
+export const setUserRolesSchema = z
+  .object({
+    roleIds: z.array(z.string().uuid()),
+  })
+  .strict();
+export type SetUserRolesInput = z.infer<typeof setUserRolesSchema>;

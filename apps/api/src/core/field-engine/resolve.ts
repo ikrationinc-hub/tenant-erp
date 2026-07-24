@@ -79,6 +79,7 @@ export async function resolveBaseFieldDefinitions(
         isEditable: fallback.isEditable,
         defaultValue: fallback.defaultValue,
         optionsSource: fallback.optionsSource,
+        multiple: fallback.multiple,
         validationJson: fallback.validationJson,
         sortOrder: fallback.sortOrder,
         isSystem: fallback.isSystem,

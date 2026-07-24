@@ -56,6 +56,41 @@ const loginResponseSchema = z.object({
 
 const provisionResponseSchema = z.object({ userId: z.string() });
 
+const userListRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string().nullable(),
+  mobile: z.string().nullable(),
+  status: z.enum(["invited", "active", "suspended"]),
+  lastLoginAt: z.string().nullable(),
+  roleIds: z.array(z.string()),
+  invitationId: z.string().nullable(),
+  invitationExpiresAt: z.string().nullable(),
+});
+const paginatedUsersResponseSchema = z.object({
+  items: z.array(userListRowSchema),
+  total: z.number(),
+  page: z.number(),
+  pageSize: z.number(),
+});
+
+const safeUserResponseSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  email: z.string().nullable(),
+  mobile: z.string().nullable(),
+  name: z.string(),
+  status: z.enum(["invited", "active", "suspended"]),
+  lastLoginAt: z.string().nullable(),
+});
+
+function asPaginatedUsers(res: { body: unknown }) {
+  return paginatedUsersResponseSchema.parse(res.body);
+}
+function asSafeUser(res: { body: unknown }) {
+  return safeUserResponseSchema.parse(res.body);
+}
+
 const changePasswordResponseSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),
@@ -135,8 +170,6 @@ async function seedTenantWithAdmin(label: string, permissionKeys: string[]): Pro
       .insert(companies)
       .values({
         name: `${label} Co`,
-        countryCode: "US",
-        currencyCode: "USD",
         fiscalYearStartMonth: 1,
         timezone: "America/New_York",
         createdBy: randomUUID(),
@@ -422,6 +455,116 @@ describe("user onboarding: invitations, provisioning, password-change scope", ()
         .send({ identifier: mobile, password: OTHER_GOOD_PASSWORD, tenantCode: admin.tenant.slug });
       expect(secondLoginRes.status).toBe(200);
       expect(asLogin(secondLoginRes).mustChangePassword).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "GET /users lists users filtered by status and roleId, never leaking passwordHash",
+    async () => {
+      const admin = await seedTenantWithAdmin("list-flow", ["users.user.read", "users.user.provision"]);
+
+      const targetRole = await createRole({
+        schemaName: admin.tenant.schemaName,
+        companyId: admin.companyId,
+        name: "Target Role",
+        createdBy: admin.adminUserId,
+      });
+      const otherRole = await createRole({
+        schemaName: admin.tenant.schemaName,
+        companyId: admin.companyId,
+        name: "Other Role",
+        createdBy: admin.adminUserId,
+      });
+
+      const provisionOne = await request(app())
+        .post("/api/v1/users/provision")
+        .set("Authorization", `Bearer ${admin.accessToken}`)
+        .send({ name: "Targeted User", mobile: `+1${randomUUID().slice(0, 8)}`, tempPassword: GOOD_PASSWORD, roles: [targetRole.id] });
+      expect(provisionOne.status).toBe(201);
+
+      const provisionTwo = await request(app())
+        .post("/api/v1/users/provision")
+        .set("Authorization", `Bearer ${admin.accessToken}`)
+        .send({ name: "Other User", mobile: `+1${randomUUID().slice(0, 8)}`, tempPassword: GOOD_PASSWORD, roles: [otherRole.id] });
+      expect(provisionTwo.status).toBe(201);
+
+      const listRes = await request(app()).get("/api/v1/users").set("Authorization", `Bearer ${admin.accessToken}`);
+      expect(listRes.status).toBe(200);
+      expect(JSON.stringify(listRes.body)).not.toContain("passwordHash");
+      asPaginatedUsers(listRes);
+
+      const byStatus = asPaginatedUsers(
+        await request(app())
+          .get("/api/v1/users")
+          .query({ status: "active" })
+          .set("Authorization", `Bearer ${admin.accessToken}`),
+      );
+      expect(byStatus.items.every((row) => row.status === "active")).toBe(true);
+
+      const byRole = asPaginatedUsers(
+        await request(app())
+          .get("/api/v1/users")
+          .query({ roleId: targetRole.id })
+          .set("Authorization", `Bearer ${admin.accessToken}`),
+      );
+      expect(byRole.items).toHaveLength(1);
+      expect(byRole.items[0]?.name).toBe("Targeted User");
+      expect(byRole.items[0]?.roleIds).toEqual([targetRole.id]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "suspend/reactivate flip a user's status, and PUT roles diffs grant/revoke and takes effect immediately",
+    async () => {
+      const admin = await seedTenantWithAdmin("suspend-flow", ["users.user.provision", "users.user.update", "users.user.read"]);
+
+      const roleA = await createRole({ schemaName: admin.tenant.schemaName, companyId: admin.companyId, name: "Role A", createdBy: admin.adminUserId });
+      const roleB = await createRole({ schemaName: admin.tenant.schemaName, companyId: admin.companyId, name: "Role B", createdBy: admin.adminUserId });
+
+      const provisionRes = await request(app())
+        .post("/api/v1/users/provision")
+        .set("Authorization", `Bearer ${admin.accessToken}`)
+        .send({ name: "Suspendable User", mobile: `+1${randomUUID().slice(0, 8)}`, tempPassword: GOOD_PASSWORD, roles: [roleA.id] });
+      expect(provisionRes.status).toBe(201);
+      const userId = asProvision(provisionRes).userId;
+
+      const suspendRes = await request(app())
+        .patch(`/api/v1/users/${userId}/suspend`)
+        .set("Authorization", `Bearer ${admin.accessToken}`);
+      expect(suspendRes.status).toBe(200);
+      expect(suspendRes.body).not.toHaveProperty("passwordHash");
+      expect(asSafeUser(suspendRes).status).toBe("suspended");
+
+      const reactivateRes = await request(app())
+        .patch(`/api/v1/users/${userId}/reactivate`)
+        .set("Authorization", `Bearer ${admin.accessToken}`);
+      expect(reactivateRes.status).toBe(200);
+      expect(asSafeUser(reactivateRes).status).toBe("active");
+
+      // The full desired set is [roleB] - roleA must be revoked, roleB granted.
+      const setRolesRes = await request(app())
+        .put(`/api/v1/users/${userId}/roles`)
+        .set("Authorization", `Bearer ${admin.accessToken}`)
+        .send({ roleIds: [roleB.id] });
+      expect(setRolesRes.status).toBe(200);
+
+      const listRes = asPaginatedUsers(
+        await request(app())
+          .get("/api/v1/users")
+          .query({ roleId: roleB.id })
+          .set("Authorization", `Bearer ${admin.accessToken}`),
+      );
+      expect(listRes.items.some((row) => row.id === userId)).toBe(true);
+
+      const listByOldRole = asPaginatedUsers(
+        await request(app())
+          .get("/api/v1/users")
+          .query({ roleId: roleA.id })
+          .set("Authorization", `Bearer ${admin.accessToken}`),
+      );
+      expect(listByOldRole.items.some((row) => row.id === userId)).toBe(false);
     },
     TEST_TIMEOUT_MS,
   );

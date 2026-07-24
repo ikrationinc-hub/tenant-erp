@@ -78,8 +78,6 @@ async function seedTenantWithActiveUser(label: string): Promise<SeededTenant> {
       .insert(companies)
       .values({
         name: `${label} Co`,
-        countryCode: "US",
-        currencyCode: "USD",
         fiscalYearStartMonth: 1,
         timezone: "America/New_York",
         createdBy: randomUUID(),
@@ -384,8 +382,6 @@ describe("auth: login/refresh/logout/me", () => {
           .insert(companies)
           .values({
             name: "Cross B Co",
-            countryCode: "GB",
-            currencyCode: "GBP",
             fiscalYearStartMonth: 4,
             timezone: "Europe/London",
             createdBy: randomUUID(),

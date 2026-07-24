@@ -32,8 +32,6 @@ describe("tenant isolation (get-db.ts boundary)", () => {
     await withTenantDb(ctxFor(alpha, ""), (tx) =>
       tx.insert(companies).values({
         name: "alpha-seed",
-        countryCode: "US",
-        currencyCode: "USD",
         fiscalYearStartMonth: 1,
         timezone: "America/New_York",
         createdBy: randomUUID(),
@@ -42,8 +40,6 @@ describe("tenant isolation (get-db.ts boundary)", () => {
     await withTenantDb(ctxFor(beta, ""), (tx) =>
       tx.insert(companies).values({
         name: "beta-seed",
-        countryCode: "GB",
-        currencyCode: "GBP",
         fiscalYearStartMonth: 4,
         timezone: "Europe/London",
         createdBy: randomUUID(),
@@ -65,8 +61,6 @@ describe("tenant isolation (get-db.ts boundary)", () => {
         return withTenantDb(ctxFor(tenant, ""), async (tx) => {
           await tx.insert(companies).values({
             name: `${label}-row-${index}`,
-            countryCode: "US",
-            currencyCode: "USD",
             fiscalYearStartMonth: 1,
             timezone: "America/New_York",
             createdBy: randomUUID(),
@@ -124,8 +118,6 @@ describe("tenant isolation (get-db.ts boundary)", () => {
       async (tx) => {
         await tx.insert(companies).values({
           name: marker,
-          countryCode: "US",
-          currencyCode: "USD",
           fiscalYearStartMonth: 1,
           timezone: "America/New_York",
           createdBy: randomUUID(),

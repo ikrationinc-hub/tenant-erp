@@ -45,6 +45,42 @@ usersRouter.post(
   usersController.revokeInvitation,
 );
 
+usersRouter.get(
+  "/",
+  scopeResolverMiddleware,
+  requireUsersModule,
+  enforcePasswordChangeScope,
+  requirePermission("users.user.read"),
+  usersController.list,
+);
+
+usersRouter.patch(
+  "/:id/suspend",
+  scopeResolverMiddleware,
+  requireUsersModule,
+  enforcePasswordChangeScope,
+  requirePermission("users.user.update"),
+  usersController.suspend,
+);
+
+usersRouter.patch(
+  "/:id/reactivate",
+  scopeResolverMiddleware,
+  requireUsersModule,
+  enforcePasswordChangeScope,
+  requirePermission("users.user.update"),
+  usersController.reactivate,
+);
+
+usersRouter.put(
+  "/:id/roles",
+  scopeResolverMiddleware,
+  requireUsersModule,
+  enforcePasswordChangeScope,
+  requirePermission("users.user.update"),
+  usersController.setRoles,
+);
+
 /**
  * No enforcePasswordChangeScope OR requireModuleEnabled here, deliberately:
  * this IS the one endpoint a "password_change"-scoped token is allowed to

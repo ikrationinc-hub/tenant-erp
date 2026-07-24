@@ -1,11 +1,11 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { db } from "../../config/db.js";
 import { ConflictError } from "../../common/errors/index.js";
 import { withTenantSchema } from "../../database/get-db.js";
 import { applyPendingTenantMigrations } from "../../database/migration-runner.js";
 import { tenants } from "../../database/platform/schema.js";
-import { branches, companies } from "../../database/tenant/schema.js";
+import { branches, companies, countries, currencies } from "../../database/tenant/schema.js";
 import { slugToTenantSchemaName } from "../../database/tenant/schema-name.js";
 import { insertAuditLog } from "../audit/write.js";
 import { INVITE_TOKEN_TTL_MS, generateInviteToken } from "../auth/invite-token.js";
@@ -44,11 +44,13 @@ export interface ProvisionTenantResult {
 }
 
 const DEFAULT_COMPANY_DEFAULTS = {
-  countryCode: "US",
-  currencyCode: "USD",
   fiscalYearStartMonth: 1,
   timezone: "UTC",
 } as const;
+
+/** ISO codes seedMasterData's COUNTRY_SEEDS/CURRENCY_SEEDS always include - the default company's country_id/currency_id backfill target. */
+const DEFAULT_COUNTRY_CODE = "US";
+const DEFAULT_CURRENCY_CODE = "USD";
 
 /**
  * Drops the schema and removes the platform.tenants row - task item 3:
@@ -88,6 +90,37 @@ async function createDefaultCompanyAndBranch(
     }
 
     return { companyId: company.id, branchId: branch.id };
+  });
+}
+
+/**
+ * The default company is created before countries/currencies exist for it
+ * (both are company-scoped masters, FK'd to this very company row - see
+ * schema.ts's doc comment on companies.countryId/currencyId), so it starts
+ * with both columns null. Once seedMasterData has run, the US/USD rows it
+ * always seeds (seed-data.ts's COUNTRY_SEEDS/CURRENCY_SEEDS) exist for this
+ * company - this backfills the two columns from them.
+ */
+async function backfillDefaultCountryAndCurrency(schemaName: string, companyId: string): Promise<void> {
+  await withTenantSchema(schemaName, async (tx) => {
+    const [country] = await tx
+      .select({ id: countries.id })
+      .from(countries)
+      .where(and(eq(countries.companyId, companyId), eq(countries.code, DEFAULT_COUNTRY_CODE), isNull(countries.deletedAt)))
+      .limit(1);
+    const [currency] = await tx
+      .select({ id: currencies.id })
+      .from(currencies)
+      .where(and(eq(currencies.companyId, companyId), eq(currencies.code, DEFAULT_CURRENCY_CODE), isNull(currencies.deletedAt)))
+      .limit(1);
+
+    await tx
+      .update(companies)
+      .set({
+        ...(country ? { countryId: country.id } : {}),
+        ...(currency ? { currencyId: currency.id } : {}),
+      })
+      .where(eq(companies.id, companyId));
   });
 }
 
@@ -208,6 +241,7 @@ async function provisionNewTenant(
     await seedDefaultFieldDefinitions({ schemaName, companyId, createdBy: adminUserId });
     await seedDefaultNumberSeries({ schemaName, companyId, createdBy: adminUserId });
     await seedMasterData({ schemaName, companyId, createdBy: adminUserId });
+    await backfillDefaultCountryAndCurrency(schemaName, companyId);
 
     await applyModuleEnablement(tenant.id, schemaName, input.modules);
 

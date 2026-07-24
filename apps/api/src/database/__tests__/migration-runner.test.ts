@@ -35,6 +35,8 @@ const REAL_MIGRATION_VERSIONS = [
   "0017_serious_ricochet",
   "0018_loose_mastermind",
   "0019_lucky_sleeper",
+  "0020_companies_country_currency_fk",
+  "0021_companies_drop_country_currency_code",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

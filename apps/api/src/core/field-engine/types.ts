@@ -31,6 +31,8 @@ export interface FieldDefault {
   isEditable: boolean;
   defaultValue?: string;
   optionsSource?: string;
+  /** Dropdown only - a role picker etc. renders as a multi-select and stores an array, not a single string. Mirrors packages/contracts/src/field-definitions.ts's fieldDefinitionSchema.multiple. */
+  multiple?: boolean;
   validationJson?: FieldValidationRules;
   sortOrder: number;
   isSystem: boolean;
@@ -56,6 +58,7 @@ export interface EffectiveField {
   isEditable: boolean;
   defaultValue: string | undefined;
   optionsSource: string | undefined;
+  multiple: boolean | undefined;
   validationJson: FieldValidationRules | undefined;
   sortOrder: number;
   isSystem: boolean;

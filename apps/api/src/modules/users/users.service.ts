@@ -5,10 +5,11 @@ import { hashPassword } from "../../core/auth/password.js";
 import { generateInviteToken, hashInviteToken, INVITE_TOKEN_TTL_MS } from "../../core/auth/invite-token.js";
 import { getActiveTenantById, resolveTenantForLogin } from "../../core/auth/tenant-resolver.js";
 import { insertAuditLog } from "../../core/audit/write.js";
+import type { PaginatedRows } from "../../core/masters/types.js";
 import { getMailer } from "../../core/notification/mailer.js";
 import { buildInviteEmail } from "../../core/notification/templates/invite-email.js";
-import { assignRoleToUser } from "../../core/rbac/mutations.js";
-import { roleIdsExist, roleIdsHoldApprovalPermission } from "../../core/rbac/queries.js";
+import { assignRoleToUser, revokeRoleFromUser } from "../../core/rbac/mutations.js";
+import { findRoleIdsForUser, roleIdsExist, roleIdsHoldApprovalPermission } from "../../core/rbac/queries.js";
 import { withTenantDb, withTenantSchema, type TenantTx } from "../../database/get-db.js";
 import { issueTokenPair, type AuthTokens } from "../auth/auth.service.js";
 import type {
@@ -16,6 +17,8 @@ import type {
   ChangePasswordInput,
   InviteUserInput,
   ProvisionUserInput,
+  SetUserRolesInput,
+  UsersListQuery,
 } from "./users.validator.js";
 import {
   activateInvitedUser,
@@ -25,14 +28,19 @@ import {
   findInvitationById,
   findInvitationByTokenHash,
   findUserByCompanyAndEmail,
+  findUserByIdInCompany,
   insertInvitation,
   insertInvitedUser,
   insertProvisionedUser,
+  listUsers as listUsersRepo,
   markInvitationAccepted,
   markInvitationRevoked,
   renewInvitation,
   setUserPassword,
+  setUserStatus,
   type InvitationRow,
+  type UserListRow,
+  type UserRow,
 } from "./users.repository.js";
 
 interface AuthenticatedScope {
@@ -371,4 +379,84 @@ export async function changePassword(
 
     return issueTokenPair(scope.tenantId, { id: scope.userId, companyId: scope.companyId }, tx);
   });
+}
+
+export async function listUsers(ctx: RequestContext, query: UsersListQuery): Promise<PaginatedRows<UserListRow>> {
+  const scope = requireTenantScope(ctx);
+  return withTenantDb(ctx, (tx) => listUsersRepo(tx, scope.companyId, query));
+}
+
+async function setStatus(
+  ctx: RequestContext,
+  userId: string,
+  status: "active" | "suspended",
+  action: string,
+): Promise<UserRow> {
+  const scope = requireTenantScope(ctx);
+
+  return withTenantDb(ctx, async (tx) => {
+    const existing = await findUserByIdInCompany(tx, scope.companyId, userId);
+    if (!existing) {
+      throw new NotFoundError("User not found");
+    }
+
+    const row = await setUserStatus(tx, userId, status);
+    if (!row) {
+      throw new NotFoundError("User not found");
+    }
+
+    await insertAuditLog(tx, {
+      companyId: scope.companyId,
+      changedBy: scope.userId,
+      entity: "user",
+      entityId: userId,
+      action,
+      before: { status: existing.status },
+      after: { status: row.status },
+    });
+
+    return row;
+  });
+}
+
+export async function suspendUser(ctx: RequestContext, userId: string): Promise<UserRow> {
+  return setStatus(ctx, userId, "suspended", "user.suspended");
+}
+
+export async function reactivateUser(ctx: RequestContext, userId: string): Promise<UserRow> {
+  return setStatus(ctx, userId, "active", "user.reactivated");
+}
+
+/**
+ * The wire contract is the full desired set (task item 7); the grant/
+ * revoke diff against the user's current roles is computed here, then
+ * applied via core/rbac/mutations.ts's assignRoleToUser/revokeRoleFromUser
+ * - both already bump role_version and write their own audit row, so
+ * nothing further is logged here beyond what those two already do.
+ */
+export async function setUserRoles(ctx: RequestContext, userId: string, input: SetUserRolesInput): Promise<UserRow> {
+  const scope = requireTenantScope(ctx);
+  const { companyId, tenantSchema } = scope;
+
+  const existing = await withTenantDb(ctx, (tx) => findUserByIdInCompany(tx, companyId, userId));
+  if (!existing) {
+    throw new NotFoundError("User not found");
+  }
+
+  await withTenantDb(ctx, (tx) => assertRolesExist(tx, companyId, input.roleIds));
+
+  const currentRoleIds = await withTenantDb(ctx, (tx) => findRoleIdsForUser(tx, userId));
+  const desiredRoleIds = new Set(input.roleIds);
+
+  const toGrant = input.roleIds.filter((roleId) => !currentRoleIds.has(roleId));
+  const toRevoke = [...currentRoleIds].filter((roleId) => !desiredRoleIds.has(roleId));
+
+  for (const roleId of toGrant) {
+    await assignRoleToUser(tenantSchema, companyId, userId, roleId, scope.userId);
+  }
+  for (const roleId of toRevoke) {
+    await revokeRoleFromUser(tenantSchema, companyId, userId, roleId, scope.userId);
+  }
+
+  return existing;
 }

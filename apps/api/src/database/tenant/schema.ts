@@ -47,10 +47,21 @@ export const companies = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
-    countryCode: text("country_code").notNull(),
-    currencyCode: text("currency_code").notNull(),
+    // Nullable, not `.notNull()`: countries/currencies are THEMSELVES
+    // company-scoped masters (defineMasterTable's company_id FK below), so
+    // a brand new company's own row must exist before either master can be
+    // seeded for it - core/provisioning/provision-tenant.ts creates the
+    // company first, seeds masters second, then backfills these two
+    // columns. FE-5.5's Dropdown-via-master-options fields (countryId/
+    // currencyId, optionsSource "masters:countries"/"masters:currencies")
+    // is the resolved shape - see the ADR-equivalent decision recorded in
+    // this task's own conversation: country_id/currency_id FK columns, not
+    // scalar ISO codes.
+    countryId: uuid("country_id").references((): AnyPgColumn => countries.id, { onDelete: "restrict" }),
+    currencyId: uuid("currency_id").references((): AnyPgColumn => currencies.id, { onDelete: "restrict" }),
     fiscalYearStartMonth: integer("fiscal_year_start_month").notNull(),
     timezone: text("timezone").notNull(),
+    taxRegistrationNo: text("tax_registration_no"),
     status: companyStatusEnum("status").notNull().default("active"),
     ...auditColumns(),
   },

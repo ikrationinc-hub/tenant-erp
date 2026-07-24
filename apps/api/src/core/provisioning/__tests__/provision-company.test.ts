@@ -49,8 +49,6 @@ describe("core/provisioning: provisionCompany", () => {
       const companyResult = await provisionCompany({
         tenantSlug: slug,
         name: "Second Legal Entity",
-        countryCode: "GB",
-        currencyCode: "GBP",
         fiscalYearStartMonth: 4,
         timezone: "Europe/London",
         adminUserId: tenantResult.adminUserId,

@@ -1,5 +1,6 @@
 import { attachmentsRouter } from "../../modules/attachments/attachments.routes.js";
 import { authRouter } from "../../modules/auth/auth.routes.js";
+import { companiesRouter } from "../../modules/companies/companies.routes.js";
 import { fieldDefinitionsRouter } from "../../modules/field-definitions/field-definitions.routes.js";
 import { healthRouter } from "../../modules/health/health.routes.js";
 import { menusRouter } from "../../modules/menus/menus.routes.js";
@@ -62,16 +63,33 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     key: "roles",
     name: "Roles & Permissions",
     version: "1.0.0",
-    // No HTTP surface yet - role/permission mutations are called directly
-    // from core/rbac/mutations.ts by other modules (e.g. users' invite/
-    // accept flow). This manifest exists to own the "roles" permission
-    // namespace, not to route anything.
+    // Real HTTP surface as of the tenant-admin API task: CRUD + permission
+    // grant/revoke + field-permission get/save, all REST layers over
+    // core/rbac/mutations.ts's existing engine (that file's own doc
+    // comment: it's the ONLY way role/permission/field-permission data
+    // changes - this router calls it, never reimplements it). `routes` is
+    // deliberately omitted here (unlike most manifests) - modules/roles/
+    // roles.controller.ts's permissions-catalogue handler imports this
+    // very registry.js (getPermissionCatalogue), so importing rolesRouter
+    // back into manifests.ts would close a real cycle: manifests.ts ->
+    // roles.routes.ts -> roles.controller.ts -> registry.ts ->
+    // manifests.ts. `routes` is purely informational (registry.ts's own
+    // mountModules doesn't exist - every router is mounted directly in
+    // app.ts, "users"+"invitationsRouter" is the existing precedent for a
+    // module whose full surface isn't captured by this one field), so
+    // dropping it costs nothing real. rolesRouter/permissionsRouter are
+    // still mounted in app.ts exactly like every other router.
+    // module="admin", not "roles" (this manifest's own key) - the task's
+    // explicit convention: admin.company/admin.branch/admin.role all share
+    // the "admin" permission namespace, matching apps/web's mock catalogue
+    // (apps/web/src/mocks/admin-handlers.ts) exactly. "assign"/"delete"
+    // (the old roles.role.* placeholders) are gone: assigning a role to a
+    // user is users.user.update's job now (PUT /users/:id/roles), and no
+    // FR in this spec ever asked for role deletion.
     permissions: [
-      permissionEntry("roles", "role", "create", "Create a role"),
-      permissionEntry("roles", "role", "read", "View roles"),
-      permissionEntry("roles", "role", "update", "Edit a role's permissions"),
-      permissionEntry("roles", "role", "assign", "Assign a role to a user"),
-      permissionEntry("roles", "role", "delete", "Remove a role"),
+      permissionEntry("admin", "role", "create", "Create a role"),
+      permissionEntry("admin", "role", "read", "View roles"),
+      permissionEntry("admin", "role", "update", "Rename a role, manage its permissions"),
     ],
     dependsOn: ["auth"],
     migrations: ["0002_silent_white_tiger"],
@@ -128,6 +146,29 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       "0012_dry_robbie_robertson",
       "0013_faulty_black_tarantula",
     ],
+  },
+  {
+    key: "admin",
+    name: "Tenant Admin (Companies & Branches)",
+    version: "1.0.0",
+    // Companies/branches REST layer under FE-5.5's tenant-admin screens.
+    // routes only names one of the two routers this manifest owns
+    // (companiesRouter) - branchesRouter is mounted separately in app.ts,
+    // same precedent as "users" (routes: usersRouter, but app.ts also
+    // mounts invitationsRouter on its own).
+    routes: companiesRouter,
+    permissions: [
+      permissionEntry("admin", "company", "create", "Add a company"),
+      permissionEntry("admin", "company", "read", "View companies"),
+      permissionEntry("admin", "company", "update", "Edit a company"),
+      permissionEntry("admin", "branch", "create", "Add a branch"),
+      permissionEntry("admin", "branch", "read", "View branches"),
+      permissionEntry("admin", "branch", "update", "Edit a branch"),
+    ],
+    // "masters": companies.country_id/currency_id FK into core/masters'
+    // countries/currencies tables (this task's own resolved decision).
+    dependsOn: ["auth", "roles", "masters"],
+    migrations: ["0020_companies_country_currency_fk", "0021_companies_drop_country_currency_code"],
   },
   {
     key: "storage",

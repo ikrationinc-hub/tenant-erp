@@ -49,7 +49,7 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     path: "/roles",
     icon: "shield",
     moduleKey: "roles",
-    requiredPermission: "roles.role.read",
+    requiredPermission: "admin.role.read",
   },
   {
     key: "masters",

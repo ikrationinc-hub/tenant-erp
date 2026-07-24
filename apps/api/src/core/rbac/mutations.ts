@@ -1,4 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
+import { NotFoundError } from "../../common/errors/index.js";
 import { insertAuditLog } from "../audit/write.js";
 import { withTenantSchema } from "../../database/get-db.js";
 import { fieldPermissions, roles, rolePermissions, userRoles } from "../../database/tenant/schema.js";
@@ -50,6 +51,50 @@ export async function createRole(input: CreateRoleInput): Promise<typeof roles.$
     });
 
     return inserted;
+  });
+  await bumpRoleVersion(input.companyId);
+  return role;
+}
+
+export interface RenameRoleInput {
+  schemaName: string;
+  companyId: string;
+  roleId: string;
+  name: string;
+  updatedBy: string;
+}
+
+/** Menus reference a role only by requiredPermission/id, never by name, so renaming needs no menu_version bump - only role_version, same as every other mutation here. */
+export async function renameRole(input: RenameRoleInput): Promise<typeof roles.$inferSelect> {
+  const role = await withTenantSchema(input.schemaName, async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(roles)
+      .where(and(eq(roles.id, input.roleId), eq(roles.companyId, input.companyId), isNull(roles.deletedAt)));
+    if (!existing) {
+      throw new NotFoundError("Role not found");
+    }
+
+    const [updated] = await tx
+      .update(roles)
+      .set({ name: input.name, updatedBy: input.updatedBy, updatedAt: new Date() })
+      .where(eq(roles.id, input.roleId))
+      .returning();
+    if (!updated) {
+      throw new Error("failed to rename role");
+    }
+
+    await insertAuditLog(tx, {
+      companyId: input.companyId,
+      changedBy: input.updatedBy,
+      entity: "role",
+      entityId: input.roleId,
+      action: "role.renamed",
+      before: { name: existing.name },
+      after: { name: updated.name },
+    });
+
+    return updated;
   });
   await bumpRoleVersion(input.companyId);
   return role;
