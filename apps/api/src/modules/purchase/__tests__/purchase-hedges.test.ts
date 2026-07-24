@@ -59,6 +59,7 @@ interface SeededTenant {
   schemaName: string;
   companyId: string;
   userId: string;
+  roleId: string;
   accessToken: string;
   purchaseRefs: {
     branchId: string;
@@ -156,7 +157,7 @@ async function seedTenant(label: string): Promise<SeededTenant> {
 
   const { token } = await signAccessToken({ sub: userId, tenant: tenant.id, company_id: companyId, roles: [], scope: "full" });
 
-  return { schemaName: tenant.schemaName, companyId, userId, accessToken: token, purchaseRefs, hedgePlatformId };
+  return { schemaName: tenant.schemaName, companyId, userId, roleId: role.id, accessToken: token, purchaseRefs, hedgePlatformId };
 }
 
 async function createDraftPurchase(app: ReturnType<typeof createApp>, authHeader: string, tenant: SeededTenant): Promise<string> {
@@ -216,6 +217,50 @@ describe("modules/purchase - Platform Hedging / LME Records, session (d): hedgin
       expect(hedge.contractNumber).toBe("HC-1001");
       expect(hedge.position).toBe("buy");
       expect(hedge.status).toBe("open");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "regression: the Hedging Details drawer's Position field had no options at all (empty dropdown) - a hedge can now be created end-to-end using an option value straight from GET /field-definitions/purchase/hedge, not a hardcoded string",
+    async () => {
+      const tenant = await seedTenant("hedge-position-e2e");
+      // The seeded role from seedTenant already has ALL_PURCHASE_PERMISSIONS;
+      // grant it the one extra permission this test needs to fetch field-definitions.
+      const permissionId = await findPermissionId(tenant.schemaName, "field_definitions.field.read");
+      await grantPermissionToRole(tenant.schemaName, tenant.companyId, tenant.roleId, permissionId, tenant.userId);
+
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+
+      const fieldDefsRes = await request(app).get("/api/v1/field-definitions/purchase/hedge").set("Authorization", authHeader);
+      expect(fieldDefsRes.status).toBe(200);
+      const positionField = (
+        fieldDefsRes.body as {
+          fields: { fieldKey: string; optionsSource?: { staticOptions: { value: string }[] } }[];
+        }
+      ).fields.find((f) => f.fieldKey === "position");
+      const firstOptionValue = positionField?.optionsSource?.staticOptions[0]?.value;
+      if (!firstOptionValue) {
+        throw new Error("expected purchase/hedge's position field to have a non-empty optionsSource - this is the exact bug being regression-tested");
+      }
+
+      const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+      const hedge = asHedge(
+        await request(app)
+          .post(`/api/v1/purchases/${purchaseId}/hedges`)
+          .set("Authorization", authHeader)
+          .send({
+            hedgePlatformId: tenant.hedgePlatformId,
+            contractNumber: "HC-E2E",
+            position: firstOptionValue,
+            quantity: "500",
+            rate: "8500",
+            hedgeDate: "2024-06-11",
+          }),
+      );
+
+      expect(hedge.position).toBe(firstOptionValue);
     },
     TEST_TIMEOUT_MS,
   );

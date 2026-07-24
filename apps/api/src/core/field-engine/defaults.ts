@@ -73,6 +73,20 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     isEditable: false,
     sortOrder: 3,
     isSystem: true,
+    // isEditable: false (list display only, per prompt 15) - SchemaTable
+    // still needs a labeled value to render instead of the bare enum
+    // string. Same active/inactive pair as company/branch (matching
+    // admin-handlers.ts's convention, even though the mock's own user
+    // field def omits optionsSource entirely) - "invited" is never a
+    // value an admin picks from this dropdown, it's surfaced via the
+    // separate invitationId/invitationExpiresAt fields instead.
+    optionsSource: {
+      type: "static",
+      staticOptions: [
+        { value: "active", label: "Active" },
+        { value: "inactive", label: "Inactive" },
+      ],
+    },
   },
   {
     module: "users",
@@ -248,12 +262,6 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     optionsSource: "masters:currencies",
   },
   {
-    // No optionsSource: a fixed 1-12 static list, same gap as masters'
-    // itemType below - the real field-engine's FieldDefault.optionsSource
-    // convention only covers "masters:<x>"/"roles" today, not an inline
-    // static option list (packages/contracts' richer `{type:"static",...}"
-    // shape is an apps/web dev-fixture-only convention, not something this
-    // backend emits yet).
     module: "admin",
     entity: "company",
     fieldKey: "fiscalYearStartMonth",
@@ -264,6 +272,23 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     isEditable: true,
     sortOrder: 3,
     isSystem: false,
+    optionsSource: {
+      type: "static",
+      staticOptions: [
+        { value: "1", label: "January" },
+        { value: "2", label: "February" },
+        { value: "3", label: "March" },
+        { value: "4", label: "April" },
+        { value: "5", label: "May" },
+        { value: "6", label: "June" },
+        { value: "7", label: "July" },
+        { value: "8", label: "August" },
+        { value: "9", label: "September" },
+        { value: "10", label: "October" },
+        { value: "11", label: "November" },
+        { value: "12", label: "December" },
+      ],
+    },
   },
   {
     module: "admin",
@@ -300,6 +325,13 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     isEditable: true,
     sortOrder: 6,
     isSystem: false,
+    optionsSource: {
+      type: "static",
+      staticOptions: [
+        { value: "active", label: "Active" },
+        { value: "inactive", label: "Inactive" },
+      ],
+    },
   },
   {
     module: "admin",
@@ -336,6 +368,13 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     isEditable: true,
     sortOrder: 2,
     isSystem: false,
+    optionsSource: {
+      type: "static",
+      staticOptions: [
+        { value: "active", label: "Active" },
+        { value: "inactive", label: "Inactive" },
+      ],
+    },
     // company_id is deliberately NOT a field here - the backend injects it
     // from the request's tenant scope (backend rule 2), never a form field.
   },
@@ -1077,9 +1116,10 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     sortOrder: 1,
   },
   {
-    // No optionsSource (same static-2-value-enum gap already accepted for
-    // admin/company's status field) - "buy"/"sell" is a fixed enum, not a
-    // master-backed dropdown.
+    // "buy"/"sell" is a fixed enum, not a master-backed dropdown - matches
+    // purchase-handlers.ts's HEDGE_FIELDS mock exactly (its own inline
+    // optionsSource for this field, the only mock precedent for the
+    // object form rather than a master/roles bare string).
     module: "purchase",
     entity: "hedge",
     fieldKey: "position",
@@ -1090,6 +1130,13 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     isEditable: true,
     isSystem: false,
     sortOrder: 2,
+    optionsSource: {
+      type: "enum",
+      staticOptions: [
+        { value: "buy", label: "Buy" },
+        { value: "sell", label: "Sell" },
+      ],
+    },
   },
   {
     module: "purchase",

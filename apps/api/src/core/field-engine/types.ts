@@ -39,6 +39,37 @@ export type FieldType =
   | "FileUpload"
   | "MultiUpload";
 
+export interface StaticOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * A `dataType: "select"` field whose choices are a fixed, code-owned enum
+ * (active/inactive, months 1-12, buy/sell) - never a masters/roles
+ * reference (those stay a bare string, e.g. "masters:countries").
+ * Mirrors packages/contracts/src/field-definitions.ts's
+ * optionsSourceObjectSchema exactly - `type: "static"` and `type: "enum"`
+ * are parsed identically there (apps/web never branches on which), so
+ * either is fine here too. Every select field needs SOME optionsSource -
+ * a bare enum with nothing else to point at is exactly the bug this type
+ * exists to make impossible again (see FIELD_DEFAULTS's own guard test).
+ */
+export interface StaticOptionsSource {
+  type: "static" | "enum";
+  staticOptions: StaticOption[];
+}
+
+/**
+ * The DB's field_definitions.options_source column is a plain TEXT
+ * column (opaque bare-string convention, e.g. "masters:countries") - it
+ * can never store the richer object form, so a row only ever contributes
+ * a string to the merged result (core/field-engine/resolve.ts's
+ * mergeRow), never a StaticOptionsSource. The object form only ever comes
+ * from the code default itself.
+ */
+export type FieldOptionsSource = string | StaticOptionsSource;
+
 /**
  * The code-declared baseline for a Tier 2 field (core/field-engine/
  * defaults.ts) - what a field looks like before any company has
@@ -57,7 +88,7 @@ export interface FieldDefault {
   isMandatory: boolean;
   isEditable: boolean;
   defaultValue?: string;
-  optionsSource?: string;
+  optionsSource?: FieldOptionsSource;
   fieldType?: FieldType;
   /** Dropdown only - a role picker etc. renders as a multi-select and stores an array, not a single string. Mirrors packages/contracts/src/field-definitions.ts's fieldDefinitionSchema.multiple. */
   multiple?: boolean;
@@ -85,7 +116,7 @@ export interface EffectiveField {
   isMandatory: boolean;
   isEditable: boolean;
   defaultValue: string | undefined;
-  optionsSource: string | undefined;
+  optionsSource: FieldOptionsSource | undefined;
   fieldType: FieldType | undefined;
   multiple: boolean | undefined;
   validationJson: FieldValidationRules | undefined;

@@ -15,6 +15,11 @@ import { companies, fieldDefinitions, permissions, users } from "../../../databa
 
 const TEST_TIMEOUT_MS = 120_000;
 
+const staticOptionsSourceSchema = z.object({
+  type: z.enum(["static", "enum"]),
+  staticOptions: z.array(z.object({ value: z.string(), label: z.string() })),
+});
+
 const effectiveFieldSchema = z.object({
   id: z.string().nullable().optional(),
   fieldKey: z.string(),
@@ -23,7 +28,7 @@ const effectiveFieldSchema = z.object({
   isVisible: z.boolean(),
   isMandatory: z.boolean(),
   isEditable: z.boolean(),
-  optionsSource: z.string().optional(),
+  optionsSource: z.union([z.string(), staticOptionsSourceSchema]).optional(),
   fieldType: z.string().optional(),
 });
 
@@ -364,6 +369,110 @@ describe("field-definitions HTTP module", () => {
         { fieldKey: "rate", isMandatory: true },
         { fieldKey: "hedgeDate", isMandatory: true },
       ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /**
+   * The 5 (really 6 - masters/item.itemType was an undocumented 6th
+   * offender the same bug class caught) static-enum select fields that
+   * had no optionsSource at all - apps/web rendered an empty "No data"
+   * dropdown for each. Asserted against the exact values apps/web/src/
+   * mocks/admin-handlers.ts and purchase-handlers.ts already carry.
+   */
+  it(
+    "admin/company.status and .fiscalYearStartMonth resolve their static optionsSource",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-company-static", ["field_definitions.field.read"]);
+      const fields = await fetchFields(admin, "admin", "company");
+
+      const status = fields.find((f) => f.fieldKey === "status");
+      expect(status?.optionsSource).toEqual({
+        type: "static",
+        staticOptions: [
+          { value: "active", label: "Active" },
+          { value: "inactive", label: "Inactive" },
+        ],
+      });
+
+      const fiscalYear = fields.find((f) => f.fieldKey === "fiscalYearStartMonth");
+      const fiscalYearOptions = fiscalYear?.optionsSource;
+      if (typeof fiscalYearOptions === "string" || !fiscalYearOptions) {
+        throw new Error("expected fiscalYearStartMonth to have a static optionsSource object");
+      }
+      expect(fiscalYearOptions.staticOptions).toHaveLength(12);
+      expect(fiscalYearOptions.staticOptions[0]).toEqual({ value: "1", label: "January" });
+      expect(fiscalYearOptions.staticOptions[11]).toEqual({ value: "12", label: "December" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "admin/branch.status resolves the same active/inactive optionsSource",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-branch-static", ["field_definitions.field.read"]);
+      const fields = await fetchFields(admin, "admin", "branch");
+      const status = fields.find((f) => f.fieldKey === "status");
+      expect(status?.optionsSource).toEqual({
+        type: "static",
+        staticOptions: [
+          { value: "active", label: "Active" },
+          { value: "inactive", label: "Inactive" },
+        ],
+      });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "users/user.status resolves a labeled optionsSource even though the field is display-only (isEditable: false)",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-user-static", ["field_definitions.field.read"]);
+      const fields = await fetchFields(admin, "users", "user");
+      const status = fields.find((f) => f.fieldKey === "status");
+      expect(status?.isEditable).toBe(false);
+      expect(status?.optionsSource).toEqual({
+        type: "static",
+        staticOptions: [
+          { value: "active", label: "Active" },
+          { value: "inactive", label: "Inactive" },
+        ],
+      });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "masters/item.itemType resolves its metals/electronics/toys optionsSource (found by the same guard, not in the original bug report)",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-item-static", ["field_definitions.field.read"]);
+      const fields = await fetchFields(admin, "masters", "item");
+      const itemType = fields.find((f) => f.fieldKey === "itemType");
+      expect(itemType?.optionsSource).toEqual({
+        type: "static",
+        staticOptions: [
+          { value: "metals", label: "Metals" },
+          { value: "electronics", label: "Electronics" },
+          { value: "toys", label: "Toys" },
+        ],
+      });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "purchase/hedge.position resolves the buy/sell optionsSource - the Hedging Details drawer's Position field is no longer empty",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-hedge-static", ["field_definitions.field.read"]);
+      const fields = await fetchFields(admin, "purchase", "hedge");
+      const position = fields.find((f) => f.fieldKey === "position");
+      expect(position?.optionsSource).toEqual({
+        type: "enum",
+        staticOptions: [
+          { value: "buy", label: "Buy" },
+          { value: "sell", label: "Sell" },
+        ],
+      });
     },
     TEST_TIMEOUT_MS,
   );

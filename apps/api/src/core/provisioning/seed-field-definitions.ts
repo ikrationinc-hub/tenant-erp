@@ -38,7 +38,13 @@ export async function seedDefaultFieldDefinitions(input: SeedFieldDefinitionsInp
           isSystem: field.isSystem,
           createdBy: input.createdBy,
           ...(field.defaultValue !== undefined ? { defaultValue: field.defaultValue } : {}),
-          ...(field.optionsSource !== undefined ? { optionsSource: field.optionsSource } : {}),
+          // Only the bare-string convention is ever written to this text
+          // column - a static-enum object (FieldOptionsSource's other
+          // member) has no column to live in, and doesn't need one:
+          // core/field-engine/resolve.ts's mergeRow falls back to the code
+          // default whenever the row itself has no optionsSource, which is
+          // always true for these fields (never PATCH-able today).
+          ...(typeof field.optionsSource === "string" ? { optionsSource: field.optionsSource } : {}),
           ...(field.validationJson !== undefined ? { validationJson: field.validationJson } : {}),
         })
         .onConflictDoUpdate({

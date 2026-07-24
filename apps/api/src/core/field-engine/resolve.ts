@@ -23,7 +23,16 @@ function mergeRow(row: FieldDefinitionRow | undefined, fallback: EffectiveField)
     isMandatory: row.isMandatory,
     isEditable: row.isEditable,
     defaultValue: row.defaultValue ?? undefined,
-    optionsSource: row.optionsSource ?? undefined,
+    // Falls back to the CODE default, not to undefined: the DB column is
+    // a plain string, so it can only ever hold the bare "masters:x"/
+    // "roles" convention, never the richer static-enum object form
+    // (core/field-engine/types.ts's StaticOptionsSource) - a field whose
+    // code default is a static enum must keep resolving to it even once
+    // a field_definitions row exists (which nothing today ever populates
+    // optionsSource on anyway - see field-definitions.validator.ts, it
+    // isn't even PATCH-able). Without this fallback, provisioning a row
+    // at all would silently erase a code-declared static option list.
+    optionsSource: row.optionsSource ?? fallback.optionsSource,
     validationJson: row.validationJson ?? undefined,
     sortOrder: row.sortOrder,
     isSystem: row.isSystem,

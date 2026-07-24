@@ -1,7 +1,7 @@
 import type { SQL } from "drizzle-orm";
 import type { RequestHandler, Router } from "express";
 import type { z } from "zod";
-import type { FieldDataType, FieldDefault } from "../field-engine/types.js";
+import type { FieldDataType, FieldDefault, FieldOptionsSource } from "../field-engine/types.js";
 import { permissionEntry, type PermissionCatalogueEntry } from "../rbac/types.js";
 import { createMasterController } from "./controller.js";
 import { createMasterRepository } from "./repository.js";
@@ -14,7 +14,7 @@ export interface MasterExtraFieldDefault {
   label: string;
   dataType: FieldDataType;
   isMandatory?: boolean;
-  optionsSource?: string;
+  optionsSource?: FieldOptionsSource;
 }
 
 export interface DefineMasterModuleConfig<

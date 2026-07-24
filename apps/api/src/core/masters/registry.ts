@@ -136,7 +136,22 @@ export const itemModule = defineMasterModule({
   table: items,
   createSchema: itemCreateSchema,
   updateSchema: itemUpdateSchema,
-  extraFieldDefaults: [{ fieldKey: "itemType", label: "Item Type", dataType: "select", isMandatory: true }],
+  extraFieldDefaults: [
+    {
+      fieldKey: "itemType",
+      label: "Item Type",
+      dataType: "select",
+      isMandatory: true,
+      optionsSource: {
+        type: "static",
+        staticOptions: [
+          { value: "metals", label: "Metals" },
+          { value: "electronics", label: "Electronics" },
+          { value: "toys", label: "Toys" },
+        ],
+      },
+    },
+  ],
 });
 
 export const itemGradeModule = defineMasterModule({
