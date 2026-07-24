@@ -33,7 +33,6 @@ export const endpoints = {
   roleFieldPermissions: (roleId: string) => `/roles/${roleId}/field-permissions`,
   userOptions: "/users/options",
   branchOptions: "/branches/options",
-  customerOptions: "/customers/options",
 
   // --- FE-6: Supplier + Purchase --------------------------------------------
   suppliers: "/suppliers",

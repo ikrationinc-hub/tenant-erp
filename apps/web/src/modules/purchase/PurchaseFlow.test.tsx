@@ -328,4 +328,53 @@ describe("Purchase - attachment upload wiring", () => {
     },
     30000,
   );
+
+  it(
+    "hydrates existing attachments from a previous session on reopening a purchase",
+    async () => {
+      signIn();
+      const purchaseId = "66666666-6666-4666-8666-666666666666";
+      server.use(
+        http.get(`${API_BASE}${endpoints.purchases}/${purchaseId}`, () => HttpResponse.json(draftFixture(purchaseId))),
+        http.get(`${API_BASE}${endpoints.attachments}`, ({ request }) => {
+          const url = new URL(request.url);
+          if (url.searchParams.get("entity") !== "purchase" || url.searchParams.get("entityId") !== purchaseId) {
+            return HttpResponse.json({ items: [], total: 0, page: 1, pageSize: 1 });
+          }
+          const row = (id: string, fieldKey: string, filename: string) => ({
+            id,
+            companyId: "22222222-2222-4222-8222-222222222222",
+            entity: "purchase",
+            entityId: purchaseId,
+            fieldKey,
+            filename,
+            contentType: "application/pdf",
+            size: 9,
+            storageKey: `mock/purchase/${purchaseId}/${fieldKey}/${filename}`,
+            checksum: "mock-checksum",
+            scannedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            createdBy: "11111111-1111-4111-8111-111111111111",
+          });
+          return HttpResponse.json({
+            items: [
+              row("77777777-7777-4777-8777-777777777777", "invoice", "prior-session-invoice.pdf"),
+              row("88888888-8888-4888-8888-888888888888", "otherDocuments", "extra-doc-1.pdf"),
+              row("99999999-9999-4999-8999-999999999999", "otherDocuments", "extra-doc-2.pdf"),
+            ],
+            total: 3,
+            page: 1,
+            pageSize: 3,
+          });
+        }),
+      );
+
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/${purchaseId}`] });
+
+      expect(await screen.findByText("prior-session-invoice.pdf", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("extra-doc-1.pdf", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("extra-doc-2.pdf", {}, ASYNC)).toBeInTheDocument();
+    },
+    30000,
+  );
 });

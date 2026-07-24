@@ -1,7 +1,6 @@
 import { http, HttpResponse } from "msw";
 import {
   fieldDefinitionsResponseSchema,
-  masterOptionsResponseSchema,
   paginatedRowsResponseSchema,
   type FieldDefinitionsResponse,
 } from "@hyperion/contracts";
@@ -71,7 +70,7 @@ const ALLOCATION_FIELDS = fieldDefinitionsResponseSchema.parse({
   module: "purchase",
   entity: "allocation",
   fields: [
-    { fieldKey: "reservedCustomerId", label: "Reserved Customer", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 0, optionsSource: "customers" },
+    { fieldKey: "reservedCustomerId", label: "Reserved Customer", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 0, optionsSource: "masters:customers" },
     { fieldKey: "allocationPct", label: "Allocation %", fieldType: "Percentage", dataType: "decimal", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 1 },
   ],
 });
@@ -129,11 +128,6 @@ export function resolvePurchaseFieldDefinitions(module: string, entity: string):
   return PURCHASE_FIELD_DEFINITIONS.find((schema) => schema.module === module && schema.entity === entity);
 }
 
-const CUSTOMER_OPTIONS = [
-  { value: "cust-1", label: "Copperline Industries" },
-  { value: "cust-2", label: "Northgate Metals" },
-];
-
 interface MockShipment extends Record<string, unknown> {
   lotNumber: string;
 }
@@ -171,10 +165,6 @@ function asNumericString(value: unknown, fallback: string): string {
 }
 
 export const purchaseHandlers = [
-  http.get(`${API_BASE}${endpoints.customerOptions}`, () =>
-    HttpResponse.json(masterOptionsResponseSchema.parse({ options: CUSTOMER_OPTIONS })),
-  ),
-
   http.get(`${API_BASE}${endpoints.purchases}`, ({ request }) => {
     const url = new URL(request.url);
     const page = Number(url.searchParams.get("page") ?? "1");

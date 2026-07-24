@@ -3,12 +3,38 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { App as AntApp, Alert, Button, Card, Drawer, Space, Spin, Table, Tag, Typography } from "antd";
+import { listAttachmentsResponseSchema, type AttachmentRow } from "@hyperion/contracts";
 import { apiFetch } from "../../core/api/client";
-import { endpoints } from "../../core/api/endpoints";
+import { endpoints, withQuery } from "../../core/api/endpoints";
 import { SchemaForm } from "../../core/schema-form/SchemaForm";
 import { Can } from "../../core/permissions/Can";
 import { useHasPermission } from "../../core/permissions/use-permissions";
 import { PURCHASE_LIST_PATH } from "./PurchaseListScreen";
+
+const MULTI_UPLOAD_ATTACHMENT_KEYS = new Set(["otherDocuments", "otherDocuments2"]);
+
+/**
+ * FileUpload/MultiUpload fields only round-trip whatever their own
+ * onChange has set (field-value-utils.ts's UploadedFileValue shape) -
+ * without this, reopening an existing purchase shows "No file" for every
+ * attachment uploaded in an earlier session, even though the row is
+ * still there server-side. Groups GET /attachments' flat list back into
+ * the per-field shape each widget expects: a single {uid, name} for a
+ * FileUpload field, an array for a MultiUpload field.
+ */
+function attachmentInitialValues(attachments: AttachmentRow[]): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const attachment of attachments) {
+    const file = { uid: attachment.id, name: attachment.filename };
+    if (MULTI_UPLOAD_ATTACHMENT_KEYS.has(attachment.fieldKey)) {
+      const existing = Array.isArray(values[attachment.fieldKey]) ? (values[attachment.fieldKey] as unknown[]) : [];
+      values[attachment.fieldKey] = [...existing, file];
+    } else {
+      values[attachment.fieldKey] = file;
+    }
+  }
+  return values;
+}
 
 const SHIPMENT_KEYS = new Set([
   "lotNumber",
@@ -100,6 +126,15 @@ export function PurchaseDetailScreen({
     enabled: mode === "edit" && Boolean(purchaseId),
   });
 
+  const attachmentsQuery = useQuery({
+    queryKey: ["attachments", "purchase", purchaseId],
+    queryFn: () =>
+      apiFetch(withQuery(endpoints.attachments, { entity: "purchase", entityId: purchaseId }), {}, {
+        schema: listAttachmentsResponseSchema,
+      }),
+    enabled: mode === "edit" && Boolean(purchaseId),
+  });
+
   function refresh(): void {
     void queryClient.invalidateQueries({ queryKey: ["purchases", purchaseId] });
     void queryClient.invalidateQueries({ queryKey: ["entity-list", endpoints.purchases] });
@@ -144,7 +179,11 @@ export function PurchaseDetailScreen({
     purchase &&
     typeof purchase.shipment === "object" &&
     purchase.shipment !== null
-      ? { ...purchase, ...(purchase.shipment as Record<string, unknown>) }
+      ? {
+          ...purchase,
+          ...(purchase.shipment as Record<string, unknown>),
+          ...attachmentInitialValues(attachmentsQuery.data?.items ?? []),
+        }
       : purchase;
 
   return (

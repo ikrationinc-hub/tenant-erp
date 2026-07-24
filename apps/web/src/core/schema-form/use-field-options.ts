@@ -6,13 +6,12 @@ import { endpoints, withQuery } from "../api/endpoints";
 
 const NO_DEPENDENCY = "__schema_form_no_dependency__";
 
-/** None of these are core/masters/registry.ts masters (roles is RBAC, FE-5.5; suppliers/users/branches/customers are their own modules, FE-6) but are options-sourced the same way - routed to their own /options route instead of GET /masters/<key>/options. userOptions/branchOptions/customerOptions have no real backend endpoint yet (see docs/CLAUDE-CODE-PROMPTS.md's follow-up prompt) - MSW-mocked only until then. */
+/** None of these are core/masters/registry.ts masters (roles is RBAC, FE-5.5; suppliers/users/branches are their own modules, FE-6) but are options-sourced the same way - routed to their own /options route instead of GET /masters/<key>/options. "customers" used to be here too (before it existed as a real master) - the real field-engine now sends optionsSource "masters:customers" for purchase/allocation's reservedCustomerId, so it resolves through the generic masters branch below instead (verified against the real backend, FE-8). */
 const NON_MASTER_OPTIONS_ENDPOINTS: Record<string, string> = {
   roles: `${endpoints.roles}/options`,
   suppliers: endpoints.supplierOptions,
   users: endpoints.userOptions,
   branches: endpoints.branchOptions,
-  customers: endpoints.customerOptions,
 };
 
 function resolveOptionsEndpoint(master: string): string {

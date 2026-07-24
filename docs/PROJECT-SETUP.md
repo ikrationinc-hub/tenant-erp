@@ -1,6 +1,6 @@
 # Hyperion ERP — Project Setup & Run Guide
 
-_Updated 2026-07-23 against the state of the repo at that time — re-check `pnpm-workspace.yaml`, `apps/api/package.json`, `apps/web/package.json`, and `apps/admin/package.json` if scripts have moved on since._
+_Updated 2026-07-24 against the state of the repo at that time — re-check `pnpm-workspace.yaml`, `apps/api/package.json`, `apps/web/package.json`, and `apps/admin/package.json` if scripts have moved on since._
 
 ## Prerequisites
 
@@ -40,11 +40,11 @@ cp apps/admin/.env.example apps/admin/.env
 
 **`apps/web/.env`**:
 - `VITE_API_BASE_URL=http://localhost:3000/api/v1`
-- `VITE_USE_MOCKS=true|false` — `true` runs the whole frontend against MSW with **zero backend running**; `false` hits the real API at `VITE_API_BASE_URL`
+- `VITE_USE_MOCKS=true|false` — defaults to `false`. `true` runs the whole frontend against MSW with **zero backend running**; this was the day-to-day dev mode before the backend existed and is now retired as the documented way to work on `apps/web` (the backend is real and complete — see `docs/CLAUDE-CODE-PROMPTS.md`'s prompt 17). MSW itself isn't gone: `apps/web/src/mocks/*.ts` is still used inside `*.test.tsx` files as a Vitest test double (`VITE_USE_MOCKS=true` in `.env.test` is correct and unrelated to this flag's dev-mode meaning) — only the "run the whole app against fake data" use is deprecated.
 
 **`apps/admin/.env`** (the platform console — see step 6a):
 - `VITE_API_BASE_URL=http://localhost:3000/api/v1/platform`
-- `VITE_USE_MOCKS=true|false` — same semantics as `apps/web`
+- `VITE_USE_MOCKS=true|false` — same semantics as `apps/web`, defaults to `false`
 
 ## 3. Start infrastructure
 
@@ -119,6 +119,16 @@ The invited tenant admin then opens the link in that email (`{{WEB_APP_BASE_URL}
 
 A full Postman collection covering every endpoint (including this whole flow) lives in `docs/postman/`.
 
+### 6b. Seed dev data (optional but recommended)
+
+A freshly provisioned tenant has reference masters, roles, and menus, but no suppliers or purchases — the Supplier and Purchase list screens will be correctly empty, not broken. To get something to click through:
+
+```bash
+cd apps/api && pnpm seed:dev --tenant=acme   # slug from step 6a
+```
+
+Idempotent, and never run automatically — a few suppliers and one purchase in each of draft/approved/posted, with items/costs/an LME record/a hedge on the posted one so every panel has something to render. This is a smoke-test convenience, not the full FE-7 demo dataset (realistic metals data, multiple roles/users — that's a later, separate script).
+
 ## 7. Run the frontend(s)
 
 ```bash
@@ -127,8 +137,8 @@ pnpm --filter @hyperion/web dev
 
 Starts Vite on its default port (check terminal output, typically `http://localhost:5173`).
 
-- With `VITE_USE_MOCKS=true` (the current default in `apps/web/.env`): the app runs standalone against MSW handlers generated from `packages/contracts` — no backend, no docker, no database needed at all. This is the fastest way to see the UI.
-- With `VITE_USE_MOCKS=false`: requests go to the real API — needs steps 3–6 done first, and a real logged-in session.
+- Default (`VITE_USE_MOCKS=false`): requests go to the real API — needs steps 3–6 done first (and ideally 6b, or the Supplier/Purchase screens are correctly but unhelpfully empty), and a real logged-in session.
+- `VITE_USE_MOCKS=true`: the app runs standalone against MSW handlers generated from `packages/contracts` — no backend, no docker, no database needed at all. This still works (the handlers are also what `*.test.tsx` files use), but it's no longer the documented way to develop against — treat it as an emergency fallback if the backend genuinely can't run, not the default workflow.
 
 ### 7a. `apps/admin` — the platform console
 
@@ -159,8 +169,7 @@ pnpm test          # turbo run test across all packages
 | `pnpm --filter @hyperion/web <script>` | run a script scoped to just the web app (dev, build, preview, msw:init) |
 | `pnpm --filter @hyperion/admin <script>` | run a script scoped to just the admin console (dev, build, preview) |
 
-## Known gaps as of 2026-07-23 (`docs/PROJECT-STATUS.md` is dated 2026-07-18 and is stale on several of these — trust the code over that file too)
+## Known gaps as of 2026-07-24 (`docs/PROJECT-STATUS.md` is dated 2026-07-18 and is stale on several of these — trust the code over that file too)
 
-- `GET /api/v1/users/me/companies` (the company/branch switcher `apps/web`'s header calls) **does not exist on the backend.** It was built frontend-first as a Zod contract + MSW mock (`packages/contracts/src/scope.ts`) so FE work wasn't blocked; the real endpoint was never speced in any numbered prompt and still needs to be built.
-- `docker/docker-compose.yml` has local, uncommitted changes as of this writing (added `clamav`, dropped a `mailhog` service) — run `git status docker/docker-compose.yml` to check whether that's still true before assuming the service list above is what's actually committed.
 - Masters (reference-data CRUD — countries, currencies, UOM, incoterms, etc.) live at `apps/api/src/core/masters/`, **not** `apps/api/src/modules/masters/` — don't be misled by the absence of a `modules/masters` directory into thinking this wasn't built.
+- `docker/docker-compose.yml` — re-run `git status docker/docker-compose.yml` before assuming the service list above (postgres/redis/minio/clamav) is exactly what's committed; it's drifted from the prompts doc's original `mailhog` mention before (email goes through Resend, not Mailhog — see `WEB_APP_BASE_URL` above).

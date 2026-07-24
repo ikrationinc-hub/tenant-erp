@@ -35,6 +35,7 @@ export const MASTER_REGISTRY: MasterRegistryEntry[] = [
   { entity: "lme_exchange", urlSegment: "lme-exchanges", label: "LME Exchanges" },
   { entity: "hedge_platform", urlSegment: "hedge-platforms", label: "Hedge Platforms" },
   { entity: "supplier_type", urlSegment: "supplier-types", label: "Supplier Types" },
+  { entity: "customer", urlSegment: "customers", label: "Customers" },
 ];
 
 const MASTERS_PATH_PREFIX = "/masters/";
