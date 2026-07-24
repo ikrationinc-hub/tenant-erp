@@ -140,6 +140,46 @@ describe("modules/companies - tenant-admin API surface", () => {
   );
 
   it(
+    "accepts fiscalYearStartMonth as a numeric string, not just a JS number",
+    async () => {
+      // Every Dropdown field in apps/web (frontend rule 6's one registry,
+      // no per-field special-casing) emits a STRING value - the whole
+      // options contract (packages/contracts/src/master-options.ts's
+      // masterOptionSchema.value) is string-typed, and fiscalYearStartMonth
+      // is rendered as a Dropdown over a static 1-12 optionsSource (prompt
+      // 18). A bare `z.number()` here rejects every real submission from
+      // the actual UI with "expected number, received string" - found by
+      // hand testing FE-8 against this endpoint.
+      const tenant = await seedTenant("coerce");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+
+      const res = await request(app)
+        .post("/api/v1/companies")
+        .set("Authorization", authHeader)
+        .send({
+          name: "String Month Co",
+          countryId: tenant.masters.countryId,
+          currencyId: tenant.masters.currencyId,
+          fiscalYearStartMonth: "4",
+          timezone: "UTC",
+        });
+
+      expect(res.status).toBe(201);
+      expect(asCompany(res).fiscalYearStartMonth).toBe(4);
+
+      const patchRes = await request(app)
+        .patch(`/api/v1/companies/${asCompany(res).id}`)
+        .set("Authorization", authHeader)
+        .send({ fiscalYearStartMonth: "7" });
+
+      expect(patchRes.status).toBe(200);
+      expect(asCompany(patchRes).fiscalYearStartMonth).toBe(7);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "edits a company through the normal PATCH - no separate activate/deactivate route (task item 1)",
     async () => {
       const tenant = await seedTenant("edit");
