@@ -866,6 +866,73 @@ Acceptance:
 
 ---
 
+## Prompt 18 — Static-enum `optionsSource` is missing on 5 Select fields
+
+```
+Found while smoke-testing FE-8 against a real tenant, clicking through
+(not just schema-validating responses, which is why prompt 16/17's own
+verification passed clean but this didn't get caught then): a handful of
+`dataType: "select"` fields in core/field-engine/defaults.ts have NO
+`optionsSource` at all. Every OTHER select field either points at a
+master ("masters:countries" etc.) or a non-master endpoint ("roles") -
+these five are plain static enums (active/inactive, months 1-12,
+buy/sell) that were apparently never given their options when the entity
+was first declared. The frontend renders an empty "No data" dropdown for
+each - two are outright broken forms right now:
+
+1. `admin/company.fiscalYearStartMonth` - Company creation's Fiscal Year
+   Start Month is impossible to fill in. Confirmed broken by hand.
+2. `purchase/hedge.position` - the Hedging Details "Add Hedge" drawer's
+   Position field (Buy/Sell) has nothing to select - a purchase's hedge
+   sub-panel is unusable end to end right now.
+3. `admin/company.status`
+4. `admin/branch.status`
+5. `users/user.status` - this one is `isEditable: false` (list display
+   only, per prompt 15), so it's not a broken FORM, but SchemaTable still
+   needs a labeled value to render instead of the bare enum string.
+
+apps/web/src/mocks/admin-handlers.ts already has the exact values these
+should carry (it's the same "mock is the spec" situation as prompts 15/
+16/17) - match it exactly, don't invent new labels:
+  - `status` (company/branch/user, all three): `{type: "static",
+    staticOptions: [{value: "active", label: "Active"}, {value:
+    "inactive", label: "Inactive"}]}`
+  - `fiscalYearStartMonth`: `{type: "static", staticOptions: [12 entries,
+    value "1".."12", label the full month name - "January".."December"]}`
+  - `purchase/hedge.position` has no mock precedent (FE-6's mock used an
+    inline `{type: "enum", staticOptions: [{value:"buy",label:"Buy"},
+    {value:"sell",label:"Sell"}]}` right on the field - see apps/web/src/
+    mocks/purchase-handlers.ts's HEDGE_FIELDS) - match that value/label
+    pair, `type` can be "static" or "enum" (packages/contracts/src/
+    field-definitions.ts's optionsSourceSchema accepts either union
+    member identically; apps/web doesn't branch on which).
+
+Also worth a once-over rather than trusting this list is exhaustive:
+grep every `dataType: "select"` block in defaults.ts for a sibling
+`optionsSource` key and fix any others the same way - this file has no
+lint rule catching a select field with nothing to select from, and
+should (a follow-up worth just doing here rather than a separate prompt:
+add a unit test that fails if any FIELD_DEFAULTS entry has
+`dataType: "select"` without an `optionsSource`, so this class of bug
+can't reappear silently).
+
+Tests: each of the 5 fields' resolved field-definitions has the exact
+optionsSource above; the new "every select field has options" guard
+test; a hedge can actually be created end-to-end now (was previously
+impossible - add this as a named regression test, not just a schema
+assertion).
+
+Acceptance:
+- `GET /field-definitions/admin/company`, `/admin/branch`, `/users/user`,
+  and `/purchase/hedge` each show every `dataType: "select"` field with a
+  non-empty optionsSource
+- Creating a Company, activating/deactivating a Branch, and adding a
+  Hedge all work end-to-end against the real API with zero frontend
+  changes
+```
+
+---
+
 ## After each prompt
 
 ```bash
@@ -895,5 +962,6 @@ git add -A && git commit -m "feat(scope): ..."
 | 17 | It will want to hand-write 16 masters menu nodes instead of generating them from core/masters/registry.ts. Refuse, same as prompt 12 |
 | 17 | It will want to write a migration/backfill script for the menu-tree fix. Unnecessary pre-launch - re-provision the dev tenant instead |
 | 17 | It will want to make the dev-seed script run automatically on boot or provisioning "for convenience." Refuse - it's an explicit, separate command |
+| 18 | It will invent its own month labels or Active/Inactive wording instead of matching apps/web/src/mocks/admin-handlers.ts exactly. Same rule as 15/16/17 - the mock is the spec, not a suggestion |
 
 Everything on that list is in `CLAUDE.md`. If it drifts, the fix is to point at the rule — not to argue.

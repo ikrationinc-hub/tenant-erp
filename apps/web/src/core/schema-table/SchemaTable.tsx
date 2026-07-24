@@ -10,7 +10,7 @@ import { columnsFromFieldDefinitions } from "./columns-from-fields";
 import { useEntityListState } from "./use-entity-list-state";
 import { useEntityList } from "./use-entity-list";
 import { FilterBar } from "./FilterBar";
-import type { EntityRow, SchemaTableAction, SchemaTableProps } from "./types";
+import type { EntityRow, SchemaTableAction, SchemaTableExtraColumn, SchemaTableProps } from "./types";
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -69,6 +69,42 @@ function buildActionsColumn(
   };
 }
 
+/** Inserts each extra (non-field-definitions-backed) column immediately after its `after` fieldKey's column - falls back to the end if that fieldKey isn't present (e.g. hidden). */
+function withExtraColumns(
+  dataColumns: TableColumnsType<EntityRow>,
+  extraColumns: SchemaTableExtraColumn[],
+): TableColumnsType<EntityRow> {
+  if (extraColumns.length === 0) {
+    return dataColumns;
+  }
+  const result: TableColumnsType<EntityRow> = [];
+  for (const column of dataColumns) {
+    result.push(column);
+    for (const extra of extraColumns) {
+      if (extra.after === column.key) {
+        result.push({
+          key: extra.key,
+          title: extra.title,
+          ...(extra.width !== undefined ? { width: extra.width } : {}),
+          render: (_value: unknown, row: EntityRow) => extra.render(row),
+        });
+      }
+    }
+  }
+  const placedKeys = new Set(extraColumns.filter((extra) => dataColumns.some((c) => c.key === extra.after)).map((e) => e.key));
+  for (const extra of extraColumns) {
+    if (!placedKeys.has(extra.key)) {
+      result.push({
+        key: extra.key,
+        title: extra.title,
+        ...(extra.width !== undefined ? { width: extra.width } : {}),
+        render: (_value: unknown, row: EntityRow) => extra.render(row),
+      });
+    }
+  }
+  return result;
+}
+
 /**
  * Generic grid over AntD Table (FE-4) - columns from field-definitions
  * metadata, rows from a server-paginated/sorted/filtered list endpoint.
@@ -80,6 +116,7 @@ export function SchemaTable({
   entity,
   endpoint,
   columns,
+  extraColumns = [],
   filters = [],
   actions = [],
   pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
@@ -115,7 +152,7 @@ export function SchemaTable({
     );
   }
 
-  const dataColumns = columnsFromFieldDefinitions(schemaQuery.data, columns);
+  const dataColumns = withExtraColumns(columnsFromFieldDefinitions(schemaQuery.data, columns), extraColumns);
   const actionsColumn = buildActionsColumn(actions, permissions);
   const tableColumns: TableColumnsType<EntityRow> = actionsColumn ? [...dataColumns, actionsColumn] : dataColumns;
 

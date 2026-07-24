@@ -20,15 +20,17 @@ export function columnsFromFieldDefinitions(
   // the section grouping - a flat grid never cared about sections anyway.
   const fields = resolveFieldSections(schema).flatMap((section) => section.fields);
 
-  return fields.map((field) => {
-    const override = overrideByFieldKey.get(field.fieldKey);
-    return {
-      key: field.fieldKey,
-      dataIndex: field.fieldKey,
-      title: override?.title ?? field.label,
-      sorter: override?.sortable ?? true,
-      ...(override?.width !== undefined ? { width: override.width } : {}),
-      ...(override?.render ? { render: override.render } : {}),
-    };
-  });
+  return fields
+    .filter((field) => !overrideByFieldKey.get(field.fieldKey)?.hidden)
+    .map((field) => {
+      const override = overrideByFieldKey.get(field.fieldKey);
+      return {
+        key: field.fieldKey,
+        dataIndex: field.fieldKey,
+        title: override?.title ?? field.label,
+        sorter: override?.sortable ?? true,
+        ...(override?.width !== undefined ? { width: override.width } : {}),
+        ...(override?.render ? { render: override.render } : {}),
+      };
+    });
 }

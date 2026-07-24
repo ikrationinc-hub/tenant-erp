@@ -10,6 +10,17 @@ export interface SchemaTableColumnOverride {
   width?: number;
   sortable?: boolean;
   render?: (value: unknown, row: EntityRow) => ReactNode;
+  /** Drop this field-definitions-derived column from the list entirely - for an entity with far more form fields than make sense as list columns (e.g. Purchase's list reuses the "header" entity, which also carries every shipment/attachment field). */
+  hidden?: boolean;
+}
+
+/** A column with no field-definitions field behind it at all (e.g. Purchase's system-controlled `status`, never part of the create/edit form). Spliced into the field-definitions-derived columns immediately after `after`'s column. */
+export interface SchemaTableExtraColumn {
+  key: string;
+  title: string;
+  after: string;
+  width?: number;
+  render: (row: EntityRow) => ReactNode;
 }
 
 export interface SchemaTableFilterOption {
@@ -47,6 +58,7 @@ export interface SchemaTableProps {
    */
   endpoint: string;
   columns?: SchemaTableColumnOverride[];
+  extraColumns?: SchemaTableExtraColumn[];
   filters?: SchemaTableFilter[];
   actions?: SchemaTableAction[];
   pageSizeOptions?: number[];

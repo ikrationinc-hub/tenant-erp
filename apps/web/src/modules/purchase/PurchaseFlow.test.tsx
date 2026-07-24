@@ -253,6 +253,47 @@ describe("Purchase - permission-gated workflow transitions", () => {
   );
 });
 
+describe("Purchase - list view", () => {
+  it(
+    "shows Status and resolves Branch/Buyer/Supplier to names, and hides shipment/attachment columns",
+    async () => {
+      signIn();
+      server.use(
+        http.get(`${API_BASE}${endpoints.purchases}`, () =>
+          HttpResponse.json({
+            items: [
+              {
+                id: "list-row-1",
+                purchaseNumber: "PO-LIST-1",
+                purchaseDate: "2026-08-01",
+                status: "approved",
+                branchId: "33333333-3333-4333-8333-333333333333",
+                buyerId: "11111111-1111-4111-8111-111111111111",
+                supplierId: "sup-1",
+                supplierInvoiceNo: "INV-1",
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 20,
+          }),
+        ),
+      );
+
+      renderApp({ routes: testRoutes, initialEntries: [PURCHASE_LIST_PATH] });
+
+      expect(await screen.findByText("Dubai HQ", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Demo Admin", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Metal Traders LLC", {}, ASYNC)).toBeInTheDocument();
+      expect(screen.getByText("Approved")).toBeInTheDocument();
+      expect(screen.queryByText("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
+      expect(screen.queryByRole("columnheader", { name: "Container Number" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("columnheader", { name: "Invoice" })).not.toBeInTheDocument();
+    },
+    30000,
+  );
+});
+
 describe("Purchase - metadata-driven sections", () => {
   it(
     "renders fields from every spec section (A-H) purely from field-definitions, with zero hardcoded labels",
