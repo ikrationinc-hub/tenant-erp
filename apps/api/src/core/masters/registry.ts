@@ -8,6 +8,7 @@ import {
   cities,
   countries,
   currencies,
+  customers,
   hedgePlatforms,
   incoterms,
   itemGrades,
@@ -177,6 +178,24 @@ export const supplierTypeModule = defineMasterModule({
   updateSchema: noExtraUpdateSchema,
 });
 
+/**
+ * Prompt 16's resolved decision: "customers" becomes a real (if minimal)
+ * master now, not a placeholder until Sales - the customers table (and
+ * purchase_allocations.reserved_customer_id's FK into it) already existed
+ * from the Purchase build; only the registry instantiation was missing.
+ * GET /masters/customers/options replaces apps/web's old bespoke
+ * GET /customers/options - reservedCustomerId's optionsSource becomes
+ * "masters:customers", same convention as every other Dropdown->Master
+ * field.
+ */
+export const customerModule = defineMasterModule({
+  entity: "customer",
+  urlSegment: "customers",
+  table: customers,
+  createSchema: noExtraCreateSchema,
+  updateSchema: noExtraUpdateSchema,
+});
+
 export const MASTER_MODULES: MasterModule[] = [
   countryModule,
   cityModule,
@@ -193,6 +212,7 @@ export const MASTER_MODULES: MasterModule[] = [
   lmeExchangeModule,
   hedgePlatformModule,
   supplierTypeModule,
+  customerModule,
 ];
 
 export const mastersRouter: Router = Router();

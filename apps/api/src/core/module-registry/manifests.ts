@@ -126,18 +126,18 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     version: "1.0.0",
     routes: mastersRouter,
     permissions: [
-      // customer remains a stub - not built yet, declared ahead of its
-      // own future module. supplier used to be declared here too, but now
-      // has a real implementation (see the "suppliers" manifest below) -
+      // supplier used to be declared here too, but now has a real
+      // implementation (see the "suppliers" manifest below) -
       // module="suppliers", not "masters", is its real permission
-      // namespace.
-      permissionEntry("masters", "customer", "create", "Create a customer master record"),
-      permissionEntry("masters", "customer", "read", "View customer master records"),
-      permissionEntry("masters", "customer", "update", "Edit a customer master record"),
-      permissionEntry("masters", "customer", "delete", "Remove a customer master record"),
-      // The 15 generic masters (countries, cities, currencies, ...) -
-      // create/read/update per entity, generated from
-      // core/masters/registry.ts so a 16th master needs no changes here.
+      // namespace. customer WAS a stub declared here ahead of its own
+      // module (prompt 16 resolved this: it's now a real instantiated
+      // master, so its create/read/update permissions come from
+      // ALL_MASTER_PERMISSIONS below like every other master - declaring
+      // it here too would be a duplicate permission key.
+      //
+      // The 16 generic masters (countries, cities, currencies, ...,
+      // customers) - create/read/update per entity, generated from
+      // core/masters/registry.ts so a 17th master needs no changes here.
       ...ALL_MASTER_PERMISSIONS,
     ],
     dependsOn: ["auth", "roles"],

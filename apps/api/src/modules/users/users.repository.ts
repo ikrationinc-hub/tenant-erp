@@ -125,6 +125,20 @@ export async function listUsers(tx: TenantTx, companyId: string, params: UsersLi
   };
 }
 
+export interface UserOptionRow {
+  id: string;
+  name: string;
+}
+
+/** Active-only, unpaginated, sorted for display - powers a dropdown (GET /api/v1/users/options), e.g. Purchase's own buyerId field. Same convention as core/masters/repository.ts's listOptions. */
+export async function listActiveUserOptions(tx: TenantTx, companyId: string): Promise<UserOptionRow[]> {
+  return tx
+    .select({ id: users.id, name: users.name })
+    .from(users)
+    .where(and(eq(users.companyId, companyId), eq(users.status, "active"), isNull(users.deletedAt)))
+    .orderBy(asc(users.name));
+}
+
 export async function findUserByIdInCompany(tx: TenantTx, companyId: string, id: string): Promise<UserRow | undefined> {
   const [row] = await tx
     .select()

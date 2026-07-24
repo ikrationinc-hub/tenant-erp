@@ -5,7 +5,7 @@ import { hashPassword } from "../../core/auth/password.js";
 import { generateInviteToken, hashInviteToken, INVITE_TOKEN_TTL_MS } from "../../core/auth/invite-token.js";
 import { getActiveTenantById, resolveTenantForLogin } from "../../core/auth/tenant-resolver.js";
 import { insertAuditLog } from "../../core/audit/write.js";
-import type { PaginatedRows } from "../../core/masters/types.js";
+import type { MasterOption, PaginatedRows } from "../../core/masters/types.js";
 import { getMailer } from "../../core/notification/mailer.js";
 import { buildInviteEmail } from "../../core/notification/templates/invite-email.js";
 import { assignRoleToUser, revokeRoleFromUser } from "../../core/rbac/mutations.js";
@@ -34,6 +34,7 @@ import {
   insertInvitation,
   insertInvitedUser,
   insertProvisionedUser,
+  listActiveUserOptions,
   listMyCompanyBranches,
   listUsers as listUsersRepo,
   markInvitationAccepted,
@@ -387,6 +388,13 @@ export async function changePassword(
 export async function listUsers(ctx: RequestContext, query: UsersListQuery): Promise<PaginatedRows<UserListRow>> {
   const scope = requireTenantScope(ctx);
   return withTenantDb(ctx, (tx) => listUsersRepo(tx, scope.companyId, query));
+}
+
+/** GET /api/v1/users/options - active users only, e.g. Purchase header's buyerId Dropdown. */
+export async function listOptions(ctx: RequestContext): Promise<MasterOption[]> {
+  const scope = requireTenantScope(ctx);
+  const rows = await withTenantDb(ctx, (tx) => listActiveUserOptions(tx, scope.companyId));
+  return rows.map((row) => ({ value: row.id, label: row.name }));
 }
 
 /**

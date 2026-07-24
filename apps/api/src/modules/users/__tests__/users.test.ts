@@ -109,6 +109,11 @@ function asMyCompanies(res: { body: unknown }) {
   return myCompaniesResponseSchema.parse(res.body);
 }
 
+const optionsResponseSchema = z.object({ options: z.array(z.object({ value: z.string(), label: z.string() })) });
+function asOptions(res: { body: unknown }) {
+  return optionsResponseSchema.parse(res.body);
+}
+
 const changePasswordResponseSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),
@@ -643,6 +648,33 @@ describe("user onboarding: invitations, provisioning, password-change scope", ()
       expect(company?.id).toBe(admin.companyId);
       expect(company?.branches.some((b) => b.id === activeBranch.id)).toBe(true);
       expect(company?.branches.some((b) => b.id === inactiveBranch.id)).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "GET /users/options returns active users only, scoped to the caller's company (task item 3)",
+    async () => {
+      const admin = await seedTenantWithAdmin("user-options-flow", ["users.user.read", "users.user.provision", "users.user.update"]);
+      const app = createApp();
+      const authHeader = `Bearer ${admin.accessToken}`;
+
+      const provisionRes = await request(app)
+        .post("/api/v1/users/provision")
+        .set("Authorization", authHeader)
+        .send({ name: "Buyer Candidate", mobile: `+1${randomUUID().slice(0, 8)}`, tempPassword: GOOD_PASSWORD, roles: [] });
+      expect(provisionRes.status).toBe(201);
+      const buyerId = asProvision(provisionRes).userId;
+
+      const before = asOptions(await request(app).get("/api/v1/users/options").set("Authorization", authHeader));
+      expect(before.options.some((o) => o.value === buyerId && o.label === "Buyer Candidate")).toBe(true);
+      // The seeding admin itself is active too - options isn't a single-row fluke.
+      expect(before.options.some((o) => o.value === admin.adminUserId)).toBe(true);
+
+      await request(app).patch(`/api/v1/users/${buyerId}/suspend`).set("Authorization", authHeader);
+
+      const after = asOptions(await request(app).get("/api/v1/users/options").set("Authorization", authHeader));
+      expect(after.options.some((o) => o.value === buyerId)).toBe(false);
     },
     TEST_TIMEOUT_MS,
   );

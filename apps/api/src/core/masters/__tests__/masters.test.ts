@@ -364,4 +364,34 @@ describe("core/masters - generic master-data pattern", () => {
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "prompt 16's resolved decision: customers is a real instantiated master, not the old masters.customer.* stub - CRUD + options work end to end, scoped to company and active-only",
+    async () => {
+      const admin = await seedTenantWithAdmin("customers-master", [
+        "masters.customer.create",
+        "masters.customer.read",
+        "masters.customer.update",
+      ]);
+      const app = createApp();
+      const authHeader = `Bearer ${admin.accessToken}`;
+
+      const created = asMasterRow(
+        await request(app)
+          .post("/api/v1/masters/customers")
+          .set("Authorization", authHeader)
+          .send({ code: "CUST-1", name: "Copperline Industries" }),
+      );
+      expect(created.code).toBe("CUST-1");
+
+      const before = asOptions(await request(app).get("/api/v1/masters/customers/options").set("Authorization", authHeader));
+      expect(before.options.some((o) => o.value === created.id && o.label === "Copperline Industries")).toBe(true);
+
+      await request(app).patch(`/api/v1/masters/customers/${created.id}/deactivate`).set("Authorization", authHeader);
+
+      const after = asOptions(await request(app).get("/api/v1/masters/customers/options").set("Authorization", authHeader));
+      expect(after.options.some((o) => o.value === created.id)).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

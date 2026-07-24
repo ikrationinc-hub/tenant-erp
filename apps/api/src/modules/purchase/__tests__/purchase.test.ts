@@ -85,6 +85,7 @@ interface SeededPurchaseTenant {
   schemaName: string;
   companyId: string;
   userId: string;
+  roleId: string;
   accessToken: string;
   refs: {
     branchId: string;
@@ -179,7 +180,7 @@ async function seedPurchaseTenant(label: string): Promise<SeededPurchaseTenant> 
 
   const { token } = await signAccessToken({ sub: userId, tenant: tenant.id, company_id: companyId, roles: [], scope: "full" });
 
-  return { schemaName: tenant.schemaName, companyId, userId, accessToken: token, refs };
+  return { schemaName: tenant.schemaName, companyId, userId, roleId: role.id, accessToken: token, refs };
 }
 
 function basePayload(refs: SeededPurchaseTenant["refs"], overrides: Record<string, unknown> = {}) {
@@ -343,6 +344,93 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
         })
         .sort((a, b) => a - b);
       expect(sequenceNumbers).toEqual(Array.from({ length: CONCURRENCY }, (_, i) => i + 1));
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "list filters by status, supplierId, branchId, and purchaseDateFrom/To - individually and combined (task item 6)",
+    async () => {
+      const tenant = await seedPurchaseTenant("list-filters");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+      const approvePermissionId = await findPermissionId(tenant.schemaName, "purchase.po.approve");
+      await grantPermissionToRole(tenant.schemaName, tenant.companyId, tenant.roleId, approvePermissionId, tenant.userId);
+
+      const { otherBranchId, otherSupplierId } = await withTenantSchema(tenant.schemaName, async (tx) => {
+        const [supplierType] = await tx.select().from(supplierTypes).where(eq(supplierTypes.companyId, tenant.companyId)).limit(1);
+        const [country] = await tx.select().from(countries).where(eq(countries.companyId, tenant.companyId)).limit(1);
+        const [paymentTerm] = await tx.select().from(paymentTerms).where(eq(paymentTerms.companyId, tenant.companyId)).limit(1);
+        const [currency] = await tx.select().from(currencies).where(eq(currencies.companyId, tenant.companyId)).limit(1);
+        if (!supplierType || !country || !paymentTerm || !currency) {
+          throw new Error("expected seedPurchaseTenant's prerequisite masters to already exist");
+        }
+
+        const [otherBranch] = await tx
+          .insert(branches)
+          .values({ companyId: tenant.companyId, name: "Other Branch", code: "OTHER", createdBy: tenant.userId })
+          .returning();
+        const [otherSupplier] = await tx
+          .insert(suppliers)
+          .values({
+            companyId: tenant.companyId,
+            code: "SUP-0002",
+            name: "Second Supplier Co",
+            supplierTypeId: supplierType.id,
+            countryId: country.id,
+            paymentTermId: paymentTerm.id,
+            currencyId: currency.id,
+            createdBy: tenant.userId,
+          })
+          .returning();
+        if (!otherBranch || !otherSupplier) {
+          throw new Error("failed to seed a second branch/supplier for filter testing");
+        }
+        return { otherBranchId: otherBranch.id, otherSupplierId: otherSupplier.id };
+      });
+
+      // A: original branch/supplier, early date, stays draft.
+      const purchaseA = asPurchase(
+        await request(app)
+          .post("/api/v1/purchases")
+          .set("Authorization", authHeader)
+          .send(basePayload(tenant.refs, { purchaseDate: "2024-01-10" })),
+      );
+
+      // B: other branch/supplier, later date, gets approved.
+      const purchaseB = asPurchase(
+        await request(app)
+          .post("/api/v1/purchases")
+          .set("Authorization", authHeader)
+          .send(
+            basePayload(tenant.refs, {
+              purchaseDate: "2024-06-20",
+              branchId: otherBranchId,
+              supplierId: otherSupplierId,
+            }),
+          ),
+      );
+      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseB.id}/approve`).set("Authorization", authHeader);
+      expect(approveRes.status).toBe(200);
+
+      async function idsFor(query: Record<string, string>): Promise<Set<string>> {
+        const res = asPaginated(await request(app).get("/api/v1/purchases").query(query).set("Authorization", authHeader));
+        return new Set(res.items.map((row) => row.id));
+      }
+
+      expect(await idsFor({ status: "approved" })).toEqual(new Set([purchaseB.id]));
+      expect(await idsFor({ status: "draft" })).toEqual(new Set([purchaseA.id]));
+      expect(await idsFor({ supplierId: otherSupplierId })).toEqual(new Set([purchaseB.id]));
+      expect(await idsFor({ branchId: otherBranchId })).toEqual(new Set([purchaseB.id]));
+      expect(await idsFor({ purchaseDateFrom: "2024-03-01" })).toEqual(new Set([purchaseB.id]));
+      expect(await idsFor({ purchaseDateTo: "2024-03-01" })).toEqual(new Set([purchaseA.id]));
+      expect(await idsFor({ purchaseDateFrom: "2024-01-01", purchaseDateTo: "2024-12-31" })).toEqual(
+        new Set([purchaseA.id, purchaseB.id]),
+      );
+
+      // Combined: branchId + status together narrow to the intersection, not either alone.
+      expect(await idsFor({ branchId: otherBranchId, status: "approved" })).toEqual(new Set([purchaseB.id]));
+      expect(await idsFor({ branchId: otherBranchId, status: "draft" })).toEqual(new Set());
     },
     TEST_TIMEOUT_MS,
   );

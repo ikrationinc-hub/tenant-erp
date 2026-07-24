@@ -67,5 +67,9 @@ export const purchasesListQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(200).default(20),
   search: z.string().min(1).optional(),
   status: z.enum(["draft", "approved", "posted"]).optional(),
+  supplierId: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional(),
+  purchaseDateFrom: dateStringSchema.optional(),
+  purchaseDateTo: dateStringSchema.optional(),
 });
 export type PurchasesListQuery = z.infer<typeof purchasesListQuerySchema>;

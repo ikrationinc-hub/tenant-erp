@@ -1,4 +1,4 @@
-import { and, asc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, ilike, isNull, lte, or, sql } from "drizzle-orm";
 import type { PaginatedRows } from "../../core/masters/types.js";
 import type { TenantTx } from "../../database/get-db.js";
 import { purchaseShipments, purchases } from "../../database/tenant/schema.js";
@@ -15,6 +15,11 @@ export interface PurchasesListParams {
   pageSize: number;
   search?: string | undefined;
   status?: "draft" | "approved" | "posted" | undefined;
+  supplierId?: string | undefined;
+  branchId?: string | undefined;
+  /** Inclusive range on purchase_date - both ends optional independently. */
+  purchaseDateFrom?: string | undefined;
+  purchaseDateTo?: string | undefined;
 }
 
 export async function listPurchases(
@@ -25,6 +30,18 @@ export async function listPurchases(
   const conditions = [eq(purchases.companyId, companyId), isNull(purchases.deletedAt)];
   if (params.status) {
     conditions.push(eq(purchases.status, params.status));
+  }
+  if (params.supplierId) {
+    conditions.push(eq(purchases.supplierId, params.supplierId));
+  }
+  if (params.branchId) {
+    conditions.push(eq(purchases.branchId, params.branchId));
+  }
+  if (params.purchaseDateFrom) {
+    conditions.push(gte(purchases.purchaseDate, params.purchaseDateFrom));
+  }
+  if (params.purchaseDateTo) {
+    conditions.push(lte(purchases.purchaseDate, params.purchaseDateTo));
   }
   if (params.search) {
     const term = `%${params.search}%`;

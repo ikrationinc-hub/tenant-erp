@@ -16,7 +16,16 @@ const clamd = createScanner(env.CLAMAV_HOST, env.CLAMAV_PORT);
 
 export const clamAvScanner: Scanner = {
   async scan(stream: Readable): Promise<ScanResult> {
-    const reply = await clamd.scanStream(stream);
+    // clamd's own wire protocol terminates its reply with a trailing NUL
+    // byte (clamdjs passes it through as-is) - harmless as a JS string,
+    // but fatal once it reaches Postgres: a jsonb/text column can never
+    // contain a raw NUL byte ("unsupported Unicode escape sequence"),
+    // which is exactly where an infected reply's `reply` ends up
+    // (attachments.service.ts's audit log). Stripped here, once, at the
+    // boundary between the raw external protocol and everything
+    // downstream - a real bug this task's own real-ClamAV test caught.
+    const rawReply = await clamd.scanStream(stream);
+    const reply = rawReply.replace(/\0+$/, "").trim();
     return { clean: isCleanReply(reply), reply };
   },
 };

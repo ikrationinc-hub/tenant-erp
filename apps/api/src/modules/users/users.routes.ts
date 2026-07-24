@@ -45,6 +45,18 @@ usersRouter.post(
   usersController.revokeInvitation,
 );
 
+// "/options" registered before "/" - same precedent as core/masters/
+// registry.ts and roles.routes.ts's GET /options: Purchase header's
+// buyerId Dropdown sources options from here.
+usersRouter.get(
+  "/options",
+  scopeResolverMiddleware,
+  requireUsersModule,
+  enforcePasswordChangeScope,
+  requirePermission("users.user.read"),
+  usersController.listOptions,
+);
+
 usersRouter.get(
   "/",
   scopeResolverMiddleware,

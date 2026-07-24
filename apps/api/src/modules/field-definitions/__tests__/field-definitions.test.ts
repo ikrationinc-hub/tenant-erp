@@ -21,7 +21,10 @@ const effectiveFieldSchema = z.object({
   label: z.string(),
   dataType: z.string(),
   isVisible: z.boolean(),
+  isMandatory: z.boolean(),
   isEditable: z.boolean(),
+  optionsSource: z.string().optional(),
+  fieldType: z.string().optional(),
 });
 
 const getFieldDefinitionsResponseSchema = z.object({
@@ -191,6 +194,176 @@ describe("field-definitions HTTP module", () => {
       expect(otherChargesAfter?.label).toBe("Clearing Charges");
       expect(otherChargesAfter?.fieldKey).toBe("otherCharges");
       expect(otherChargesAfter?.dataType).toBe("decimal");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  /**
+   * Prompt 16: every new field-definitions entity must match apps/web's
+   * mocks (suppliers-handlers.ts / purchase-handlers.ts) field-for-field -
+   * field keys, order, and mandatory flags, asserted as one ordered tuple
+   * list per entity rather than spot-checking a single field.
+   */
+  async function fetchFields(admin: SeededAdmin, module: string, entity: string) {
+    const res = await request(createApp())
+      .get(`/api/v1/field-definitions/${module}/${entity}`)
+      .set("Authorization", `Bearer ${admin.accessToken}`);
+    expect(res.status).toBe(200);
+    return asGetFieldDefinitions(res).fields;
+  }
+
+  async function fetchOrderedFields(
+    admin: SeededAdmin,
+    module: string,
+    entity: string,
+  ): Promise<{ fieldKey: string; isMandatory: boolean }[]> {
+    const fields = await fetchFields(admin, module, entity);
+    return fields.map((f) => ({ fieldKey: f.fieldKey, isMandatory: f.isMandatory }));
+  }
+
+  it(
+    "suppliers/supplier matches suppliers-handlers.ts's supplierFieldDefinitions field-for-field",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-supplier", ["field_definitions.field.read"]);
+      const fields = await fetchOrderedFields(admin, "suppliers", "supplier");
+      expect(fields).toEqual([
+        { fieldKey: "code", isMandatory: false },
+        { fieldKey: "name", isMandatory: true },
+        { fieldKey: "supplierTypeId", isMandatory: true },
+        { fieldKey: "countryId", isMandatory: true },
+        { fieldKey: "cityId", isMandatory: false },
+        { fieldKey: "address", isMandatory: false },
+        { fieldKey: "taxRegistrationNo", isMandatory: false },
+        { fieldKey: "paymentTermId", isMandatory: true },
+        { fieldKey: "currencyId", isMandatory: true },
+        { fieldKey: "remarks", isMandatory: false },
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "purchase/header matches purchase-handlers.ts's HEADER_FIELDS field-for-field (header + flattened shipment + 6 attachment fields)",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-header", ["field_definitions.field.read"]);
+      const fields = await fetchOrderedFields(admin, "purchase", "header");
+      expect(fields).toEqual([
+        { fieldKey: "purchaseNumber", isMandatory: false },
+        { fieldKey: "purchaseDate", isMandatory: true },
+        { fieldKey: "branchId", isMandatory: true },
+        { fieldKey: "buyerId", isMandatory: true },
+        { fieldKey: "supplierId", isMandatory: true },
+        { fieldKey: "supplierInvoiceNo", isMandatory: false },
+        { fieldKey: "supplierReferenceNo", isMandatory: false },
+        { fieldKey: "lotNumber", isMandatory: true },
+        { fieldKey: "containerNumber", isMandatory: true },
+        { fieldKey: "blNo", isMandatory: true },
+        { fieldKey: "loadingDate", isMandatory: true },
+        { fieldKey: "transportModeId", isMandatory: true },
+        { fieldKey: "vesselId", isMandatory: false },
+        { fieldKey: "voyageNumber", isMandatory: false },
+        { fieldKey: "portOfLoadingId", isMandatory: true },
+        { fieldKey: "portOfDischargeId", isMandatory: true },
+        { fieldKey: "warehouseId", isMandatory: true },
+        { fieldKey: "incotermId", isMandatory: true },
+        { fieldKey: "invoice", isMandatory: false },
+        { fieldKey: "billOfLading", isMandatory: false },
+        { fieldKey: "packingList", isMandatory: false },
+        { fieldKey: "certificateOfOrigin", isMandatory: false },
+        { fieldKey: "otherDocuments", isMandatory: false },
+        { fieldKey: "otherDocuments2", isMandatory: false },
+      ]);
+
+      // The 6 attachment fields need fieldType FileUpload/MultiUpload, not
+      // just a bare dataType - otherwise they'd resolve to a plain Textbox
+      // client-side (apps/web's resolve-field-type.ts), which would be a
+      // functional break, not a cosmetic one.
+      const rawFields = await fetchFields(admin, "purchase", "header");
+      expect(rawFields.find((f) => f.fieldKey === "invoice")?.fieldType).toBe("FileUpload");
+      expect(rawFields.find((f) => f.fieldKey === "otherDocuments")?.fieldType).toBe("MultiUpload");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "purchase/po (Tier-2 Other Charges) still matches exactly - unchanged by this prompt",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-po", ["field_definitions.field.read"]);
+      const fields = await fetchOrderedFields(admin, "purchase", "po");
+      expect(fields).toEqual([
+        { fieldKey: "freight", isMandatory: false },
+        { fieldKey: "insurance", isMandatory: false },
+        { fieldKey: "customs", isMandatory: false },
+        { fieldKey: "otherCharges", isMandatory: false },
+        { fieldKey: "otherCharges2", isMandatory: false },
+        { fieldKey: "otherCharges3", isMandatory: false },
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "purchase/item matches purchase-handlers.ts's ITEM_FIELDS field-for-field",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-item", ["field_definitions.field.read"]);
+      const fields = await fetchOrderedFields(admin, "purchase", "item");
+      expect(fields).toEqual([
+        { fieldKey: "itemId", isMandatory: true },
+        { fieldKey: "gradeId", isMandatory: false },
+        { fieldKey: "quantity", isMandatory: true },
+        { fieldKey: "uomId", isMandatory: true },
+        { fieldKey: "purchaseRateUsd", isMandatory: true },
+        { fieldKey: "exchangeRate", isMandatory: true },
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "purchase/allocation matches purchase-handlers.ts's ALLOCATION_FIELDS, with reservedCustomerId sourced from the real customers master",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-allocation", ["field_definitions.field.read"]);
+      const fields = await fetchOrderedFields(admin, "purchase", "allocation");
+      expect(fields).toEqual([
+        { fieldKey: "reservedCustomerId", isMandatory: true },
+        { fieldKey: "allocationPct", isMandatory: true },
+      ]);
+
+      const rawFields = await fetchFields(admin, "purchase", "allocation");
+      expect(rawFields.find((f) => f.fieldKey === "reservedCustomerId")?.optionsSource).toBe("masters:customers");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "purchase/lme_record matches purchase-handlers.ts's LME_RECORD_FIELDS field-for-field",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-lme", ["field_definitions.field.read"]);
+      const fields = await fetchOrderedFields(admin, "purchase", "lme_record");
+      expect(fields).toEqual([
+        { fieldKey: "lmeExchangeId", isMandatory: true },
+        { fieldKey: "metal", isMandatory: true },
+        { fieldKey: "lmePriceUsd", isMandatory: true },
+        { fieldKey: "fixingDate", isMandatory: true },
+        { fieldKey: "agreedPremiumPct", isMandatory: true },
+      ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "purchase/hedge matches purchase-handlers.ts's HEDGE_FIELDS field-for-field",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-hedge", ["field_definitions.field.read"]);
+      const fields = await fetchOrderedFields(admin, "purchase", "hedge");
+      expect(fields).toEqual([
+        { fieldKey: "hedgePlatformId", isMandatory: true },
+        { fieldKey: "contractNumber", isMandatory: true },
+        { fieldKey: "position", isMandatory: true },
+        { fieldKey: "quantity", isMandatory: true },
+        { fieldKey: "rate", isMandatory: true },
+        { fieldKey: "hedgeDate", isMandatory: true },
+      ]);
     },
     TEST_TIMEOUT_MS,
   );
