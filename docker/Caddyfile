@@ -1,0 +1,25 @@
+{
+	auto_https off
+}
+
+:80 {
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+:8080 {
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+	handle {
+		root * /srv/admin
+		try_files {path} /index.html
+		file_server
+	}
+}
