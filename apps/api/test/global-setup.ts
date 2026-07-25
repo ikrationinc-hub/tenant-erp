@@ -52,7 +52,7 @@ export async function setup(): Promise<void> {
   // key never needs to be valid - env.ts just requires it to be present.
   process.env.RESEND_API_KEY ??= "test-resend-api-key";
   process.env.MAIL_FROM_ADDRESS ??= "test@example.com";
-  process.env.MAIL_FROM_NAME ??= "Hyperion ERP Test";
+  process.env.MAIL_FROM_NAME ??= "Ikration ERP Test";
   process.env.WEB_APP_BASE_URL ??= "http://localhost:5173";
 
   // Every test that goes through config/db.ts or get-db.ts needs the

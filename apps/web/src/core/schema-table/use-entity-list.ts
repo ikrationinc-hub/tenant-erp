@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { paginatedRowsResponseSchema, type PaginatedRowsResponse } from "@hyperion/contracts";
+import { paginatedRowsResponseSchema, type PaginatedRowsResponse } from "@ikration/contracts";
 import { apiFetch } from "../api/client";
 import { withQuery } from "../api/endpoints";
 import type { EntityListState } from "./use-entity-list-state";

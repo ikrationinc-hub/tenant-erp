@@ -4,7 +4,7 @@ import {
   paginatedRowsResponseSchema,
   type FieldDefinitionsResponse,
   type MasterOption,
-} from "@hyperion/contracts";
+} from "@ikration/contracts";
 import { MASTER_REGISTRY } from "../modules/masters/master-registry";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;

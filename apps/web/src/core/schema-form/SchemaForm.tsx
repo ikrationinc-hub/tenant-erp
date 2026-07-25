@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Card, Space, Spin, Form as AntForm } from "antd";
-import { fieldDefinitionsResponseSchema, type FieldDefinitionsResponse } from "@hyperion/contracts";
+import { fieldDefinitionsResponseSchema, type FieldDefinitionsResponse } from "@ikration/contracts";
 import { apiFetch } from "../api/client";
 import { endpoints } from "../api/endpoints";
 import { notifyError, toToastPayload } from "../api/error-toast";

@@ -1,4 +1,4 @@
-# Hyperion ERP — Project Status
+# Ikration ERP — Project Status
 
 _Snapshot as of 2026-07-18. Ground-truth from reading the repo, not from prompt-completion claims. Re-verify before trusting this beyond a few weeks — re-run the same audit rather than assuming it's still accurate._
 

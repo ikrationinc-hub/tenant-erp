@@ -153,7 +153,7 @@ describe("modules/attachments - real ClamAV + real MinIO integration (prompt 16 
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
       const entityId = randomUUID();
-      const fileContent = Buffer.from(`Hyperion test invoice ${randomUUID()}`, "utf8");
+      const fileContent = Buffer.from(`Ikration test invoice ${randomUUID()}`, "utf8");
 
       const uploadRes = await request(app)
         .post(`/api/v1/attachments/purchase/${entityId}/invoice`)

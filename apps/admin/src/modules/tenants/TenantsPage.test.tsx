@@ -15,7 +15,7 @@ function signIn(): void {
     refreshToken: "platform-refresh-token",
     admin: {
       id: "99999999-9999-4999-8999-999999999999",
-      email: "ops@hyperion.test",
+      email: "ops@ikration.test",
       name: "Platform Operator",
       status: "active",
     },
@@ -34,8 +34,8 @@ describe("TenantsPage", () => {
     signIn();
     renderApp({ initialEntries: ["/tenants"] });
 
-    expect(await screen.findByText("Hyperion Metals Trading")).toBeInTheDocument();
-    expect(screen.getByText("hyperion")).toBeInTheDocument();
+    expect(await screen.findByText("Ikration Metals Trading")).toBeInTheDocument();
+    expect(screen.getByText("ikration")).toBeInTheDocument();
     expect(screen.getByText("ACTIVE")).toBeInTheDocument();
   });
 
@@ -68,7 +68,7 @@ describe("TenantsPage", () => {
     renderApp({ initialEntries: ["/tenants"] });
 
     const dialog = await openOnboardModal();
-    await user.type(within(dialog).getByLabelText("Slug"), "hyperion");
+    await user.type(within(dialog).getByLabelText("Slug"), "ikration");
 
     expect(await within(dialog).findByText("This slug is already taken")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Provision" })).toBeDisabled();
@@ -112,7 +112,7 @@ describe("TenantsPage", () => {
     signIn();
     renderApp({ initialEntries: ["/tenants"] });
 
-    await user.click(await screen.findByText("Hyperion Metals Trading"));
+    await user.click(await screen.findByText("Ikration Metals Trading"));
     const drawer = await screen.findByRole("dialog");
     await user.click(await within(drawer).findByRole("button", { name: "Suspend" }, { timeout: 3000 }));
 
@@ -130,7 +130,7 @@ describe("TenantsPage", () => {
     signIn();
     renderApp({ initialEntries: ["/tenants"] });
 
-    await user.click(await screen.findByText("Hyperion Metals Trading"));
+    await user.click(await screen.findByText("Ikration Metals Trading"));
     const drawer = await screen.findByRole("dialog");
     const menusRow = (await within(drawer).findByText("Navigation Menus", {}, { timeout: 3000 })).closest("div");
     const toggle = menusRow?.querySelector("button[role='switch']");

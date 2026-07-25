@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import userEvent from "@testing-library/user-event";
 import { screen, waitFor } from "@testing-library/react";
-import type { FieldDefinition, FieldDefinitionsResponse } from "@hyperion/contracts";
+import type { FieldDefinition, FieldDefinitionsResponse } from "@ikration/contracts";
 import { server } from "../../mocks/server";
 import { queryClient } from "../api/query-client";
 import { endpoints } from "../api/endpoints";

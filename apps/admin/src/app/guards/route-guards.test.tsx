@@ -17,7 +17,7 @@ describe("route guards", () => {
       refreshToken: "platform-refresh-token",
       admin: {
         id: "99999999-9999-4999-8999-999999999999",
-        email: "ops@hyperion.test",
+        email: "ops@ikration.test",
         name: "Platform Operator",
         status: "active",
       },

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { LoginUserSummary } from "@hyperion/contracts";
+import type { LoginUserSummary } from "@ikration/contracts";
 
 /**
  * Auth token + UI prefs ONLY (frontend rule 5) - server data belongs to
@@ -72,7 +72,7 @@ export const useAppStore = create<AppStore>()(
         set({ activeCompanyId: companyId, activeBranchId: branchId }),
     }),
     {
-      name: "hyperion-app-store",
+      name: "ikration-app-store",
       storage: createJSONStorage(() => localStorage),
     },
   ),

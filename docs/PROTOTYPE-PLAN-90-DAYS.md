@@ -1,4 +1,4 @@
-# Hyperion ERP — 90-Day Prototype Plan
+# Ikration ERP — 90-Day Prototype Plan
 
 **Goal:** a demonstrable system proving (1) the full architecture end-to-end, (2) tenant/company onboarding, (3) the complete Purchase V2 module.
 **Team:** 2 backend engineers. **Duration:** 12 weeks.

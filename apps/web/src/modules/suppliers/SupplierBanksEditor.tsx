@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 import { Button, Input, Space, Table, Typography } from "antd";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import type { SupplierBank } from "@hyperion/contracts";
+import type { SupplierBank } from "@ikration/contracts";
 
 /** Same reasoning as SupplierContactsEditor - "Bank Details" is a repeatable sub-table in the real backend, not a flat field. */
 export function SupplierBanksEditor({

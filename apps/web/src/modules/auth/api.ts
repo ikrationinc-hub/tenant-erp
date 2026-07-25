@@ -7,7 +7,7 @@ import {
   type AcceptInvitationRequest,
   type ChangePasswordRequest,
   type LoginRequest,
-} from "@hyperion/contracts";
+} from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints, withQuery } from "../../core/api/endpoints";
 import { useAppStore } from "../../core/store/app-store";

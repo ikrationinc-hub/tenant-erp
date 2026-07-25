@@ -59,7 +59,7 @@ export async function storeUploadedFile(input: StoreUploadedFileInput): Promise<
     });
   }
 
-  const spoolDir = await mkdtemp(join(tmpdir(), "hyperion-upload-"));
+  const spoolDir = await mkdtemp(join(tmpdir(), "ikration-upload-"));
   const spoolPath = join(spoolDir, "spool");
 
   try {

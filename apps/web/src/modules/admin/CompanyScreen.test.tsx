@@ -14,7 +14,7 @@ function signIn(): void {
     refreshToken: "refresh-token",
     user: {
       id: "11111111-1111-4111-8111-111111111111",
-      email: "demo.admin@hyperion.test",
+      email: "demo.admin@ikration.test",
       name: "Demo Admin",
       companyId: "22222222-2222-4222-8222-222222222222",
     },
@@ -38,7 +38,7 @@ describe("CompanyScreen", () => {
       renderApp({ routes: testRoutes, initialEntries: ["/"] });
 
       expect(await screen.findByRole("heading", { name: "Companies" }, ASYNC)).toBeInTheDocument();
-      expect(await screen.findByText("Hyperion Metals Trading", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Ikration Metals Trading", {}, ASYNC)).toBeInTheDocument();
 
       await user.click(await screen.findByRole("button", { name: /New Companies/ }, ASYNC));
 
@@ -48,7 +48,7 @@ describe("CompanyScreen", () => {
       expect(drawer().queryByLabelText(/company.?id/i)).not.toBeInTheDocument();
       expect(drawer().queryByLabelText("Tenant")).not.toBeInTheDocument();
 
-      await user.type(drawer().getByLabelText("Name"), "Hyperion Testland LLC");
+      await user.type(drawer().getByLabelText("Name"), "Ikration Testland LLC");
 
       await user.click(drawer().getByRole("combobox", { name: "Country" }));
       await user.click(await screen.findByText("United Arab Emirates"));
@@ -66,7 +66,7 @@ describe("CompanyScreen", () => {
 
       await user.click(drawer().getByRole("button", { name: "Save" }));
 
-      expect(await screen.findByText("Hyperion Testland LLC", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Ikration Testland LLC", {}, ASYNC)).toBeInTheDocument();
     },
     30000,
   );

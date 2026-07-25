@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import { attachmentRowSchema, type AttachmentRow } from "@hyperion/contracts";
+import { attachmentRowSchema, type AttachmentRow } from "@ikration/contracts";
 import { endpoints } from "../core/api/endpoints";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;

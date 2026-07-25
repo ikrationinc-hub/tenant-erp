@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import { appErrorResponseSchema, platformRefreshResponseSchema } from "@hyperion/contracts";
+import { appErrorResponseSchema, platformRefreshResponseSchema } from "@ikration/contracts";
 import { useAdminStore } from "../store/admin-store";
 import { ApiError } from "./api-error";
 import { endpoints } from "./endpoints";

@@ -1,4 +1,4 @@
-import type { VisibilityCondition } from "@hyperion/contracts";
+import type { VisibilityCondition } from "@ikration/contracts";
 
 export function evaluateVisibility(watchedValue: unknown, condition: VisibilityCondition): boolean {
   const { operator, value } = condition;

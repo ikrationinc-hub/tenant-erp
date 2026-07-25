@@ -429,7 +429,7 @@ describe("auth: login/refresh/logout/me", () => {
 
       const res = await request(app())
         .post("/api/v1/auth/login")
-        .set("Host", `${seed.tenant.slug}.hyperion-erp.example.com`)
+        .set("Host", `${seed.tenant.slug}.ikration-erp.example.com`)
         .send({ identifier: seed.email, password: KNOWN_PASSWORD });
 
       expect(res.status).toBe(200);

@@ -7,7 +7,7 @@ import {
   fieldPermissionsResponseSchema,
   permissionCatalogueResponseSchema,
   type FieldPermissionRow,
-} from "@hyperion/contracts";
+} from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints, withQuery } from "../../core/api/endpoints";
 import { resolveFieldSections } from "../../core/field-definitions/resolve-sections";

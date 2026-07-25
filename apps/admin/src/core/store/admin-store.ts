@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { PlatformAdminSummary } from "@hyperion/contracts";
+import type { PlatformAdminSummary } from "@ikration/contracts";
 
 /**
  * The PLATFORM token only (ADM-3 task item 2) - a separate store from
@@ -33,7 +33,7 @@ export const useAdminStore = create<AdminAuthState>()(
       clearAuth: () => set({ accessToken: null, refreshToken: null, admin: null }),
     }),
     {
-      name: "hyperion-admin-store",
+      name: "ikration-admin-store",
       storage: createJSONStorage(() => localStorage),
     },
   ),

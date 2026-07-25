@@ -1,5 +1,5 @@
 {
-  "name": "@hyperion/worker",
+  "name": "@ikration/worker",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -19,7 +19,7 @@
     "zod": "^4.1.10"
   },
   "devDependencies": {
-    "@hyperion/config": "workspace:*",
+    "@ikration/config": "workspace:*",
     "@types/node": "^22.20.1",
     "eslint": "^9.39.5",
     "pino-pretty": "^13.1.3",

@@ -1,4 +1,4 @@
-# Hyperion ERP — Project Setup & Run Guide
+# Ikration ERP — Project Setup & Run Guide
 
 _Updated 2026-07-24 against the state of the repo at that time — re-check `pnpm-workspace.yaml`, `apps/api/package.json`, `apps/web/package.json`, and `apps/admin/package.json` if scripts have moved on since._
 
@@ -73,7 +73,7 @@ This only does anything once at least one tenant schema has been created (step 6
 ## 5. Run the backend
 
 ```bash
-pnpm --filter @hyperion/api dev
+pnpm --filter @ikration/api dev
 # or from repo root: pnpm dev   (runs turbo dev across every app, including the frontend if present)
 ```
 
@@ -98,7 +98,7 @@ Idempotent — re-running with the same `PLATFORM_BOOTSTRAP_ADMIN_EMAIL` is a no
 
 Two ways to do this — prefer the admin console; curl is the fallback if it's not running.
 
-**Via `apps/admin`** (recommended): run `pnpm --filter @hyperion/admin dev` (see step 7a below), log in with the platform admin from step 6, and use the tenant-creation form. This is what the UI actually calls under the hood.
+**Via `apps/admin`** (recommended): run `pnpm --filter @ikration/admin dev` (see step 7a below), log in with the platform admin from step 6, and use the tenant-creation form. This is what the UI actually calls under the hood.
 
 **Via curl** (no admin console needed):
 
@@ -132,7 +132,7 @@ Idempotent, and never run automatically — a few suppliers and one purchase in 
 ## 7. Run the frontend(s)
 
 ```bash
-pnpm --filter @hyperion/web dev
+pnpm --filter @ikration/web dev
 ```
 
 Starts Vite on its default port (check terminal output, typically `http://localhost:5173`).
@@ -143,7 +143,7 @@ Starts Vite on its default port (check terminal output, typically `http://localh
 ### 7a. `apps/admin` — the platform console
 
 ```bash
-pnpm --filter @hyperion/admin dev
+pnpm --filter @ikration/admin dev
 ```
 
 Also a Vite app, own port (check terminal output). This is where tenant creation, suspend/reactivate, and per-tenant module toggling actually live — it's what step 6a's "via admin" option runs. Same `VITE_USE_MOCKS` convention as `apps/web`.
@@ -165,9 +165,9 @@ pnpm test          # turbo run test across all packages
 | `pnpm migrate:tenants [-- --tenant=slug]` | fan out pending tenant migrations to one or all tenant schemas |
 | `pnpm dev` | turbo dev — runs `apps/api`, `apps/web`, and `apps/admin` together |
 | `pnpm lint` / `typecheck` / `test` / `build` | turbo across all workspaces |
-| `pnpm --filter @hyperion/api <script>` | run a script scoped to just the API (dev, db:generate, db:tenant:generate, migrate:tenants, seed:platform-admin) |
-| `pnpm --filter @hyperion/web <script>` | run a script scoped to just the web app (dev, build, preview, msw:init) |
-| `pnpm --filter @hyperion/admin <script>` | run a script scoped to just the admin console (dev, build, preview) |
+| `pnpm --filter @ikration/api <script>` | run a script scoped to just the API (dev, db:generate, db:tenant:generate, migrate:tenants, seed:platform-admin) |
+| `pnpm --filter @ikration/web <script>` | run a script scoped to just the web app (dev, build, preview, msw:init) |
+| `pnpm --filter @ikration/admin <script>` | run a script scoped to just the admin console (dev, build, preview) |
 
 ## Known gaps as of 2026-07-24 (`docs/PROJECT-STATUS.md` is dated 2026-07-18 and is stale on several of these — trust the code over that file too)
 

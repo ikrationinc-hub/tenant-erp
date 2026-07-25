@@ -26,7 +26,7 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.82.0(react@19.2.7))
-      '@hyperion/contracts':
+      '@ikration/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@tanstack/react-query':
@@ -57,7 +57,7 @@ importers:
         specifier: ^5.0.14
         version: 5.0.14(@types/react@19.2.17)(react@19.2.7)
     devDependencies:
-      '@hyperion/config':
+      '@ikration/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@testing-library/jest-dom':
@@ -117,7 +117,7 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1090.0
         version: 3.1090.0
-      '@hyperion/contracts':
+      '@ikration/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@zxcvbn-ts/core':
@@ -175,7 +175,7 @@ importers:
         specifier: ^4.1.10
         version: 4.4.3
     devDependencies:
-      '@hyperion/config':
+      '@ikration/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@testcontainers/postgresql':
@@ -235,7 +235,7 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.82.0(react@19.2.7))
-      '@hyperion/contracts':
+      '@ikration/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@tanstack/react-query':
@@ -269,7 +269,7 @@ importers:
         specifier: ^5.0.14
         version: 5.0.14(@types/react@19.2.17)(react@19.2.7)
     devDependencies:
-      '@hyperion/config':
+      '@ikration/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@testing-library/jest-dom':
@@ -333,7 +333,7 @@ importers:
         specifier: ^4.1.10
         version: 4.4.3
     devDependencies:
-      '@hyperion/config':
+      '@ikration/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@types/node':
@@ -376,7 +376,7 @@ importers:
         specifier: ^4.1.10
         version: 4.4.3
     devDependencies:
-      '@hyperion/config':
+      '@ikration/config':
         specifier: workspace:*
         version: link:../config
       eslint:

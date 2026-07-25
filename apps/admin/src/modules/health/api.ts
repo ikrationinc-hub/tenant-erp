@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { platformHealthResponseSchema } from "@hyperion/contracts";
+import { platformHealthResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints } from "../../core/api/endpoints";
 

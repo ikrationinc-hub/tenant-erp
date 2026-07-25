@@ -17,7 +17,7 @@ import {
   type TenantDetailResponse,
   type TenantListResponse,
   type TenantModuleCatalogueEntry,
-} from "@hyperion/contracts";
+} from "@ikration/contracts";
 import { endpoints } from "../core/api/endpoints";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -29,7 +29,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL;
  */
 const mockAdmin: PlatformMeResponse = platformMeResponseSchema.parse({
   id: "99999999-9999-4999-8999-999999999999",
-  email: "ops@hyperion.test",
+  email: "ops@ikration.test",
   name: "Platform Operator",
   status: "active",
 });
@@ -41,15 +41,15 @@ const mockLoginResponse: PlatformLoginResponse = platformLoginResponseSchema.par
 });
 
 const EXISTING_TENANT_ID = "11111111-1111-4111-8111-111111111111";
-const EXISTING_TENANT_SLUG = "hyperion";
+const EXISTING_TENANT_SLUG = "ikration";
 
 const mockTenants: TenantListResponse = tenantListResponseSchema.parse({
   tenants: [
     {
       id: EXISTING_TENANT_ID,
-      name: "Hyperion Metals Trading",
+      name: "Ikration Metals Trading",
       slug: EXISTING_TENANT_SLUG,
-      schemaName: "tenant_hyperion",
+      schemaName: "tenant_ikration",
       status: "active",
       createdAt: "2026-01-15T09:00:00.000Z",
       updatedAt: "2026-01-15T09:00:00.000Z",
@@ -61,9 +61,9 @@ const mockTenants: TenantListResponse = tenantListResponseSchema.parse({
 
 const mockTenantDetail: TenantDetailResponse = tenantDetailResponseSchema.parse({
   id: EXISTING_TENANT_ID,
-  name: "Hyperion Metals Trading",
+  name: "Ikration Metals Trading",
   slug: EXISTING_TENANT_SLUG,
-  schemaName: "tenant_hyperion",
+  schemaName: "tenant_ikration",
   status: "active",
   createdAt: "2026-01-15T09:00:00.000Z",
   updatedAt: "2026-01-15T09:00:00.000Z",

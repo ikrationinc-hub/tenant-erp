@@ -9,7 +9,7 @@ describe("LoginPage", () => {
     const user = userEvent.setup();
     renderApp({ initialEntries: ["/login"] });
 
-    await user.type(screen.getByLabelText("Email"), "ops@hyperion.test");
+    await user.type(screen.getByLabelText("Email"), "ops@ikration.test");
     await user.type(screen.getByLabelText("Password"), "correct horse battery staple");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
@@ -20,10 +20,10 @@ describe("LoginPage", () => {
     expect(state.refreshToken).toBe("mock-platform-refresh-token");
     expect(state.admin?.name).toBe("Platform Operator");
 
-    // Persisted under its own key, never apps/web's "hyperion-app-store".
-    const persisted = window.localStorage.getItem("hyperion-admin-store");
+    // Persisted under its own key, never apps/web's "ikration-app-store".
+    const persisted = window.localStorage.getItem("ikration-admin-store");
     expect(persisted).toBeTruthy();
-    expect(window.localStorage.getItem("hyperion-app-store")).toBeNull();
+    expect(window.localStorage.getItem("ikration-app-store")).toBeNull();
   });
 
   it("has no tenant-code field - platform admins aren't tenant-scoped", () => {
@@ -39,7 +39,7 @@ describe("LoginPage", () => {
       refreshToken: "platform-refresh-token",
       admin: {
         id: "99999999-9999-4999-8999-999999999999",
-        email: "ops@hyperion.test",
+        email: "ops@ikration.test",
         name: "Platform Operator",
         status: "active",
       },

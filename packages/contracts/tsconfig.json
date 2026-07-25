@@ -1,5 +1,5 @@
 {
-  "extends": "@hyperion/config/tsconfig.base.json",
+  "extends": "@ikration/config/tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src"

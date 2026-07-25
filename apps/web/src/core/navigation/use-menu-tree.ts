@@ -1,5 +1,5 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import { menuTreeResponseSchema, type MenuTreeResponse } from "@hyperion/contracts";
+import { menuTreeResponseSchema, type MenuTreeResponse } from "@ikration/contracts";
 import { apiFetch } from "../api/client";
 import { endpoints } from "../api/endpoints";
 

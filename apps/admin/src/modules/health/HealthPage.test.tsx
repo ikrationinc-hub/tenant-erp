@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, screen, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
-import { platformHealthResponseSchema, type PlatformHealthResponse } from "@hyperion/contracts";
+import { platformHealthResponseSchema, type PlatformHealthResponse } from "@ikration/contracts";
 import { renderApp } from "../../test/render-app";
 import { server } from "../../mocks/server";
 import { endpoints } from "../../core/api/endpoints";
@@ -15,7 +15,7 @@ function signIn(): void {
     refreshToken: "platform-refresh-token",
     admin: {
       id: "99999999-9999-4999-8999-999999999999",
-      email: "ops@hyperion.test",
+      email: "ops@ikration.test",
       name: "Platform Operator",
       status: "active",
     },
@@ -31,7 +31,7 @@ function healthFixture(overrides: Partial<PlatformHealthResponse> = {}): Platfor
     tenants: [
       {
         id: "11111111-1111-4111-8111-111111111111",
-        slug: "hyperion",
+        slug: "ikration",
         status: "active",
         schemaPresent: true,
         lastMigrationVersion: "0013_faulty_black_tarantula",
@@ -68,7 +68,7 @@ describe("HealthPage", () => {
             tenants: [
               {
                 id: "11111111-1111-4111-8111-111111111111",
-                slug: "hyperion",
+                slug: "ikration",
                 status: "active",
                 schemaPresent: true,
                 lastMigrationVersion: "0010_modern_adam_warlock",

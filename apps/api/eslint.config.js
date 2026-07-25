@@ -1,5 +1,5 @@
 import tseslint from "typescript-eslint";
-import { baseConfig } from "@hyperion/config/eslint";
+import { baseConfig } from "@ikration/config/eslint";
 
 export default tseslint.config(baseConfig, {
   // Standalone Node script, not part of the tsconfig project - type-aware

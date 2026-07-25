@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Space, Tag, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
-import { masterOptionsResponseSchema } from "@hyperion/contracts";
+import { masterOptionsResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { SchemaTable } from "../../core/schema-table/SchemaTable";
 import { Can } from "../../core/permissions/Can";

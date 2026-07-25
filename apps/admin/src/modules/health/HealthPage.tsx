@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { Card, Col, Row, Skeleton, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import type { PlatformHealthTenantStatus, TenantStatus } from "@hyperion/contracts";
+import type { PlatformHealthTenantStatus, TenantStatus } from "@ikration/contracts";
 import { usePlatformHealthQuery } from "./api";
 
 const TENANT_STATUS_COLOR: Record<TenantStatus, string> = {

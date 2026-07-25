@@ -5,7 +5,7 @@
 ## Import
 
 1. Postman → Import → select both files.
-2. Select the **Hyperion ERP - Local** environment (top-right dropdown).
+2. Select the **Ikration ERP - Local** environment (top-right dropdown).
 3. Run **Auth > Login** (tenant) and/or **Platform Admin / Auth > Login** (platform admin) once — their Tests scripts auto-capture `accessToken`/`refreshToken` (or the platform equivalents) into environment variables. Every other request in the collection already points at `{{accessToken}}` / `{{platformAccessToken}}`, so nothing else needs manual copy-pasting.
 
 ## Folders

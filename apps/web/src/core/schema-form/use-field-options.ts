@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useWatch, type Control } from "react-hook-form";
-import { masterOptionsResponseSchema, type FieldDefinition, type MasterOption } from "@hyperion/contracts";
+import { masterOptionsResponseSchema, type FieldDefinition, type MasterOption } from "@ikration/contracts";
 import { apiFetch } from "../api/client";
 import { endpoints, withQuery } from "../api/endpoints";
 

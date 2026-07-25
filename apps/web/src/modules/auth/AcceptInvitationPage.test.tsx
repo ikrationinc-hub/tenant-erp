@@ -8,7 +8,7 @@ describe("AcceptInvitationPage", () => {
     const user = userEvent.setup();
     renderApp({ initialEntries: ["/accept-invitation/mock-token"] });
 
-    expect(await screen.findByText(/new\.hire@hyperion\.test/)).toBeInTheDocument();
+    expect(await screen.findByText(/new\.hire@ikration\.test/)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Password"), "a very long passphrase 123");
     await user.type(screen.getByLabelText("Confirm password"), "a very long passphrase 123");

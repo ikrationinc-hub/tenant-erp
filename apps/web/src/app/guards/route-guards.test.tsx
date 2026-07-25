@@ -36,7 +36,7 @@ describe("route guards", () => {
       refreshToken: "refresh-token",
       user: {
         id: "11111111-1111-4111-8111-111111111111",
-        email: "demo.admin@hyperion.test",
+        email: "demo.admin@ikration.test",
         name: "Demo Admin",
         companyId: "22222222-2222-4222-8222-222222222222",
       },

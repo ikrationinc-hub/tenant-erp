@@ -1,3 +1,3 @@
-import { baseConfig } from "@hyperion/config/eslint";
+import { baseConfig } from "@ikration/config/eslint";
 
 export default baseConfig;

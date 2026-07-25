@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { App as AntApp, Button, Drawer, Space, Spin, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
-import type { SupplierBank, SupplierContact } from "@hyperion/contracts";
+import type { SupplierBank, SupplierContact } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints } from "../../core/api/endpoints";
 import { SchemaTable } from "../../core/schema-table/SchemaTable";

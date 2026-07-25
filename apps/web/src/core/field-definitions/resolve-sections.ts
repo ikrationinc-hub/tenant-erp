@@ -1,4 +1,4 @@
-import type { FieldDefinitionsResponse, FieldSection } from "@hyperion/contracts";
+import type { FieldDefinitionsResponse, FieldSection } from "@ikration/contracts";
 
 /**
  * The real field-engine's response is flat (`fields`, no sections); FE-3's

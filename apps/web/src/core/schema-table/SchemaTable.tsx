@@ -2,7 +2,7 @@ import type { Key, ReactElement } from "react";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Empty, Skeleton, Space, Table, type TableColumnsType, type TableProps } from "antd";
-import { fieldDefinitionsResponseSchema } from "@hyperion/contracts";
+import { fieldDefinitionsResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../api/client";
 import { endpoints } from "../api/endpoints";
 import { usePermissions } from "../permissions/use-permissions";

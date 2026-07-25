@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { App as AntApp, Alert, Button, Descriptions, Drawer, Popconfirm, Skeleton, Switch, Tag } from "antd";
-import type { TenantStatus } from "@hyperion/contracts";
+import type { TenantStatus } from "@ikration/contracts";
 import {
   useReactivateTenantMutation,
   useSetTenantModuleMutation,

@@ -25,7 +25,7 @@ export function AppShell(): ReactElement {
             fontWeight: 600,
           }}
         >
-          {sidebarCollapsed ? "H" : "Hyperion"}
+          {sidebarCollapsed ? "H" : "Ikration"}
         </div>
         <NavigationMenu />
       </Sider>
@@ -40,7 +40,7 @@ export function AppShell(): ReactElement {
             borderBottom: "1px solid #f0f0f0",
           }}
         >
-          <Typography.Text strong>Hyperion ERP</Typography.Text>
+          <Typography.Text strong>Ikration ERP</Typography.Text>
           <HeaderBar />
         </Header>
         <Content style={{ padding: 16 }}>

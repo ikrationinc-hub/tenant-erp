@@ -9,7 +9,7 @@ describe("LoginPage", () => {
     const user = userEvent.setup();
     renderApp({ initialEntries: ["/login"] });
 
-    await user.type(screen.getByLabelText("Email"), "demo.admin@hyperion.test");
+    await user.type(screen.getByLabelText("Email"), "demo.admin@ikration.test");
     await user.type(screen.getByLabelText("Password"), "correct horse battery staple");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 

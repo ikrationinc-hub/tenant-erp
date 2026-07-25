@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Alert, Form, Input, Modal, Select } from "antd";
 import { App as AntApp } from "antd";
-import type { TenantListItem } from "@hyperion/contracts";
+import type { TenantListItem } from "@ikration/contracts";
 import { ApiError } from "../../core/api/api-error";
 import { useModuleCatalogueQuery, useProvisionTenantMutation } from "./api";
 
@@ -113,7 +113,7 @@ export function OnboardTenantModal({ open, onClose, existingTenants }: OnboardTe
               validateStatus={fieldState.error || slugTaken ? "error" : ""}
               help={fieldState.error?.message ?? (slugTaken ? "This slug is already taken" : undefined)}
             >
-              <Input {...field} id="onboard-slug" placeholder="e.g. hyperion-metals" />
+              <Input {...field} id="onboard-slug" placeholder="e.g. ikration-metals" />
             </Form.Item>
           )}
         />

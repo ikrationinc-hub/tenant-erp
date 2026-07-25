@@ -1,4 +1,4 @@
-import type { FieldDefinitionsResponse } from "@hyperion/contracts";
+import type { FieldDefinitionsResponse } from "@ikration/contracts";
 
 /**
  * Hand-written fixture covering all 13 field types, a cascading dropdown

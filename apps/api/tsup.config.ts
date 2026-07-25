@@ -16,7 +16,7 @@ export default defineConfig({
   // relative position under dist/ or tenant provisioning (which runs the
   // compiled dist/server.js, unlike the tsx-run migrate-tenants.ts CLI
   // script) can never find them at runtime.
-  onSuccess: async () => {
+  onSuccess: () => {
     cpSync("src/database/tenant/migrations", "dist/tenant/migrations", { recursive: true });
   },
 });

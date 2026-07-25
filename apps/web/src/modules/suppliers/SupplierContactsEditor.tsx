@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 import { Button, Input, Space, Table, Typography } from "antd";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import type { SupplierContact } from "@hyperion/contracts";
+import type { SupplierContact } from "@ikration/contracts";
 
 /**
  * FR-... Sub Tab 1's "Contact Person"/"Mobile Number"/"Email Address" are

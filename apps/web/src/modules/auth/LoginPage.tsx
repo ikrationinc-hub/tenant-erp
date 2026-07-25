@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Alert, Button, Card, Form, Input, Typography } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { LoginRequest } from "@hyperion/contracts";
+import type { LoginRequest } from "@ikration/contracts";
 import { ApiError } from "../../core/api/api-error";
 import { useAppStore } from "../../core/store/app-store";
 import { useLoginMutation } from "./api";
@@ -67,7 +67,7 @@ export function LoginPage(): ReactElement {
     >
       <Card style={{ width: 360 }}>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
-          Hyperion ERP
+          Ikration ERP
         </Typography.Title>
         <Form layout="vertical" onFinish={() => void onSubmit()}>
           <Controller

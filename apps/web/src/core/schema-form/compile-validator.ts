@@ -1,5 +1,5 @@
 import { z, type ZodTypeAny } from "zod";
-import type { FieldDefinition, FieldDefinitionsResponse, FieldType } from "@hyperion/contracts";
+import type { FieldDefinition, FieldDefinitionsResponse, FieldType } from "@ikration/contracts";
 import { NUMERIC_STRING_PATTERN } from "./numeric-string";
 import { resolveFieldType } from "./resolve-field-type";
 import { resolveFieldSections } from "../field-definitions/resolve-sections";

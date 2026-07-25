@@ -5,8 +5,8 @@ RUN corepack enable
 WORKDIR /repo
 
 COPY . .
-RUN pnpm install --frozen-lockfile --filter=@hyperion/worker...
-RUN pnpm --filter=@hyperion/worker build
+RUN pnpm install --frozen-lockfile --filter=@ikration/worker...
+RUN pnpm --filter=@ikration/worker build
 
 WORKDIR /repo/apps/worker
 ENV NODE_ENV=production

@@ -10,7 +10,7 @@ import {
   type FieldDefinitionsResponse,
   type MasterOption,
   type PermissionCatalogueEntry,
-} from "@hyperion/contracts";
+} from "@ikration/contracts";
 import { endpoints } from "../core/api/endpoints";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -227,7 +227,7 @@ export interface MockRow extends Record<string, unknown> {
 const companies: MockRow[] = [
   {
     id: "22222222-2222-4222-8222-222222222222",
-    name: "Hyperion Metals Trading",
+    name: "Ikration Metals Trading",
     countryId: "ae",
     currencyId: "aed",
     fiscalYearStartMonth: "1",
@@ -237,7 +237,7 @@ const companies: MockRow[] = [
   },
   {
     id: "55555555-5555-4555-8555-555555555555",
-    name: "Hyperion Singapore Pte Ltd",
+    name: "Ikration Singapore Pte Ltd",
     countryId: "sg",
     currencyId: "sgd",
     fiscalYearStartMonth: "4",
@@ -263,7 +263,7 @@ const users: MockRow[] = [
   {
     id: "11111111-1111-4111-8111-111111111111",
     name: "Demo Admin",
-    email: "demo.admin@hyperion.test",
+    email: "demo.admin@ikration.test",
     mobile: "+971500000001",
     status: "active",
     lastLoginAt: new Date().toISOString(),
@@ -274,7 +274,7 @@ const users: MockRow[] = [
   {
     id: "u-2",
     name: "Amina Officer",
-    email: "amina@hyperion.test",
+    email: "amina@ikration.test",
     mobile: "+971500000002",
     status: "active",
     lastLoginAt: new Date(Date.now() - 86_400_000).toISOString(),
@@ -285,7 +285,7 @@ const users: MockRow[] = [
   {
     id: "u-3",
     name: "Rashid Manager",
-    email: "rashid@hyperion.test",
+    email: "rashid@ikration.test",
     mobile: "+971500000003",
     status: "suspended",
     lastLoginAt: null,
@@ -296,7 +296,7 @@ const users: MockRow[] = [
   {
     id: "u-4",
     name: "New Hire",
-    email: "new.hire@hyperion.test",
+    email: "new.hire@ikration.test",
     mobile: "+971500000004",
     status: "invited",
     lastLoginAt: null,

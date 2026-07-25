@@ -3,7 +3,7 @@ import {
   fieldDefinitionsResponseSchema,
   masterOptionsResponseSchema,
   type FieldDefinitionsResponse,
-} from "@hyperion/contracts";
+} from "@ikration/contracts";
 import { endpoints } from "../core/api/endpoints";
 import { listHandler, updateHandler, type MockRow } from "./admin-handlers";
 

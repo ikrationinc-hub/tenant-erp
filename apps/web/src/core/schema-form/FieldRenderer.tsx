@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { useWatch, type Control } from "react-hook-form";
-import type { FieldDefinition } from "@hyperion/contracts";
+import type { FieldDefinition } from "@ikration/contracts";
 import { fieldTypeRegistry } from "./field-types/registry";
 import { evaluateVisibility } from "./visibility";
 import { resolveFieldType } from "./resolve-field-type";

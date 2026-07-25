@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Alert, Button, Card, Form, Input, Tag, Typography } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { PlatformLoginRequest } from "@hyperion/contracts";
+import type { PlatformLoginRequest } from "@ikration/contracts";
 import { ApiError } from "../../core/api/api-error";
 import { useAdminStore } from "../../core/store/admin-store";
 import { PLATFORM_ACCENT_COLOR } from "../../theme/tokens";
@@ -59,7 +59,7 @@ export function LoginPage(): ReactElement {
       <Card style={{ width: 360 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 0 }}>
-            Hyperion
+            Ikration
           </Typography.Title>
           <Tag color={PLATFORM_ACCENT_COLOR}>PLATFORM ADMIN</Tag>
         </div>

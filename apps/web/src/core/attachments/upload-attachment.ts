@@ -1,4 +1,4 @@
-import { attachmentRowSchema, type AttachmentRow } from "@hyperion/contracts";
+import { attachmentRowSchema, type AttachmentRow } from "@ikration/contracts";
 import { useAppStore } from "../store/app-store";
 import { endpoints } from "../api/endpoints";
 

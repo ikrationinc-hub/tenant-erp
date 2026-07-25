@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import {
   platformLoginResponseSchema,
   type PlatformLoginRequest,
-} from "@hyperion/contracts";
+} from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints } from "../../core/api/endpoints";
 import { useAdminStore } from "../../core/store/admin-store";

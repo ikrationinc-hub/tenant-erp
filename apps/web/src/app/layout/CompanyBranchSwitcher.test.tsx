@@ -12,7 +12,7 @@ function signIn(): void {
   useAppStore.setState({
     accessToken: "access-token",
     refreshToken: "refresh-token",
-    user: { id: "11111111-1111-4111-8111-111111111111", email: "demo.admin@hyperion.test", name: "Demo Admin", companyId: DEMO_COMPANY_ID },
+    user: { id: "11111111-1111-4111-8111-111111111111", email: "demo.admin@ikration.test", name: "Demo Admin", companyId: DEMO_COMPANY_ID },
     mustChangePassword: false,
     activeCompanyId: DEMO_COMPANY_ID,
     activeBranchId: null,
@@ -29,7 +29,7 @@ describe("CompanyBranchSwitcher", () => {
 
     const companySelect = await screen.findByRole("combobox", { name: "Company" });
     await user.click(companySelect);
-    await user.click(await screen.findByText("Hyperion Singapore Pte Ltd"));
+    await user.click(await screen.findByText("Ikration Singapore Pte Ltd"));
 
     expect(invalidateSpy).toHaveBeenCalledWith();
     expect(useAppStore.getState().activeCompanyId).toBe(SINGAPORE_COMPANY_ID);

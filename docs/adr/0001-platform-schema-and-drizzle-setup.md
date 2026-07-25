@@ -40,7 +40,7 @@ a few details were left to judgment.
 - **`db:generate` / `db:migrate` are plain `drizzle-kit` CLI calls**, not Turborepo tasks —
   they're side-effectful, non-cacheable commands against a real database, which doesn't
   fit Turbo's task model. Root `package.json` forwards to `apps/api` via
-  `pnpm --filter @hyperion/api`.
+  `pnpm --filter @ikration/api`.
 
 ## Consequences
 

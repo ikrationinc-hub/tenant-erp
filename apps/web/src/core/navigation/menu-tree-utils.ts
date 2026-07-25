@@ -1,4 +1,4 @@
-import type { MenuNode } from "@hyperion/contracts";
+import type { MenuNode } from "@ikration/contracts";
 
 export interface FlatMenuEntry {
   path: string;

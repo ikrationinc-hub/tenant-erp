@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Alert, Button, Card, Form, Input, Result, Spin, Typography } from "antd";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import type { AcceptInvitationRequest } from "@hyperion/contracts";
+import type { AcceptInvitationRequest } from "@ikration/contracts";
 import { ApiError } from "../../core/api/api-error";
 import { PasswordStrengthMeter } from "./PasswordStrengthMeter";
 import { useAcceptInvitationMutation, useValidateInvitationQuery } from "./api";

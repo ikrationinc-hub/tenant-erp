@@ -3,7 +3,7 @@ import {
   fieldDefinitionsResponseSchema,
   paginatedRowsResponseSchema,
   type FieldDefinitionsResponse,
-} from "@hyperion/contracts";
+} from "@ikration/contracts";
 import { endpoints } from "../core/api/endpoints";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL;

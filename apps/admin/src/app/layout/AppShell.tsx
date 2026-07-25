@@ -40,7 +40,7 @@ export function AppShell(): ReactElement {
             color: "#fff",
           }}
         >
-          {collapsed ? "H" : "Hyperion Platform"}
+          {collapsed ? "H" : "Ikration Platform"}
         </div>
         <Menu
           mode="inline"
@@ -60,7 +60,7 @@ export function AppShell(): ReactElement {
           }}
         >
           <Typography.Text strong style={{ color: "#fff" }}>
-            Hyperion Platform Console
+            Ikration Platform Console
           </Typography.Text>
           <HeaderBar />
         </Header>

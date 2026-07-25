@@ -1,5 +1,5 @@
 {
-  "name": "@hyperion/contracts",
+  "name": "@ikration/contracts",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,7 +12,7 @@
     "test": "echo \"no tests yet\" && exit 0"
   },
   "devDependencies": {
-    "@hyperion/config": "workspace:*",
+    "@ikration/config": "workspace:*",
     "eslint": "^9.39.5",
     "typescript": "^5.7.3"
   },

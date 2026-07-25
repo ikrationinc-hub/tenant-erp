@@ -1,4 +1,4 @@
-import type { FieldDefinitionsResponse, FieldType } from "@hyperion/contracts";
+import type { FieldDefinitionsResponse, FieldType } from "@ikration/contracts";
 import { resolveFieldSections } from "../field-definitions/resolve-sections";
 import { resolveFieldType } from "./resolve-field-type";
 

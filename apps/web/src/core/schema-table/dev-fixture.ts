@@ -1,4 +1,4 @@
-import { fieldDefinitionsResponseSchema, type FieldDefinitionsResponse } from "@hyperion/contracts";
+import { fieldDefinitionsResponseSchema, type FieldDefinitionsResponse } from "@ikration/contracts";
 
 export const DEV_ENTITY_LIST_ENDPOINT = "/_dev/entities";
 

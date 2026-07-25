@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Menu, type MenuProps } from "antd";
-import type { MenuNode } from "@hyperion/contracts";
+import type { MenuNode } from "@ikration/contracts";
 import { resolveMenuIcon } from "./icon-registry";
 import { useMenuTree } from "./use-menu-tree";
 import { findBreadcrumbTrail } from "./menu-tree-utils";

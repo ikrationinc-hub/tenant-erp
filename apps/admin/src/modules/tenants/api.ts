@@ -8,7 +8,7 @@ import {
   tenantStatusUpdateResponseSchema,
   type ProvisionTenantRequest,
   type SetTenantModuleRequest,
-} from "@hyperion/contracts";
+} from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints } from "../../core/api/endpoints";
 

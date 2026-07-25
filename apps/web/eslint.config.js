@@ -1,7 +1,7 @@
 import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
-import { baseConfig } from "@hyperion/config/eslint";
+import { baseConfig } from "@ikration/config/eslint";
 
 export default tseslint.config(
   baseConfig,

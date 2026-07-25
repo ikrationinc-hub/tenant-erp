@@ -1,5 +1,5 @@
 import type { Control } from "react-hook-form";
-import type { FieldDefinition } from "@hyperion/contracts";
+import type { FieldDefinition } from "@ikration/contracts";
 
 export interface UploadContext {
   entity: string;

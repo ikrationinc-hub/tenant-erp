@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
-import { attachmentRowSchema } from "@hyperion/contracts";
+import { attachmentRowSchema } from "@ikration/contracts";
 import { uploadAttachmentWithProgress } from "./upload-attachment";
 import { useAppStore } from "../store/app-store";
 import { endpoints } from "../api/endpoints";

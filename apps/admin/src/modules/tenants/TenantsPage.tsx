@@ -1,7 +1,7 @@
 import { useState, type ReactElement } from "react";
 import { Button, Empty, Table, Tag, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
-import type { TenantListItem, TenantStatus } from "@hyperion/contracts";
+import type { TenantListItem, TenantStatus } from "@ikration/contracts";
 import type { ColumnsType } from "antd/es/table";
 import { useTenantsQuery } from "./api";
 import { OnboardTenantModal } from "./OnboardTenantModal";

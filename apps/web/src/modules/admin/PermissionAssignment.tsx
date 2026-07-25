@@ -1,7 +1,7 @@
 import type { Key, ReactElement } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Spin, Transfer, type TransferProps } from "antd";
-import { permissionCatalogueResponseSchema, roleGrantedPermissionsResponseSchema } from "@hyperion/contracts";
+import { permissionCatalogueResponseSchema, roleGrantedPermissionsResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints } from "../../core/api/endpoints";
 import { MENU_TREE_QUERY_KEY } from "../../core/navigation/use-menu-tree";

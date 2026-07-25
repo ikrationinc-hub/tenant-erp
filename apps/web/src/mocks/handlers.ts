@@ -20,7 +20,7 @@ import {
   type MyCompaniesResponse,
   type MyPermissionsResponse,
   type ValidateInvitationResponse,
-} from "@hyperion/contracts";
+} from "@ikration/contracts";
 import { endpoints } from "../core/api/endpoints";
 import { schemaFormDevFixture } from "../core/schema-form/dev-fixture";
 import {
@@ -45,7 +45,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL;
  */
 const mockUser: MeResponse = meResponseSchema.parse({
   id: "11111111-1111-4111-8111-111111111111",
-  email: "demo.admin@hyperion.test",
+  email: "demo.admin@ikration.test",
   name: "Demo Admin",
   companyId: "22222222-2222-4222-8222-222222222222",
   status: "active",
@@ -70,15 +70,15 @@ const mockChangePasswordResponse: ChangePasswordResponse = changePasswordRespons
 });
 
 const mockInvitation: ValidateInvitationResponse = validateInvitationResponseSchema.parse({
-  email: "new.hire@hyperion.test",
-  companyName: "Hyperion Metals Trading",
+  email: "new.hire@ikration.test",
+  companyName: "Ikration Metals Trading",
 });
 
 const mockCompanies: MyCompaniesResponse = myCompaniesResponseSchema.parse({
   companies: [
     {
       id: mockUser.companyId,
-      name: "Hyperion Metals Trading",
+      name: "Ikration Metals Trading",
       branches: [
         { id: "33333333-3333-4333-8333-333333333333", name: "Dubai HQ" },
         { id: "44444444-4444-4444-8444-444444444444", name: "Jebel Ali Warehouse" },
@@ -86,7 +86,7 @@ const mockCompanies: MyCompaniesResponse = myCompaniesResponseSchema.parse({
     },
     {
       id: "55555555-5555-4555-8555-555555555555",
-      name: "Hyperion Singapore Pte Ltd",
+      name: "Ikration Singapore Pte Ltd",
       branches: [{ id: "66666666-6666-4666-8666-666666666666", name: "Singapore HQ" }],
     },
   ],

@@ -1,4 +1,4 @@
-import { presignedDownloadUrlResponseSchema } from "@hyperion/contracts";
+import { presignedDownloadUrlResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../api/client";
 import { endpoints } from "../api/endpoints";
 

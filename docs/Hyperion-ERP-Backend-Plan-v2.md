@@ -1,4 +1,4 @@
-# Hyperion ERP — Backend Plan v2
+# Ikration ERP — Backend Plan v2
 
 **Supersedes:** `Hyperion-ERP-Backend-Master-Plan.md` (v1)
 **Changed since v1:** deployment model, scope (multi-country + multi-vertical), stack picks, onboarding model, timeline.
@@ -52,7 +52,7 @@ Multi-country adds a fourth: **the tax engine** (§3.3).
 ```
                        ┌─────────────┐
    React SPA ─── TLS ──│    Nginx    │  ← subdomain routes tenant
-                       └──────┬──────┘     (hyperion.yourerp.com)
+                       └──────┬──────┘     (ikration.yourerp.com)
                               │
                      ┌────────▼─────────┐        ┌──────────────────┐
                      │   API process    │        │  Worker process  │
@@ -82,7 +82,7 @@ platform                       ← control plane, becomes its own DB on split
 ├── platform_admins               ← you/Knackroot. Separate auth entirely.
 └── break_glass_sessions
 
-tenant_hyperion                ← self-contained. pg_dump -n = a whole tenant.
+tenant_ikration                ← self-contained. pg_dump -n = a whole tenant.
 ├── companies                     ← legal entities (country, currency, tax, FY)
 ├── branches
 ├── users, roles, permissions, user_roles, role_permissions, field_permissions
@@ -189,7 +189,7 @@ field_definitions (
 ```
 Knackroot (platform_admins)
    └── onboards tenant → creates schema, runs migrations, seeds, creates tenant admin
-         └── Tenant admin (Hyperion)
+         └── Tenant admin (Ikration)
                └── invites employees → email + mobile + roles   (NO password field)
                      └── employee: single-use expiring token
                            → sets own password

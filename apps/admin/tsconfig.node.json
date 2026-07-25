@@ -1,5 +1,5 @@
 {
-  "extends": "@hyperion/config/tsconfig.base.json",
+  "extends": "@ikration/config/tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
     "outDir": "dist-node",

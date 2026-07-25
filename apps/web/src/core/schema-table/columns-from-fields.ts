@@ -1,5 +1,5 @@
 import type { TableColumnsType } from "antd";
-import type { FieldDefinitionsResponse } from "@hyperion/contracts";
+import type { FieldDefinitionsResponse } from "@ikration/contracts";
 import { resolveFieldSections } from "../field-definitions/resolve-sections";
 import type { EntityRow, SchemaTableColumnOverride } from "./types";
 

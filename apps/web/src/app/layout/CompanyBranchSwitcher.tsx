@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Select, Space } from "antd";
-import { myCompaniesResponseSchema } from "@hyperion/contracts";
+import { myCompaniesResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints } from "../../core/api/endpoints";
 import { queryClient } from "../../core/api/query-client";

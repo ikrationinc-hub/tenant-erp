@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { myPermissionsResponseSchema } from "@hyperion/contracts";
+import { myPermissionsResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../api/client";
 import { endpoints } from "../api/endpoints";
 
