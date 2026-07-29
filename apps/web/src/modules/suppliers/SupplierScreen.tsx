@@ -1,9 +1,9 @@
 import type { ReactElement } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { App as AntApp, Button, Drawer, Space, Spin, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
-import type { SupplierBank, SupplierContact } from "@ikration/contracts";
+import { masterOptionsResponseSchema, type SupplierBank, type SupplierContact } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints } from "../../core/api/endpoints";
 import { SchemaTable } from "../../core/schema-table/SchemaTable";
@@ -18,6 +18,24 @@ const ENTITY = "supplier";
 
 function rowId(row: EntityRow): string {
   return typeof row.id === "string" ? row.id : "";
+}
+
+/** Same pattern as PurchaseListScreen's useMasterOptions - a select field
+ * backed by a masters:X optionsSource stores the master's row id, not a
+ * label, so the list needs its own resolved-value -> label lookup (the
+ * form's Dropdown does this too, but via use-field-options.ts, which
+ * SchemaTable's read-only grid doesn't use). */
+function useMasterOptions(master: string) {
+  const query = useQuery({
+    queryKey: ["field-options", master],
+    queryFn: () => apiFetch(endpoints.masterOptions(master), {}, { schema: masterOptionsResponseSchema }),
+    staleTime: 5 * 60_000,
+  });
+  return query.data?.options ?? [];
+}
+
+function asDisplayString(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 
 type DrawerState = { mode: "create" } | { mode: "edit"; id: string } | null;
@@ -83,6 +101,23 @@ export function SupplierScreen(): ReactElement {
   const queryClient = useQueryClient();
   const { message } = AntApp.useApp();
 
+  const supplierTypes = useMasterOptions("supplier-types");
+  const countries = useMasterOptions("countries");
+  const cities = useMasterOptions("cities");
+  const paymentTerms = useMasterOptions("payment-terms");
+  const currencies = useMasterOptions("currencies");
+
+  const supplierTypeLabels = useMemo(() => new Map(supplierTypes.map((o) => [o.value, o.label])), [supplierTypes]);
+  const countryLabels = useMemo(() => new Map(countries.map((o) => [o.value, o.label])), [countries]);
+  const cityLabels = useMemo(() => new Map(cities.map((o) => [o.value, o.label])), [cities]);
+  const paymentTermLabels = useMemo(() => new Map(paymentTerms.map((o) => [o.value, o.label])), [paymentTerms]);
+  const currencyLabels = useMemo(() => new Map(currencies.map((o) => [o.value, o.label])), [currencies]);
+
+  function resolvedLabel(labels: Map<string, string>, value: unknown): string {
+    const id = asDisplayString(value);
+    return labels.get(id) ?? id;
+  }
+
   function refreshList(): void {
     void queryClient.invalidateQueries({ queryKey: ["entity-list", endpoints.suppliers] });
   }
@@ -126,6 +161,13 @@ export function SupplierScreen(): ReactElement {
         module={MODULE}
         entity={ENTITY}
         endpoint={endpoints.suppliers}
+        columns={[
+          { fieldKey: "supplierTypeId", render: (value) => resolvedLabel(supplierTypeLabels, value) },
+          { fieldKey: "countryId", render: (value) => resolvedLabel(countryLabels, value) },
+          { fieldKey: "cityId", render: (value) => resolvedLabel(cityLabels, value) },
+          { fieldKey: "paymentTermId", render: (value) => resolvedLabel(paymentTermLabels, value) },
+          { fieldKey: "currencyId", render: (value) => resolvedLabel(currencyLabels, value) },
+        ]}
         filters={[
           {
             key: "status",

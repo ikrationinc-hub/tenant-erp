@@ -62,17 +62,26 @@ describe("SupplierScreen", () => {
 
       await user.type(await drawer().findByLabelText("Supplier Name", {}, ASYNC), "Metal Traders LLC");
 
-      await user.click(drawer().getByRole("combobox", { name: "Supplier Type" }));
-      await user.click(await screen.findByText("Supplier Types 1"));
+      // The list now resolves these same master-data labels for its own
+      // rows (fixed supplierTypeId/countryId/etc. columns rendering raw
+      // ids), so a bare text match is ambiguous between an already-visible
+      // table cell and the freshly-opened dropdown's option - pick the
+      // option, the one appended last (AntD portals the dropdown at the
+      // end of the DOM, after the table).
+      async function selectDropdownOption(comboboxName: string, optionText: string): Promise<void> {
+        await user.click(drawer().getByRole("combobox", { name: comboboxName }));
+        const matches = await screen.findAllByText(optionText, {}, ASYNC);
+        const lastMatch = matches.at(-1);
+        if (!lastMatch) {
+          throw new Error(`expected at least one match for "${optionText}"`);
+        }
+        await user.click(lastMatch);
+      }
 
-      await user.click(drawer().getByRole("combobox", { name: "Country" }));
-      await user.click(await screen.findByText("United Arab Emirates"));
-
-      await user.click(drawer().getByRole("combobox", { name: "Payment Terms" }));
-      await user.click(await screen.findByText("Payment Terms 1"));
-
-      await user.click(drawer().getByRole("combobox", { name: "Default Currency" }));
-      await user.click(await screen.findByText("UAE Dirham"));
+      await selectDropdownOption("Supplier Type", "Supplier Types 1");
+      await selectDropdownOption("Country", "United Arab Emirates");
+      await selectDropdownOption("Payment Terms", "Payment Terms 1");
+      await selectDropdownOption("Default Currency", "UAE Dirham");
 
       await user.click(drawer().getByRole("button", { name: "Save" }));
 
