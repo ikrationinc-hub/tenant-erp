@@ -74,17 +74,19 @@ function SupplierEditForm({
   }
 
   return (
-    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-      <SchemaForm
-        module={MODULE}
-        entity={ENTITY}
-        mode="edit"
-        initialValues={supplierQuery.data}
-        onSubmit={(values) => onSubmit({ ...values, contacts, banks })}
-      />
-      <SupplierContactsEditor value={contacts} onChange={setContacts} />
-      <SupplierBanksEditor value={banks} onChange={setBanks} />
-    </Space>
+    <SchemaForm
+      module={MODULE}
+      entity={ENTITY}
+      mode="edit"
+      initialValues={supplierQuery.data}
+      onSubmit={(values) => onSubmit({ ...values, contacts, banks })}
+      footer={
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <SupplierContactsEditor value={contacts} onChange={setContacts} />
+          <SupplierBanksEditor value={banks} onChange={setBanks} />
+        </Space>
+      }
+    />
   );
 }
 
@@ -229,15 +231,17 @@ function CreateSupplierForm({
   const [banks, setBanks] = useState<SupplierBank[]>([]);
 
   return (
-    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-      <SchemaForm
-        module={MODULE}
-        entity={ENTITY}
-        mode="create"
-        onSubmit={(values) => onSubmit({ ...values, contacts, banks })}
-      />
-      <SupplierContactsEditor value={contacts} onChange={setContacts} />
-      <SupplierBanksEditor value={banks} onChange={setBanks} />
-    </Space>
+    <SchemaForm
+      module={MODULE}
+      entity={ENTITY}
+      mode="create"
+      onSubmit={(values) => onSubmit({ ...values, contacts, banks })}
+      footer={
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <SupplierContactsEditor value={contacts} onChange={setContacts} />
+          <SupplierBanksEditor value={banks} onChange={setBanks} />
+        </Space>
+      }
+    />
   );
 }

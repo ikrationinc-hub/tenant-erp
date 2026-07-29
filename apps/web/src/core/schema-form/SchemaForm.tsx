@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -53,6 +53,19 @@ export interface SchemaFormProps {
   onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
   /** FileUpload/MultiUpload fields need a real entity/entityId to attach to - absent (e.g. create mode, before the record has an id) they fall back to local-only tracking. */
   uploadContext?: UploadContext;
+  /**
+   * Content rendered inside this SAME form, after the field-definitions
+   * sections but before the one Save button - for a caller that has its
+   * own non-field-definitions sub-editor bolted onto this entity (e.g.
+   * Supplier's contacts/banks sub-tables, FE-6 - there's no repeating-
+   * group field type in the 13-type spec, so these can't be schema-driven
+   * fields). Rendering them as a sibling AFTER SchemaForm instead strands
+   * them after the Save button, looking like they have no way to commit
+   * even though the caller's onSubmit merges their state in regardless.
+   * The caller owns whatever state/onChange this content needs; SchemaForm
+   * only renders it.
+   */
+  footer?: ReactNode;
 }
 
 /**
@@ -70,6 +83,7 @@ export function SchemaForm({
   initialValues,
   onSubmit,
   uploadContext,
+  footer,
 }: SchemaFormProps): ReactElement {
   const schemaQuery = useQuery({
     queryKey: ["field-definitions", module, entity],
@@ -92,6 +106,7 @@ export function SchemaForm({
       initialValues={initialValues}
       onSubmit={onSubmit}
       uploadContext={uploadContext}
+      footer={footer}
     />
   );
 }
@@ -102,12 +117,14 @@ function SchemaFormBody({
   initialValues,
   onSubmit,
   uploadContext,
+  footer,
 }: {
   schema: FieldDefinitionsResponse;
   mode: SchemaFormMode;
   initialValues: Record<string, unknown> | undefined;
   onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
   uploadContext: UploadContext | undefined;
+  footer: ReactNode;
 }): ReactElement {
   const validator = useMemo(() => compileValidator(schema), [schema]);
   const defaultValues = useMemo(
@@ -152,6 +169,7 @@ function SchemaFormBody({
             ))}
           </Card>
         ))}
+        {footer}
         {submitError && <Alert type="error" showIcon message={submitError} />}
         {mode !== "view" && (
           <Button type="primary" htmlType="submit">
