@@ -7,7 +7,7 @@ import { endpoints } from "../api/endpoints";
 import { renderApp } from "../../test/render-app";
 import { useAppStore } from "../store/app-store";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
 
 function signIn(): void {
   useAppStore.setState({

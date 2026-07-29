@@ -7,7 +7,7 @@ import {
 import { endpoints } from "../core/api/endpoints";
 import { listHandler, updateHandler, type MockRow } from "./admin-handlers";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
 
 /** Mirrors suppliers.validator.ts's createSupplierSchema/updateSupplierSchema field-for-field - 11 of docs/spec/Purchase-V2.md §1's 15 fields (the other 4 - Contact Person/Mobile/Email/Bank Details - are the contacts/banks sub-tables, not field-definitions-driven). No real field-engine entry yet (module="suppliers" isn't in core/field-engine/defaults.ts). */
 export const supplierFieldDefinitions: FieldDefinitionsResponse = fieldDefinitionsResponseSchema.parse({

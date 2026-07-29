@@ -11,7 +11,7 @@ import { renderWithProviders } from "../../test/render-with-providers";
 import { SchemaForm } from "./SchemaForm";
 import { schemaFormDevFixture } from "./dev-fixture";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
 
 function mockFieldDefinitions(module: string, entity: string, response: FieldDefinitionsResponse): void {
   server.use(http.get(`${API_BASE}${endpoints.fieldDefinitions(module, entity)}`, () => HttpResponse.json(response)));

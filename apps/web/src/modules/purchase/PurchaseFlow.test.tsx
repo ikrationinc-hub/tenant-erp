@@ -13,7 +13,7 @@ import { PurchaseListScreen, PURCHASE_LIST_PATH } from "./PurchaseListScreen";
 import { PurchaseDetailScreen } from "./PurchaseDetailScreen";
 
 const ASYNC = { timeout: 20000 };
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
 
 function signIn(): void {
   useAppStore.setState({

@@ -5,7 +5,7 @@ import { useAppStore } from "../store/app-store";
 import { apiFetch } from "./client";
 import { endpoints } from "./endpoints";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
 
 describe("apiFetch - refresh single-flight", () => {
   it("fires exactly one /auth/refresh call for N concurrent 401s, and every caller ends up on the new token", async () => {

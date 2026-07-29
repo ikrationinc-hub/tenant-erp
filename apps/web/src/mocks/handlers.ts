@@ -36,7 +36,7 @@ import { suppliersHandlers, resolveSupplierFieldDefinitions } from "./suppliers-
 import { purchaseHandlers, resolvePurchaseFieldDefinitions } from "./purchase-handlers";
 import { attachmentsHandlers } from "./attachments-handlers";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
 
 /**
  * Fixture data is parsed through the same contract schemas the real API is

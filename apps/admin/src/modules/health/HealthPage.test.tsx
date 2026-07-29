@@ -7,7 +7,7 @@ import { server } from "../../mocks/server";
 import { endpoints } from "../../core/api/endpoints";
 import { useAdminStore } from "../../core/store/admin-store";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_ADMIN_API_BASE_URL;
 
 function signIn(): void {
   useAdminStore.setState({

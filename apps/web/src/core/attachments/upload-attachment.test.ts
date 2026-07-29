@@ -6,7 +6,7 @@ import { useAppStore } from "../store/app-store";
 import { endpoints } from "../api/endpoints";
 import { server } from "../../mocks/server";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
 
 /**
  * Drives the real XMLHttpRequest-with-progress code path end to end

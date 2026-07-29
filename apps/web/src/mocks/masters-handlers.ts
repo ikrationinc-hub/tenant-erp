@@ -7,7 +7,7 @@ import {
 } from "@ikration/contracts";
 import { MASTER_REGISTRY } from "../modules/masters/master-registry";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
 
 interface MockMasterRow extends Record<string, unknown> {
   id: string;

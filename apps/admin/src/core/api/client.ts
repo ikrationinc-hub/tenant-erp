@@ -45,7 +45,7 @@ function rawFetch(path: string, options: ApiFetchOptions, withAuth: boolean): Pr
     }
   }
 
-  return fetch(`${import.meta.env.VITE_API_BASE_URL}${path}`, {
+  return fetch(`${import.meta.env.VITE_ADMIN_API_BASE_URL}${path}`, {
     ...rest,
     headers,
     body: body !== undefined ? JSON.stringify(body) : null,

@@ -1,8 +1,12 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  // One .env family for the whole monorepo (repo root), not one per app -
+  // Vite defaults envDir to this app's own directory.
+  envDir: fileURLToPath(new URL("../..", import.meta.url)),
   test: {
     environment: "jsdom",
     globals: false,

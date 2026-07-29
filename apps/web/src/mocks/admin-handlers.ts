@@ -13,7 +13,7 @@ import {
 } from "@ikration/contracts";
 import { endpoints } from "../core/api/endpoints";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
 
 // --- Field definitions for the FE-5.5 admin entities ------------------------
 // None of these have a real field-engine entry yet (companies/branches/

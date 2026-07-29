@@ -17,12 +17,10 @@ pnpm install
 
 ## 2. Environment files
 
-Three `.env` files exist already in this repo (`.env` at root, `apps/web/.env`, `apps/admin/.env`) — copy the `.example` versions if setting up fresh elsewhere:
+One `.env` file at repo root, shared by every app — `apps/api`/`apps/worker` load it via Node's `--env-file=../../.env`, and `apps/web`/`apps/admin`'s `vite.config.ts` point `envDir` at the repo root too (Vite otherwise defaults `envDir` to the app's own directory, which is how this used to be three separate files). Copy the `.example` version if setting up fresh elsewhere:
 
 ```bash
 cp .env.example .env
-cp apps/web/.env.example apps/web/.env
-cp apps/admin/.env.example apps/admin/.env
 ```
 
 **Root `.env`** (consumed by `apps/api`, Zod-validated at boot — a missing var fails loudly):
@@ -35,16 +33,11 @@ cp apps/admin/.env.example apps/admin/.env
 - `CLAMAV_HOST` / `CLAMAV_PORT` — attachment virus-scanning (`core/storage/`); `CLAMAV_PORT` defaults to `3310` if unset
 - `WEB_APP_BASE_URL` — origin of `apps/web` (e.g. `http://localhost:5173`), used to build links in invite emails. **Never** point this at the API's own origin — that was a real bug (invite links 404'd) fixed 2026-07-23. See `apps/api/src/core/notification/templates/invite-email.ts`.
 - `PLATFORM_BOOTSTRAP_ADMIN_EMAIL` / `PLATFORM_BOOTSTRAP_ADMIN_PASSWORD` / `PLATFORM_BOOTSTRAP_ADMIN_NAME` — only read by `pnpm seed:platform-admin` (step 6), not by the running server
+- `VITE_WEB_API_BASE_URL` / `VITE_ADMIN_API_BASE_URL` / `VITE_USE_MOCKS` — read by `apps/web`/`apps/admin` respectively; distinct var names because the two apps hit different API path prefixes (`/api/v1` vs `/api/v1/platform`), so they can't share one key in a single shared file
 
 **Note the non-default ports** — `docker/docker-compose.yml` maps Postgres to host `5433` (not 5432) and Redis to `6380` (not 6379), specifically to avoid clashing with any Postgres/Redis you already run locally.
 
-**`apps/web/.env`**:
-- `VITE_API_BASE_URL=http://localhost:3000/api/v1`
-- `VITE_USE_MOCKS=true|false` — defaults to `false`. `true` runs the whole frontend against MSW with **zero backend running**; this was the day-to-day dev mode before the backend existed and is now retired as the documented way to work on `apps/web` (the backend is real and complete — see `docs/CLAUDE-CODE-PROMPTS.md`'s prompt 17). MSW itself isn't gone: `apps/web/src/mocks/*.ts` is still used inside `*.test.tsx` files as a Vitest test double (`VITE_USE_MOCKS=true` in `.env.test` is correct and unrelated to this flag's dev-mode meaning) — only the "run the whole app against fake data" use is deprecated.
-
-**`apps/admin/.env`** (the platform console — see step 6a):
-- `VITE_API_BASE_URL=http://localhost:3000/api/v1/platform`
-- `VITE_USE_MOCKS=true|false` — same semantics as `apps/web`, defaults to `false`
+**`VITE_USE_MOCKS=true|false`** (defaults to `false`) — `true` runs the whole frontend against MSW with **zero backend running**; this was the day-to-day dev mode before the backend existed and is now retired as the documented way to work on `apps/web`/`apps/admin` (the backend is real and complete — see `docs/CLAUDE-CODE-PROMPTS.md`'s prompt 17). MSW itself isn't gone: `apps/web/src/mocks/*.ts` and `apps/admin/src/mocks/*.ts` are still used inside `*.test.tsx` files as a Vitest test double (`VITE_USE_MOCKS=true` in root `.env.test` is correct and unrelated to this flag's dev-mode meaning) — only the "run the whole app against fake data" use is deprecated.
 
 ## 3. Start infrastructure
 

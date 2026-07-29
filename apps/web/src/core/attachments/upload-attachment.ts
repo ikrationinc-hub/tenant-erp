@@ -19,7 +19,7 @@ export function uploadAttachmentWithProgress(
 ): Promise<AttachmentRow> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const url = `${import.meta.env.VITE_API_BASE_URL}${endpoints.uploadAttachment(entity, entityId, fieldKey)}`;
+    const url = `${import.meta.env.VITE_WEB_API_BASE_URL}${endpoints.uploadAttachment(entity, entityId, fieldKey)}`;
     xhr.open("POST", url);
 
     const { accessToken } = useAppStore.getState();

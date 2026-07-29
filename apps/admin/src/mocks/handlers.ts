@@ -20,7 +20,7 @@ import {
 } from "@ikration/contracts";
 import { endpoints } from "../core/api/endpoints";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_ADMIN_API_BASE_URL;
 
 /**
  * Fixture data is parsed through the same contract schemas the real API is
