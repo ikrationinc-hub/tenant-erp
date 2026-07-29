@@ -8,6 +8,8 @@ import { apiFetch } from "../../core/api/client";
 import { endpoints } from "../../core/api/endpoints";
 import { SchemaTable } from "../../core/schema-table/SchemaTable";
 import type { EntityRow } from "../../core/schema-table/types";
+import { Can } from "../../core/permissions/Can";
+import { useAppStore } from "../../core/store/app-store";
 import { InviteUserDrawer } from "./InviteUserDrawer";
 import { ProvisionUserDrawer } from "./ProvisionUserDrawer";
 import { EditUserRolesModal } from "./EditUserRolesModal";
@@ -54,6 +56,11 @@ export function UserManagementScreen(): ReactElement {
   const [editRolesRow, setEditRolesRow] = useState<EntityRow | null>(null);
   const queryClient = useQueryClient();
   const { message } = AntApp.useApp();
+  const currentUserId = useAppStore((state) => state.user?.id);
+
+  function isNotSelf(row: EntityRow): boolean {
+    return row.id !== currentUserId;
+  }
 
   const roleOptionsQuery = useQuery({
     queryKey: ["field-options", "roles", "", ""],
@@ -104,12 +111,16 @@ export function UserManagementScreen(): ReactElement {
           Users
         </Typography.Title>
         <Space>
-          <Button icon={<UserAddOutlined />} onClick={() => setProvisionOpen(true)}>
-            Provision (no email)
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setInviteOpen(true)}>
-            Invite User
-          </Button>
+          <Can permission="users.user.provision">
+            <Button icon={<UserAddOutlined />} onClick={() => setProvisionOpen(true)}>
+              Provision (no email)
+            </Button>
+          </Can>
+          <Can permission="users.user.create">
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setInviteOpen(true)}>
+              Invite User
+            </Button>
+          </Can>
         </Space>
       </Space>
 
@@ -160,7 +171,11 @@ export function UserManagementScreen(): ReactElement {
             label: "Suspend",
             permission: "users.user.update",
             danger: true,
-            isVisible: (row) => row.status === "active",
+            // Never your own row - suspending yourself with nobody else
+            // around to reactivate you is a self-lockout foot-gun, not a
+            // permission question (an Admin holds users.user.update on
+            // every row including their own).
+            isVisible: (row) => row.status === "active" && isNotSelf(row),
             onClick: (row) => void suspend(row),
           },
           {
@@ -174,6 +189,10 @@ export function UserManagementScreen(): ReactElement {
             key: "edit-roles",
             label: "Edit roles",
             permission: "users.user.update",
+            // Same self-lockout guard as Suspend - stripping your own
+            // last role (or the one holding admin.role.update itself)
+            // would leave nobody able to grant it back.
+            isVisible: (row) => isNotSelf(row),
             onClick: (row) => setEditRolesRow(row),
           },
         ]}
