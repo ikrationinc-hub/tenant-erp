@@ -1,9 +1,9 @@
 import type { ReactElement, ReactNode } from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { App as AntApp, Alert, Button, Card, Drawer, Space, Spin, Table, Tag, Typography } from "antd";
-import { listAttachmentsResponseSchema, type AttachmentRow } from "@ikration/contracts";
+import { listAttachmentsResponseSchema, masterOptionsResponseSchema, type AttachmentRow } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints, withQuery } from "../../core/api/endpoints";
 import { SchemaForm } from "../../core/schema-form/SchemaForm";
@@ -12,6 +12,23 @@ import { useHasPermission } from "../../core/permissions/use-permissions";
 import { PURCHASE_LIST_PATH } from "./PurchaseListScreen";
 
 const MULTI_UPLOAD_ATTACHMENT_KEYS = new Set(["otherDocuments", "otherDocuments2"]);
+
+/** Same pattern as PurchaseListScreen/SupplierScreen's useMasterOptions - a select field backed by a masters:X optionsSource stores the master's row id, not a label, so every sub-panel table here needs its own resolved-value -> label lookup (SchemaForm's Dropdown does this too, but via use-field-options.ts, which a plain read-only Table doesn't go through). */
+function useMasterLabels(master: string): Map<string, string> {
+  const query = useQuery({
+    queryKey: ["field-options", master],
+    queryFn: () => apiFetch(endpoints.masterOptions(master), {}, { schema: masterOptionsResponseSchema }),
+    staleTime: 5 * 60_000,
+  });
+  const options = query.data?.options ?? [];
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- options is a fresh array every render (query.data?.options ?? []); re-keying on it would rebuild the Map every render for no reason. staleTime already keeps query.data itself stable across re-renders until it actually changes.
+  return useMemo(() => new Map(options.map((option) => [option.value, option.label])), [query.data]);
+}
+
+function resolvedLabel(labels: Map<string, string>, value: unknown): string {
+  const id = typeof value === "string" || typeof value === "number" ? String(value) : "";
+  return labels.get(id) ?? id;
+}
 
 /**
  * FileUpload/MultiUpload fields only round-trip whatever their own
@@ -119,6 +136,7 @@ export function PurchaseDetailScreen({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { message } = AntApp.useApp();
+  const customerLabels = useMasterLabels("customers");
 
   const purchaseQuery = useQuery({
     queryKey: ["purchases", purchaseId],
@@ -245,7 +263,11 @@ export function PurchaseDetailScreen({
             rows={rowsOf(purchase.allocations)}
             onAdded={refresh}
             columns={[
-              { title: "Reserved Customer", dataIndex: "reservedCustomerId" },
+              {
+                title: "Reserved Customer",
+                dataIndex: "reservedCustomerId",
+                render: (value) => resolvedLabel(customerLabels, value),
+              },
               { title: "Allocation %", dataIndex: "allocationPct" },
             ]}
           />
@@ -322,6 +344,9 @@ function PurchaseItemsPanel({
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const { message } = AntApp.useApp();
+  const itemLabels = useMasterLabels("items");
+  const gradeLabels = useMasterLabels("item-grades");
+  const uomLabels = useMasterLabels("uom");
 
   async function handleSubmit(values: Record<string, unknown>): Promise<void> {
     await apiFetch(endpoints.purchaseItems(purchaseId), { method: "POST", body: values });
@@ -349,10 +374,10 @@ function PurchaseItemsPanel({
         size="small"
         locale={{ emptyText: "No items yet" }}
         columns={[
-          { title: "Item", dataIndex: "itemId" },
-          { title: "Grade", dataIndex: "gradeId" },
+          { title: "Item", dataIndex: "itemId", render: (value) => resolvedLabel(itemLabels, value) },
+          { title: "Grade", dataIndex: "gradeId", render: (value) => resolvedLabel(gradeLabels, value) },
           { title: "Quantity", dataIndex: "quantity" },
-          { title: "UOM", dataIndex: "uomId" },
+          { title: "UOM", dataIndex: "uomId", render: (value) => resolvedLabel(uomLabels, value) },
           {
             title: "Rate (USD)",
             dataIndex: "pricing",
@@ -391,6 +416,7 @@ function PurchaseHedgesPanel({
   const [open, setOpen] = useState(false);
   const { message } = AntApp.useApp();
   const canUpdate = useHasPermission("purchase.po.update");
+  const platformLabels = useMasterLabels("hedge-platforms");
 
   async function handleSubmit(values: Record<string, unknown>): Promise<void> {
     await apiFetch(endpoints.purchaseHedges(purchaseId), { method: "POST", body: values });
@@ -424,12 +450,30 @@ function PurchaseHedgesPanel({
         size="small"
         locale={{ emptyText: "No hedges yet" }}
         columns={[
-          { title: "Platform", dataIndex: "hedgePlatformId" },
+          { title: "Platform", dataIndex: "hedgePlatformId", render: (value) => resolvedLabel(platformLabels, value) },
           { title: "Contract #", dataIndex: "contractNumber" },
-          { title: "Position", dataIndex: "position" },
+          {
+            title: "Position",
+            dataIndex: "position",
+            render: (value: unknown) => {
+              const position = asDisplayString(value);
+              return (
+                <Tag color={position === "buy" ? "green" : position === "sell" ? "red" : "default"}>
+                  {position ? position.charAt(0).toUpperCase() + position.slice(1) : "—"}
+                </Tag>
+              );
+            },
+          },
           { title: "Quantity", dataIndex: "quantity" },
           { title: "Rate", dataIndex: "rate" },
-          { title: "Status", dataIndex: "status" },
+          {
+            title: "Status",
+            dataIndex: "status",
+            render: (value: unknown) => {
+              const hedgeStatus = asDisplayString(value);
+              return <Tag color={hedgeStatus === "open" ? "blue" : "default"}>{hedgeStatus || "—"}</Tag>;
+            },
+          },
           {
             title: "",
             key: "actions",
@@ -452,6 +496,7 @@ function PurchaseHedgesPanel({
 interface SubResourceColumn {
   title: string;
   dataIndex: string;
+  render?: (value: unknown, row: Record<string, unknown>) => ReactNode;
 }
 
 function PurchaseSubResourceList({
@@ -501,7 +546,11 @@ function PurchaseSubResourceList({
         pagination={false}
         size="small"
         locale={{ emptyText: "None added yet" }}
-        columns={columns.map((column) => ({ title: column.title, dataIndex: column.dataIndex }))}
+        columns={columns.map((column) => ({
+          title: column.title,
+          dataIndex: column.dataIndex,
+          ...(column.render ? { render: column.render } : {}),
+        }))}
       />
       <Drawer title={`Add ${title}`} open={open} onClose={() => setOpen(false)} width={420} destroyOnHidden>
         <SchemaForm module="purchase" entity={entity} mode="create" onSubmit={handleSubmit} />

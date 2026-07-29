@@ -327,6 +327,58 @@ describe("Purchase - metadata-driven sections", () => {
   );
 });
 
+describe("Purchase - sub-panel tables resolve master ids to names", () => {
+  it(
+    "shows Item/Grade/UOM, Reserved Customer, and Hedge Platform as names, not raw UUIDs",
+    async () => {
+      signIn();
+      server.use(
+        http.get(`${API_BASE}${endpoints.purchases}/purchase-resolved-ids`, () =>
+          HttpResponse.json({
+            ...draftFixture("purchase-resolved-ids"),
+            items: [
+              {
+                id: "item-row-1",
+                itemId: "items-1",
+                gradeId: "item-grades-1",
+                quantity: "5.000000",
+                uomId: "uom-1",
+                pricing: { purchaseRateUsd: "5.000000", purchaseAmountUsd: "25.00", purchaseAmountAed: "91.75" },
+              },
+            ],
+            allocations: [{ id: "alloc-row-1", reservedCustomerId: "customers-1", allocationPct: "100.000000" }],
+            hedges: [
+              {
+                id: "hedge-row-1",
+                hedgePlatformId: "hedge-platforms-1",
+                contractNumber: "HC-1",
+                position: "buy",
+                quantity: "5.000000",
+                rate: "1.000000",
+                status: "open",
+              },
+            ],
+          }),
+        ),
+      );
+
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-resolved-ids`] });
+
+      expect(await screen.findByText("Items 1", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Item Grades 1", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Units of Measure 1", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Customers 1", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Hedge Platforms 1", {}, ASYNC)).toBeInTheDocument();
+      expect(screen.queryByText("items-1")).not.toBeInTheDocument();
+      expect(screen.queryByText("item-grades-1")).not.toBeInTheDocument();
+      expect(screen.queryByText("uom-1")).not.toBeInTheDocument();
+      expect(screen.queryByText("customers-1")).not.toBeInTheDocument();
+      expect(screen.queryByText("hedge-platforms-1")).not.toBeInTheDocument();
+    },
+    30000,
+  );
+});
+
 describe("Purchase - attachment upload wiring", () => {
   // The progress-reporting and resolve/reject-on-server-status contract is
   // proven precisely (including a virus-scan rejection) in
