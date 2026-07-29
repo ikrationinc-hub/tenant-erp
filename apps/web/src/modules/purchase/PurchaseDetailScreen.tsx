@@ -137,6 +137,15 @@ export function PurchaseDetailScreen({
   const queryClient = useQueryClient();
   const { message } = AntApp.useApp();
   const customerLabels = useMasterLabels("customers");
+  // A Viewer (read-only role, missing purchase.po.create/update) was
+  // getting an editable Header/Shipment form and Additional Cost form on
+  // any non-posted purchase - the mode/readOnly calculations below only
+  // ever checked `posted` (rule 8's immutability), never the signed-in
+  // user's own permission. Every sub-panel's own Add/Close button was
+  // already correctly gated by <Can>/useHasPermission; these two weren't.
+  const canCreate = useHasPermission("purchase.po.create");
+  const canUpdate = useHasPermission("purchase.po.update");
+  const canEditHeader = mode === "create" ? canCreate : canUpdate;
 
   const purchaseQuery = useQuery({
     queryKey: ["purchases", purchaseId],
@@ -243,7 +252,7 @@ export function PurchaseDetailScreen({
         <SchemaForm
           module="purchase"
           entity="header"
-          mode={posted ? "view" : mode === "create" ? "create" : "edit"}
+          mode={posted || !canEditHeader ? "view" : mode === "create" ? "create" : "edit"}
           {...(headerInitialValues ? { initialValues: headerInitialValues } : {})}
           onSubmit={handleHeaderSubmit}
           {...(purchaseId ? { uploadContext: { entity: "purchase", entityId: purchaseId } } : {})}
@@ -252,7 +261,7 @@ export function PurchaseDetailScreen({
 
       {mode === "edit" && purchaseId && purchase && (
         <>
-          <PurchaseCostsPanel purchaseId={purchaseId} readOnly={posted} onSaved={refresh} costs={purchase.additionalCosts} />
+          <PurchaseCostsPanel purchaseId={purchaseId} readOnly={posted || !canUpdate} onSaved={refresh} costs={purchase.additionalCosts} />
           <PurchaseItemsPanel purchaseId={purchaseId} readOnly={posted} onAdded={refresh} items={rowsOf(purchase.items)} />
           <PurchaseSubResourceList
             title="Customer Allocation"

@@ -251,6 +251,33 @@ describe("Purchase - permission-gated workflow transitions", () => {
     },
     30000,
   );
+
+  it(
+    "hides the header form's Save button (and Additional Cost's) for a Viewer missing purchase.po.update, on a draft or approved purchase",
+    async () => {
+      signIn();
+      server.use(
+        http.get(`${API_BASE}${endpoints.purchases}/purchase-viewer`, () =>
+          HttpResponse.json({ ...draftFixture("purchase-viewer"), status: "approved" }),
+        ),
+        http.get(`${API_BASE}${endpoints.myPermissions}`, () => HttpResponse.json({ permissions: ["purchase.po.read"] })),
+      );
+
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-viewer`] });
+
+      expect(await screen.findByText("Approved", {}, ASYNC)).toBeInTheDocument();
+      // Wait for both SchemaForms to actually finish their own
+      // field-definitions fetch (each shows its own loading spinner until
+      // then) - asserting Save's absence any earlier is meaningless, since
+      // neither form has rendered a Save button yet either way. The label
+      // text itself (not findByLabelText) since a Viewer's fields render
+      // read-only (a <span>, not a labelled <input>).
+      await screen.findByText("Purchase Date", {}, ASYNC);
+      await screen.findByText("Other Charges", {}, ASYNC);
+      expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+    },
+    30000,
+  );
 });
 
 describe("Purchase - list view", () => {
