@@ -58,6 +58,7 @@ export async function addLmeRecord(ctx: RequestContext, purchaseId: string, inpu
       companyId: scope.companyId,
       lmeExchangeId: input.lmeExchangeId,
       marketPriceId: marketPrice.id,
+      metal: input.metal,
       lmePriceUsd: roundRate(lmePrice),
       fixingDate: input.fixingDate,
       agreedPremiumPct: roundRate(premiumPct),
@@ -73,6 +74,7 @@ export async function addLmeRecord(ctx: RequestContext, purchaseId: string, inpu
       action: "lme_record.created",
       after: {
         marketPriceId: row.marketPriceId,
+        metal: row.metal,
         lmePriceUsd: row.lmePriceUsd,
         fixingDate: row.fixingDate,
         agreedPremiumPct: row.agreedPremiumPct,

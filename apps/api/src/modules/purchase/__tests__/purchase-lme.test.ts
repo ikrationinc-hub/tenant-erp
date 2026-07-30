@@ -37,6 +37,7 @@ const lmeRecordSchema = z.object({
   purchaseId: z.string(),
   lmeExchangeId: z.string(),
   marketPriceId: z.string(),
+  metal: z.string(),
   lmePriceUsd: z.string(),
   fixingDate: z.string(),
   agreedPremiumPct: z.string(),
@@ -208,6 +209,11 @@ describe("modules/purchase - Platform Hedging / LME Records, session (d): LME pr
       const record = asLmeRecord(res);
       expect(record.lmePriceUsd).toBe("8432.750000");
       expect(record.fixingDate).toBe("2024-06-12");
+      // The metal recorded on market_prices is also snapshotted directly
+      // onto the lme_record itself - the UI's LME Records table renders
+      // this column straight off this row (dataIndex: "metal"), it never
+      // joins back to market_prices to resolve it.
+      expect(record.metal).toBe("Copper");
 
       // The price actually landed in the immutable ledger first.
       const [marketPrice] = await withTenantSchema(tenant.schemaName, (tx) =>

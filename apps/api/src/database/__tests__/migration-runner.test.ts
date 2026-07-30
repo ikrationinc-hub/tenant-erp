@@ -37,6 +37,7 @@ const REAL_MIGRATION_VERSIONS = [
   "0019_lucky_sleeper",
   "0020_companies_country_currency_fk",
   "0021_companies_drop_country_currency_code",
+  "0022_add_lme_records_metal",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

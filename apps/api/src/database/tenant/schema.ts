@@ -1365,6 +1365,8 @@ export const lmeRecords = pgTable(
     marketPriceId: uuid("market_price_id")
       .notNull()
       .references(() => marketPrices.id, { onDelete: "restrict" }),
+    /** Snapshotted from market_prices.metal at insert time (purchase-lme.service.ts) - same reasoning as lmePriceUsd/fixingDate/agreedPremiumPct below: a value that also lives on market_prices, but captured here too so this row is a self-contained record of what was recorded, not a dangling reference. */
+    metal: text("metal").notNull(),
     lmePriceUsd: numeric("lme_price_usd", { precision: 18, scale: 6 }).notNull(),
     fixingDate: date("fixing_date").notNull(),
     agreedPremiumPct: numeric("agreed_premium_pct", { precision: 18, scale: 6 }).notNull(),

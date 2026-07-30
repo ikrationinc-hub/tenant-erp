@@ -155,6 +155,13 @@
       "when": 1784863662250,
       "tag": "0021_companies_drop_country_currency_code",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785408282561,
+      "tag": "0022_add_lme_records_metal",
+      "breakpoints": true
     }
   ]
 }
