@@ -5,7 +5,7 @@ import { closeDbPool } from "../../../config/db.js";
 import { closeRedis } from "../../../config/redis.js";
 import { createTenantSchema, type ProvisionedTenant } from "../../../core/tenant/provisioner.js";
 import { closeTenantDbPool, withTenantSchema } from "../../../database/get-db.js";
-import { companies, fieldDefinitions, users } from "../../../database/tenant/schema.js";
+import { auditLogs, companies, fieldDefinitions, users } from "../../../database/tenant/schema.js";
 import { and, eq } from "drizzle-orm";
 import { assignRoleToUser, createRole, setFieldPermission } from "../../rbac/mutations.js";
 import { seedDefaultFieldDefinitions } from "../../provisioning/seed-field-definitions.js";
@@ -196,6 +196,35 @@ describe("core/field-engine", () => {
 
       const after = await resolveFieldDefinitions(ctx, "purchase", "po");
       expect(after.find((f) => f.fieldKey === "freight")?.label).toBe("Freight Cost");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "the write is audited - same transaction, before/after values, standard audit engine",
+    async () => {
+      const seed = await seedTenantWithUser("field-audit");
+      const id = await findFieldDefinitionId(seed.tenant.schemaName, seed.companyId, "purchase", "po", "insurance");
+
+      await updateFieldDefinition({
+        id,
+        companyId: seed.companyId,
+        schemaName: seed.tenant.schemaName,
+        updatedBy: seed.userId,
+        label: "Insurance Cost",
+      });
+
+      const [logRow] = await withTenantSchema(seed.tenant.schemaName, (tx) =>
+        tx
+          .select()
+          .from(auditLogs)
+          .where(and(eq(auditLogs.entity, "field_definition"), eq(auditLogs.entityId, id)))
+          .limit(1),
+      );
+      expect(logRow?.action).toBe("field_definition.changed");
+      expect(logRow?.changedBy).toBe(seed.userId);
+      expect((logRow?.before as { label?: string } | null)?.label).toBe("Insurance");
+      expect((logRow?.after as { label?: string } | null)?.label).toBe("Insurance Cost");
     },
     TEST_TIMEOUT_MS,
   );

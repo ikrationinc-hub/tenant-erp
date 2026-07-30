@@ -238,7 +238,7 @@ describe("modules/purchase - Record Purchase, session (c): additional costs (doc
   it(
     "renaming Other Charges via the field engine changes only the label, never the stored value or calculation",
     async () => {
-      const tenant = await seedTenant("rename-other-charges", ["field_definitions.field.read", "field_definitions.field.update"]);
+      const tenant = await seedTenant("rename-other-charges", ["field_definitions.field.read", "admin.field.manage"]);
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
       const purchaseId = await createDraftPurchase(app, authHeader, tenant);

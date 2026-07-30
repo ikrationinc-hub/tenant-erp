@@ -28,6 +28,8 @@ const effectiveFieldSchema = z.object({
   isVisible: z.boolean(),
   isMandatory: z.boolean(),
   isEditable: z.boolean(),
+  isSystem: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
   optionsSource: z.union([z.string(), staticOptionsSourceSchema]).optional(),
   fieldType: z.string().optional(),
 });
@@ -142,11 +144,70 @@ describe("field-definitions HTTP module", () => {
   );
 
   it(
+    "GET /modules lists every (module, entity) pair with field definitions, for the admin picker",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-modules", ["admin.field.manage"]);
+
+      const res = await request(createApp())
+        .get("/api/v1/field-definitions/modules")
+        .set("Authorization", `Bearer ${admin.accessToken}`);
+
+      expect(res.status).toBe(200);
+      const modules = (res.body as { modules: { module: string; entity: string }[] }).modules;
+      expect(modules).toContainEqual({ module: "purchase", entity: "po" });
+      expect(modules).toContainEqual({ module: "suppliers", entity: "supplier" });
+      // Not hardcoded on the frontend or here - every entry sourced live
+      // from FIELD_DEFAULTS, so a new module/entity shows up automatically.
+      expect(modules.length).toBeGreaterThan(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "GET /modules rejects a caller without admin.field.manage - field_definitions.field.read alone isn't enough",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-modules-403", ["field_definitions.field.read"]);
+
+      const res = await request(createApp())
+        .get("/api/v1/field-definitions/modules")
+        .set("Authorization", `Bearer ${admin.accessToken}`);
+
+      expect(res.status).toBe(403);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "PATCH rejects a caller without admin.field.manage - field_definitions.field.update alone isn't enough",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-patch-403", [
+        "field_definitions.field.read",
+        "field_definitions.field.update",
+      ]);
+
+      const [row] = await withTenantSchema(admin.schemaName, (tx) =>
+        tx.select().from(fieldDefinitions).limit(1),
+      );
+      if (!row) {
+        throw new Error("expected at least one seeded field_definitions row");
+      }
+
+      const res = await request(createApp())
+        .patch(`/api/v1/field-definitions/${row.id}`)
+        .set("Authorization", `Bearer ${admin.accessToken}`)
+        .send({ label: "Should Not Apply" });
+
+      expect(res.status).toBe(403);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "PATCH rejects an attempt to override dataType with a 422 - it is structurally not an overridable field",
     async () => {
       const admin = await seedTenantWithAdmin("fd-datatype", [
         "field_definitions.field.read",
-        "field_definitions.field.update",
+        "admin.field.manage",
       ]);
 
       const [row] = await withTenantSchema(admin.schemaName, (tx) =>
@@ -172,7 +233,7 @@ describe("field-definitions HTTP module", () => {
     async () => {
       const admin = await seedTenantWithAdmin("fd-proof", [
         "field_definitions.field.read",
-        "field_definitions.field.update",
+        "admin.field.manage",
       ]);
       const app = createApp();
       const authHeader = `Bearer ${admin.accessToken}`;
@@ -199,6 +260,82 @@ describe("field-definitions HTTP module", () => {
       expect(otherChargesAfter?.label).toBe("Clearing Charges");
       expect(otherChargesAfter?.fieldKey).toBe("otherCharges");
       expect(otherChargesAfter?.dataType).toBe("decimal");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "PATCH updates isVisible, isMandatory, and sortOrder together on a non-system field",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-toggles", [
+        "field_definitions.field.read",
+        "admin.field.manage",
+      ]);
+      const app = createApp();
+      const authHeader = `Bearer ${admin.accessToken}`;
+
+      const before = await request(app)
+        .get("/api/v1/field-definitions/purchase/po")
+        .set("Authorization", authHeader);
+      const remarks = asGetFieldDefinitions(before).fields.find((f) => f.fieldKey === "insurance");
+      if (!remarks?.id) {
+        throw new Error("expected insurance to have a real provisioned id");
+      }
+
+      const patchRes = await request(app)
+        .patch(`/api/v1/field-definitions/${remarks.id}`)
+        .set("Authorization", authHeader)
+        .send({ isVisible: false, isMandatory: true, sortOrder: 99 });
+      expect(patchRes.status).toBe(200);
+
+      const after = await request(app)
+        .get("/api/v1/field-definitions/purchase/po")
+        .set("Authorization", authHeader);
+      const updated = asGetFieldDefinitions(after).fields.find((f) => f.fieldKey === "insurance");
+      expect(updated?.isVisible).toBe(false);
+      expect(updated?.isMandatory).toBe(true);
+      expect(updated?.sortOrder).toBe(99);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "PATCH rejects is_visible=false and is_mandatory=false on an is_system field with a 403 - guardrail from Prompt 11",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-system-guard", [
+        "field_definitions.field.read",
+        "admin.field.manage",
+      ]);
+      const app = createApp();
+      const authHeader = `Bearer ${admin.accessToken}`;
+
+      const before = await request(app)
+        .get("/api/v1/field-definitions/suppliers/supplier")
+        .set("Authorization", authHeader);
+      const name = asGetFieldDefinitions(before).fields.find((f) => f.fieldKey === "name");
+      if (!name?.id) {
+        throw new Error("expected supplier.name to have a real provisioned id");
+      }
+
+      const hideRes = await request(app)
+        .patch(`/api/v1/field-definitions/${name.id}`)
+        .set("Authorization", authHeader)
+        .send({ isVisible: false });
+      expect(hideRes.status).toBe(403);
+
+      const optionalRes = await request(app)
+        .patch(`/api/v1/field-definitions/${name.id}`)
+        .set("Authorization", authHeader)
+        .send({ isMandatory: false });
+      expect(optionalRes.status).toBe(403);
+
+      // Tightening (not loosening) an is_system field is fine - only
+      // is_visible:false / is_mandatory:false are rejected.
+      const tightenRes = await request(app)
+        .patch(`/api/v1/field-definitions/${name.id}`)
+        .set("Authorization", authHeader)
+        .send({ label: "Supplier Name (Required)" });
+      expect(tightenRes.status).toBe(200);
     },
     TEST_TIMEOUT_MS,
   );

@@ -87,6 +87,14 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     requiredPermission: "admin.role.read",
   },
   {
+    key: "field-definitions",
+    label: "Field Definitions",
+    path: "/admin/field-definitions",
+    icon: "database",
+    moduleKey: "field-definitions",
+    requiredPermission: "admin.field.manage",
+  },
+  {
     key: "suppliers",
     label: "Suppliers",
     path: "/suppliers",

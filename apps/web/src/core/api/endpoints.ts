@@ -5,6 +5,8 @@ export const endpoints = {
   logout: "/auth/logout",
   me: "/auth/me",
   fieldDefinitions: (module: string, entity: string) => `/field-definitions/${module}/${entity}`,
+  fieldDefinitionModules: "/field-definitions/modules",
+  fieldDefinition: (id: string) => `/field-definitions/${id}`,
   validateInvitation: (token: string) => `/invitations/${token}`,
   acceptInvitation: (token: string) => `/invitations/${token}/accept`,
   changePassword: "/users/me/password",

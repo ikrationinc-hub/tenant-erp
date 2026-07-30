@@ -30,6 +30,16 @@ export async function getFieldDefinitions(req: Request, res: Response, next: Nex
   }
 }
 
+export function listFieldDefinitionModules(_req: Request, res: Response, next: NextFunction): void {
+  try {
+    requireContext();
+    const modules = fieldDefinitionsService.listFieldDefinitionModules();
+    res.status(200).json({ modules });
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function updateFieldDefinition(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const ctx = requireContext();

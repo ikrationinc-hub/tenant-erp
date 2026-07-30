@@ -1,6 +1,7 @@
 import { http, HttpResponse } from "msw";
 import {
   changePasswordResponseSchema,
+  fieldDefinitionModulesResponseSchema,
   fieldDefinitionsResponseSchema,
   loginResponseSchema,
   masterOptionsResponseSchema,
@@ -129,6 +130,28 @@ const mockFieldDefinitions: FieldDefinitionsResponse = fieldDefinitionsResponseS
   ],
 });
 
+/**
+ * The admin field-definitions picker's source list - mirrors the real
+ * GET /field-definitions/modules's shape (every module/entity pair with
+ * field definitions), not exhaustively every mocked entity, just a
+ * representative set covering what this mock environment actually
+ * serves.
+ */
+const mockFieldDefinitionModules = fieldDefinitionModulesResponseSchema.parse({
+  modules: [
+    { module: "purchase", entity: "header" },
+    { module: "purchase", entity: "po" },
+    { module: "purchase", entity: "item" },
+    { module: "purchase", entity: "allocation" },
+    { module: "purchase", entity: "lme_record" },
+    { module: "purchase", entity: "hedge" },
+    { module: "suppliers", entity: "supplier" },
+    { module: "admin", entity: "company" },
+    { module: "admin", entity: "branch" },
+    { module: "users", entity: "user" },
+  ],
+});
+
 /** Mirrors the shape (not the exact ids) of apps/api/src/core/provisioning/seed-menu-tree.ts's default tenant tree - already permission/module-filtered, per resolve.ts, so the mock represents what a fully-privileged demo admin would receive. */
 const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
   menus: [
@@ -137,14 +160,23 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
     { id: "m-branches", key: "branches", label: "Branches", path: "/branches", icon: "database", sortOrder: 3, children: [] },
     { id: "m-users", key: "users", label: "Users", path: "/users", icon: "users", sortOrder: 4, children: [] },
     { id: "m-roles", key: "roles", label: "Roles", path: "/roles", icon: "shield", sortOrder: 5, children: [] },
-    { id: "m-suppliers", key: "suppliers", label: "Suppliers", path: "/suppliers", icon: "shop", sortOrder: 6, children: [] },
+    {
+      id: "m-field-definitions",
+      key: "field-definitions",
+      label: "Field Definitions",
+      path: "/admin/field-definitions",
+      icon: "database",
+      sortOrder: 6,
+      children: [],
+    },
+    { id: "m-suppliers", key: "suppliers", label: "Suppliers", path: "/suppliers", icon: "shop", sortOrder: 7, children: [] },
     {
       id: "m-masters",
       key: "masters",
       label: "Masters",
       path: null,
       icon: "database",
-      sortOrder: 7,
+      sortOrder: 8,
       // Generated from the same registry MasterScreen resolves against
       // (modules/masters/master-registry.tsx) - the real backend seeds one
       // menu row per master the same way (core/provisioning/
@@ -166,7 +198,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Purchase",
       path: null,
       icon: "shopping-cart",
-      sortOrder: 8,
+      sortOrder: 9,
       children: [
         {
           id: "m-purchase-orders",
@@ -197,6 +229,8 @@ const mockPermissions: MyPermissionsResponse = myPermissionsResponseSchema.parse
     "admin.role.read",
     "admin.role.create",
     "admin.role.update",
+    "admin.field.manage",
+    "field_definitions.field.read",
     "purchase.po.read",
     "purchase.po.create",
     "purchase.po.update",
@@ -258,6 +292,7 @@ export const handlers = [
     HttpResponse.json(mockInvitation),
   ),
   http.post(`${API_BASE}${endpoints.acceptInvitation(":token")}`, () => new HttpResponse(null, { status: 204 })),
+  http.get(`${API_BASE}${endpoints.fieldDefinitionModules}`, () => HttpResponse.json(mockFieldDefinitionModules)),
   http.get(`${API_BASE}${endpoints.fieldDefinitions(":module", ":entity")}`, ({ params }) => {
     if (params.module === schemaFormDevFixture.module && params.entity === schemaFormDevFixture.entity) {
       return HttpResponse.json(schemaFormDevFixture);

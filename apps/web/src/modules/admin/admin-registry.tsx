@@ -4,6 +4,7 @@ import { CompanyScreen } from "./CompanyScreen";
 import { BranchScreen } from "./BranchScreen";
 import { UserManagementScreen } from "./UserManagementScreen";
 import { RoleListScreen } from "./RoleListScreen";
+import { FieldDefinitionsScreen } from "./FieldDefinitionsScreen";
 
 /**
  * DynamicRoutes' resolveScreen hook for the tenant-admin surface (FE-5.5) -
@@ -14,11 +15,12 @@ import { RoleListScreen } from "./RoleListScreen";
  * user's menu never reaches this function at all (DynamicRoutes 404s
  * first).
  */
-const ADMIN_SCREENS: Record<string, () => ReactElement> = {
+const ADMIN_SCREENS: Record<string, () => ReactElement | null> = {
   "/companies": () => <CompanyScreen />,
   "/branches": () => <BranchScreen />,
   "/users": () => <UserManagementScreen />,
   "/roles": () => <RoleListScreen />,
+  "/admin/field-definitions": () => <FieldDefinitionsScreen />,
 };
 
 export function resolveAdminScreen(entry: FlatMenuEntry, pathname: string): ReactElement | null {

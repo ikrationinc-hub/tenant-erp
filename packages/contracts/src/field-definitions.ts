@@ -116,6 +116,8 @@ export type VisibilityCondition = z.infer<typeof visibilityConditionSchema>;
  * rule 4: this is metadata to obey, not a permission to re-derive).
  */
 export const fieldDefinitionSchema = z.object({
+  /** The field_definitions row id - present for every Tier 2 field (core/provisioning/seed-field-definitions.ts materializes one row per company from day one), absent for anything else (e.g. a dev fixture). Needed to PATCH a specific row - GET /field-definitions/:module/:entity never omitted it, but this schema did, so apiFetch's parse silently stripped it before this field existed. */
+  id: z.string().optional(),
   fieldKey: z.string(),
   tier: fieldTierSchema.optional(),
   label: z.string(),
@@ -163,3 +165,37 @@ export const fieldDefinitionsResponseSchema = z.object({
   sections: z.array(fieldSectionSchema).optional(),
 });
 export type FieldDefinitionsResponse = z.infer<typeof fieldDefinitionsResponseSchema>;
+
+// --- GET /api/v1/field-definitions/modules ----------------------------------
+
+/**
+ * Every (module, entity) pair that has field definitions - sourced from
+ * core/field-engine/defaults.ts's FIELD_DEFAULTS (which already includes
+ * every master's generated defaults), so an admin picker never needs its
+ * own hardcoded list. No human-readable label at the pair level exists
+ * anywhere in the backend (only individual fields have labels) - a picker
+ * shows "module / entity" as-is rather than inventing one.
+ */
+export const fieldDefinitionModulesResponseSchema = z.object({
+  modules: z.array(z.object({ module: z.string(), entity: z.string() })),
+});
+export type FieldDefinitionModulesResponse = z.infer<typeof fieldDefinitionModulesResponseSchema>;
+
+// --- PATCH /api/v1/field-definitions/:id ------------------------------------
+
+/**
+ * Mirrors apps/api's updateFieldDefinitionSchema exactly - label,
+ * isVisible, isMandatory, sortOrder ONLY. field_key/data_type/module/
+ * entity/tier are never in this shape at all (CLAUDE.md: "data_type is
+ * NEVER overridable") - sending them is a 422 on the way in, not
+ * something this type could even represent.
+ */
+export const updateFieldDefinitionRequestSchema = z
+  .object({
+    label: z.string().min(1).optional(),
+    isVisible: z.boolean().optional(),
+    isMandatory: z.boolean().optional(),
+    sortOrder: z.number().int().optional(),
+  })
+  .strict();
+export type UpdateFieldDefinitionRequest = z.infer<typeof updateFieldDefinitionRequestSchema>;

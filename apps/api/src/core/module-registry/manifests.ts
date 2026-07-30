@@ -164,6 +164,18 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       permissionEntry("admin", "branch", "create", "Add a branch"),
       permissionEntry("admin", "branch", "read", "View branches"),
       permissionEntry("admin", "branch", "update", "Edit a branch"),
+      // Deliberately its own action ("manage"), not "update" - the
+      // ROLE_PERMISSION_FILTERS action-based tiers (Viewer/Officer/
+      // Manager/Admin) only grant "update" up through Officer/Manager;
+      // Tier 2 field configuration should be Admin-only by default, same
+      // as company/branch structure itself is meant to be governed
+      // carefully, not day-to-day data entry.
+      permissionEntry(
+        "admin",
+        "field",
+        "manage",
+        "Edit a Tier 2 field's label, visibility, mandatory flag, or sort order",
+      ),
     ],
     // "masters": companies.country_id/currency_id FK into core/masters'
     // countries/currencies tables (this task's own resolved decision).

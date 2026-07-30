@@ -2,6 +2,7 @@ import { http, HttpResponse } from "msw";
 import {
   fieldDefinitionsResponseSchema,
   paginatedRowsResponseSchema,
+  type FieldDefinition,
   type FieldDefinitionsResponse,
 } from "@ikration/contracts";
 import { endpoints } from "../core/api/endpoints";
@@ -39,17 +40,26 @@ const HEADER_FIELDS = fieldDefinitionsResponseSchema.parse({
   ],
 });
 
-/** Matches the REAL field-engine entry exactly (core/field-engine/defaults.ts, module="purchase" entity="po") - the Tier-2 "Other Charges" proof, FE-3/FE-7's whole point. */
+/**
+ * Matches the REAL field-engine entry exactly (core/field-engine/
+ * defaults.ts, module="purchase" entity="po") - the Tier-2 "Other
+ * Charges" proof, FE-3/FE-7's whole point. `id`s here (unlike every other
+ * mock fixture in this file) exist specifically so the field-definitions
+ * admin screen's mock PATCH handler below can target a row by id, the
+ * same way the real GET/PATCH pair does - a real GET response always has
+ * one (core/provisioning/seed-field-definitions.ts provisions a row per
+ * field from day one).
+ */
 const COSTS_FIELDS = fieldDefinitionsResponseSchema.parse({
   module: "purchase",
   entity: "po",
   fields: [
-    { fieldKey: "freight", label: "Freight", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 0, defaultValue: "0" },
-    { fieldKey: "insurance", label: "Insurance", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 1, defaultValue: "0" },
-    { fieldKey: "customs", label: "Customs", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 2, defaultValue: "0" },
-    { fieldKey: "otherCharges", label: "Other Charges", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 3, defaultValue: "0" },
-    { fieldKey: "otherCharges2", label: "Other Charges 2", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 4, defaultValue: "0" },
-    { fieldKey: "otherCharges3", label: "Other Charges 3", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 5, defaultValue: "0" },
+    { id: "fd-po-freight", fieldKey: "freight", label: "Freight", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 0, defaultValue: "0" },
+    { id: "fd-po-insurance", fieldKey: "insurance", label: "Insurance", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 1, defaultValue: "0" },
+    { id: "fd-po-customs", fieldKey: "customs", label: "Customs", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 2, defaultValue: "0" },
+    { id: "fd-po-other-charges", fieldKey: "otherCharges", label: "Other Charges", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 3, defaultValue: "0" },
+    { id: "fd-po-other-charges-2", fieldKey: "otherCharges2", label: "Other Charges 2", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 4, defaultValue: "0" },
+    { id: "fd-po-other-charges-3", fieldKey: "otherCharges3", label: "Other Charges 3", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 5, defaultValue: "0" },
   ],
 });
 
@@ -126,6 +136,28 @@ const PURCHASE_FIELD_DEFINITIONS: FieldDefinitionsResponse[] = [
 
 export function resolvePurchaseFieldDefinitions(module: string, entity: string): FieldDefinitionsResponse | undefined {
   return PURCHASE_FIELD_DEFINITIONS.find((schema) => schema.module === module && schema.entity === entity);
+}
+
+/**
+ * Mutates the matching field IN PLACE (not a fresh object) - every
+ * PURCHASE_FIELD_DEFINITIONS entry is a shared module-scope const, so the
+ * next resolvePurchaseFieldDefinitions() call (a SchemaForm rendering
+ * this same module/entity elsewhere) sees the change immediately, same
+ * as the real field-engine's cache-bust-on-write behavior. Returns the
+ * updated field, or undefined if no field with this id is mocked here.
+ */
+export function updatePurchaseFieldDefinition(
+  id: string,
+  patch: { label?: string; isVisible?: boolean; isMandatory?: boolean; sortOrder?: number },
+): FieldDefinition | undefined {
+  for (const schema of PURCHASE_FIELD_DEFINITIONS) {
+    const field = schema.fields?.find((f) => f.id === id);
+    if (field) {
+      Object.assign(field, patch);
+      return field;
+    }
+  }
+  return undefined;
 }
 
 interface MockShipment extends Record<string, unknown> {
@@ -353,5 +385,15 @@ export const purchaseHandlers = [
     const body = (await request.json()) as Record<string, unknown>;
     Object.assign(hedge, body);
     return HttpResponse.json(hedge);
+  }),
+
+  http.patch(`${API_BASE}${endpoints.fieldDefinition(":id")}`, async ({ params, request }) => {
+    const id = typeof params.id === "string" ? params.id : "";
+    const body = (await request.json()) as Record<string, unknown>;
+    const updated = updatePurchaseFieldDefinition(id, body);
+    if (!updated) {
+      return new HttpResponse(null, { status: 404 });
+    }
+    return HttpResponse.json(updated);
   }),
 ];
