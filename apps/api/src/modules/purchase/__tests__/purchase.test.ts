@@ -17,6 +17,7 @@ import {
   countries,
   currencies,
   incoterms,
+  items,
   paymentTerms,
   permissions,
   ports,
@@ -24,6 +25,7 @@ import {
   suppliers,
   supplierTypes,
   transportModes,
+  uom,
   users,
   warehouses,
 } from "../../../database/tenant/schema.js";
@@ -357,7 +359,7 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
       const approvePermissionId = await findPermissionId(tenant.schemaName, "purchase.po.approve");
       await grantPermissionToRole(tenant.schemaName, tenant.companyId, tenant.roleId, approvePermissionId, tenant.userId);
 
-      const { otherBranchId, otherSupplierId } = await withTenantSchema(tenant.schemaName, async (tx) => {
+      const { otherBranchId, otherSupplierId, itemId, uomId } = await withTenantSchema(tenant.schemaName, async (tx) => {
         const [supplierType] = await tx.select().from(supplierTypes).where(eq(supplierTypes.companyId, tenant.companyId)).limit(1);
         const [country] = await tx.select().from(countries).where(eq(countries.companyId, tenant.companyId)).limit(1);
         const [paymentTerm] = await tx.select().from(paymentTerms).where(eq(paymentTerms.companyId, tenant.companyId)).limit(1);
@@ -383,10 +385,12 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
             createdBy: tenant.userId,
           })
           .returning();
-        if (!otherBranch || !otherSupplier) {
+        const [item] = await tx.insert(items).values({ companyId: tenant.companyId, code: "CU-CATH", name: "Copper Cathode", itemType: "metals", createdBy: tenant.userId }).returning();
+        const [unit] = await tx.insert(uom).values({ companyId: tenant.companyId, code: "MT", name: "Metric Ton", createdBy: tenant.userId }).returning();
+        if (!otherBranch || !otherSupplier || !item || !unit) {
           throw new Error("failed to seed a second branch/supplier for filter testing");
         }
-        return { otherBranchId: otherBranch.id, otherSupplierId: otherSupplier.id };
+        return { otherBranchId: otherBranch.id, otherSupplierId: otherSupplier.id, itemId: item.id, uomId: unit.id };
       });
 
       // A: original branch/supplier, early date, stays draft.
@@ -410,6 +414,13 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
             }),
           ),
       );
+      // Approve now requires at least one valid item (core/workflow/guards.ts's requireAtLeastOneValidLine).
+      const itemRes = await request(app)
+        .post(`/api/v1/purchases/${purchaseB.id}/items`)
+        .set("Authorization", authHeader)
+        .send({ itemId, quantity: "10", uomId, purchaseRateUsd: "8000", exchangeRate: "3.6725" });
+      expect(itemRes.status).toBe(201);
+
       const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseB.id}/approve`).set("Authorization", authHeader);
       expect(approveRes.status).toBe(200);
 

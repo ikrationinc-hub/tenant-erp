@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { App as AntApp, Alert, Button, Card, Drawer, Space, Spin, Table, Tag, Typography } from "antd";
+import { App as AntApp, Alert, Button, Card, Drawer, Space, Spin, Table, Tag, Tooltip, Typography } from "antd";
 import { listAttachmentsResponseSchema, masterOptionsResponseSchema, type AttachmentRow } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints, withQuery } from "../../core/api/endpoints";
@@ -202,6 +202,7 @@ export function PurchaseDetailScreen({
   const purchase = purchaseQuery.data;
   const status = purchase?.status;
   const posted = status === "posted";
+  const hasItems = rowsOf(purchase?.items).length > 0;
   const headerInitialValues =
     purchase &&
     typeof purchase.shipment === "object" &&
@@ -226,7 +227,12 @@ export function PurchaseDetailScreen({
           <Space>
             {status === "draft" && (
               <Can permission="purchase.po.approve">
-                <Button onClick={() => void handleApprove()}>Approve</Button>
+                {/* UX nicety only - the server rejects an item-less approve regardless (core/workflow/guards.ts's requireAtLeastOneValidLine), this just avoids a round trip to say so. */}
+                <Tooltip title={hasItems ? undefined : "Add at least one item before approving"}>
+                  <Button disabled={!hasItems} onClick={() => void handleApprove()}>
+                    Approve
+                  </Button>
+                </Tooltip>
               </Can>
             )}
             {status === "approved" && (

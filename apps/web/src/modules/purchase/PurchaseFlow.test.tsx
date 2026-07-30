@@ -230,6 +230,30 @@ describe("Purchase - permission-gated workflow transitions", () => {
   );
 
   it(
+    // The "enabled once it has an item" side of this is already exercised
+    // by this file's main create-add item-Approve flow test above - that
+    // one only reaches a clickable Approve because the button isn't
+    // disabled once an item exists.
+    "disables Approve, with a tooltip explaining why, on a draft with zero items - a UX nicety, never the actual guard (core/workflow/guards.ts enforces it server-side regardless of what the frontend does)",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      server.use(
+        http.get(`${API_BASE}${endpoints.purchases}/purchase-no-items`, () => HttpResponse.json(draftFixture("purchase-no-items"))),
+      );
+
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-no-items`] });
+
+      const approveButton = await screen.findByRole("button", { name: "Approve" }, ASYNC);
+      expect(approveButton).toBeDisabled();
+
+      await user.hover(approveButton);
+      expect(await screen.findByText("Add at least one item before approving", {}, ASYNC)).toBeInTheDocument();
+    },
+    30000,
+  );
+
+  it(
     "hides Post on an approved purchase without purchase.po.post",
     async () => {
       signIn();

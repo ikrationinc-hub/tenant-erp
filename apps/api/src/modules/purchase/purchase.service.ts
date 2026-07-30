@@ -1,10 +1,12 @@
 import { eventBus } from "../../common/events/bus.js";
 import type { RequestContext } from "../../common/context/request-context.js";
 import { ConflictError, NotFoundError, UnauthorizedError } from "../../common/errors/index.js";
+import { parseMoney } from "../../common/money/decimal.js";
 import { insertAuditLog } from "../../core/audit/write.js";
 import type { PaginatedRows } from "../../core/masters/types.js";
 import { nextNumber } from "../../core/numbering/next-number.js";
-import { findTransition, type WorkflowTransition } from "../../core/workflow/transitions.js";
+import { requireAtLeastOneValidLine } from "../../core/workflow/guards.js";
+import { findTransition, runGuards, type WorkflowTransition } from "../../core/workflow/transitions.js";
 import { withTenantDb } from "../../database/get-db.js";
 import type { CreatePurchaseInput, PurchasesListQuery, UpdatePurchaseInput } from "./purchase.validator.js";
 import { listAllocationsForPurchase, type PurchaseAllocationRow } from "./purchase-allocations.repository.js";
@@ -25,9 +27,48 @@ import {
   type PurchaseShipmentRow,
 } from "./purchase.repository.js";
 
-/** FR-107/FR-108: Draft -> Approved -> Posted, each transition its own permission (core/workflow/transitions.ts). */
-const PURCHASE_WORKFLOW: WorkflowTransition<PurchaseRow["status"]>[] = [
-  { name: "approve", from: "draft", to: "approved", permission: "purchase.po.approve" },
+interface ApproveGuardContext {
+  items: PurchaseItemWithPricing[];
+}
+
+/**
+ * What makes one purchase item "valid" to approve - domain-specific, so
+ * it stays here rather than in core/workflow/guards.ts's reusable
+ * "at least one valid line" shape. Quantity is enforced positive already
+ * at addItem/updatePurchaseItem time (purchase-items.service.ts's
+ * requirePositive) - re-checked here anyway as defense in depth, since
+ * this guard must hold regardless of how an item got into its current
+ * state (a future bulk-import path, a relaxed PATCH, direct data repair),
+ * not just through today's one write path. purchaseRateUsd/exchangeRate
+ * are ALSO required positive here - flagged for review with the user:
+ * required for now, since an approved (soon-immutable) financial document
+ * with a zero rate has no real value either.
+ */
+function validatePurchaseItemForApproval(item: PurchaseItemWithPricing): string | undefined {
+  if (parseMoney(item.quantity).lte(0)) {
+    return `Cannot approve: item ${item.id} has quantity ${item.quantity}, must be greater than 0`;
+  }
+  if (parseMoney(item.pricing.purchaseRateUsd).lte(0)) {
+    return `Cannot approve: item ${item.id} has purchase rate ${item.pricing.purchaseRateUsd}, must be greater than 0`;
+  }
+  if (parseMoney(item.pricing.exchangeRate).lte(0)) {
+    return `Cannot approve: item ${item.id} has exchange rate ${item.pricing.exchangeRate}, must be greater than 0`;
+  }
+  return undefined;
+}
+
+/** FR-107/FR-108: Draft -> Approved -> Posted, each transition its own permission (core/workflow/transitions.ts). Approve's guard: a purchase can't become an approved (soon-immutable) financial document representing no goods - Sales will later allocate against these lines, so an empty or invalid one is a blocker, not a cosmetic gap. */
+const PURCHASE_WORKFLOW: WorkflowTransition<PurchaseRow["status"], ApproveGuardContext>[] = [
+  {
+    name: "approve",
+    from: "draft",
+    to: "approved",
+    permission: "purchase.po.approve",
+    guards: [
+      (context) =>
+        requireAtLeastOneValidLine(context.items, validatePurchaseItemForApproval, "Cannot approve: purchase has no items"),
+    ],
+  },
   { name: "post", from: "approved", to: "posted", permission: "purchase.po.post" },
 ];
 
@@ -208,6 +249,8 @@ export async function approve(ctx: RequestContext, id: string): Promise<Purchase
       throw new Error(`Purchase ${id} has no shipment row - the 1:1 invariant was violated`);
     }
     const items = await listItemsWithPricingForPurchase(tx, scope.companyId, id);
+
+    runGuards(transition, { items });
 
     const row = await transitionPurchaseStatus(tx, scope.companyId, id, {
       from: transition.from,
