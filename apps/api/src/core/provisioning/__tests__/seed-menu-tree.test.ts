@@ -38,6 +38,7 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/admin/field-definitions",
   "/suppliers",
   "/purchase/orders",
+  "/inventory",
   ...MASTER_MODULES.filter((module) => module.entity !== "customer").map((module) => `/masters/${module.urlSegment}`),
 ]);
 const KNOWN_PENDING_FRONTEND_EXCEPTIONS = new Set(["/masters/customers"]);
@@ -130,6 +131,7 @@ describe("core/provisioning/seed-menu-tree - the seeded default navigation", () 
         "/admin/field-definitions",
         "/suppliers",
         "/purchase/orders",
+        "/inventory",
         ...MASTER_MODULES.map((module) => `/masters/${module.urlSegment}`),
       ]) {
         expect(leafPaths).toContain(required);

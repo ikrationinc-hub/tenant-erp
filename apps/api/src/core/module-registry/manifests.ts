@@ -3,6 +3,7 @@ import { authRouter } from "../../modules/auth/auth.routes.js";
 import { companiesRouter } from "../../modules/companies/companies.routes.js";
 import { fieldDefinitionsRouter } from "../../modules/field-definitions/field-definitions.routes.js";
 import { healthRouter } from "../../modules/health/health.routes.js";
+import { inventoryRouter } from "../../modules/inventory/inventory.routes.js";
 import { menusRouter } from "../../modules/menus/menus.routes.js";
 import { purchaseRouter } from "../../modules/purchase/purchase.routes.js";
 import { suppliersRouter } from "../../modules/suppliers/suppliers.routes.js";
@@ -238,5 +239,23 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       "0018_loose_mastermind",
       "0019_lucky_sleeper",
     ],
+  },
+  {
+    key: "inventory",
+    name: "Inventory (Stock Ledger)",
+    version: "1.0.0",
+    // Read-only REST surface over stock_movements - the write side
+    // (inventory-subscriber.ts, registered separately in app.ts as a
+    // side effect against common/events/bus.ts, not through this
+    // manifest's `routes`) already existed before this module had any
+    // HTTP surface, permission, or menu entry at all.
+    routes: inventoryRouter,
+    permissions: [
+      permissionEntry("inventory", "stock", "read", "View stock balances and movements"),
+    ],
+    dependsOn: ["auth", "roles", "masters", "purchase"],
+    // stock_movements originates from the same migration purchase's own
+    // Approve->stock workflow shipped in (0019) - not a new one.
+    migrations: ["0019_lucky_sleeper"],
   },
 ];

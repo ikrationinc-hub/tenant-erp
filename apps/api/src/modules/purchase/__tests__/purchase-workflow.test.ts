@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createApp } from "../../../app.js";
 import { closeDbPool } from "../../../config/db.js";
 import { closeRedis } from "../../../config/redis.js";
+import { eventBus } from "../../../common/events/bus.js";
 import { signAccessToken } from "../../../core/auth/jwt.js";
 import { seedDefaultNumberSeries } from "../../../core/provisioning/seed-number-series.js";
 import { assignRoleToUser, createRole, grantPermissionToRole } from "../../../core/rbac/mutations.js";
@@ -196,6 +197,7 @@ describe("modules/purchase - Record Purchase, session (e): workflow + stock (FR-
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
       const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+      await addItem(app, authHeader, purchaseId, tenant, "10");
 
       const created = purchaseStatusSchema.parse((await request(app).get(`/api/v1/purchases/${purchaseId}`).set("Authorization", authHeader)).body);
       expect(created.status).toBe("draft");
@@ -242,6 +244,7 @@ describe("modules/purchase - Record Purchase, session (e): workflow + stock (FR-
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
       const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+      await addItem(app, authHeader, purchaseId, tenant, "10");
 
       const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/approve`).set("Authorization", authHeader);
       expect(approveRes.status).toBe(200);
@@ -303,6 +306,38 @@ describe("modules/purchase - Record Purchase, session (e): workflow + stock (FR-
 
       const [purchase] = await withTenantSchema(tenant.schemaName, (tx) => tx.select().from(purchases).where(eq(purchases.id, purchaseId)));
       expect(purchase?.status).toBe("approved");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a failure in the stock-write path rolls back the whole approval - no orphan approved purchase, no orphan movement (common/events/bus.ts's whole reason for being synchronous and same-tx)",
+    async () => {
+      // eventBus has no off(): once registered, this throwing handler stays
+      // registered for every remaining "purchase.approved" emit in THIS test
+      // file's module instance (Vitest isolates modules per file, so sibling
+      // test files are unaffected). Kept last in this describe block so no
+      // later test in this file ever calls approve() again.
+      eventBus.on("purchase.approved", () => {
+        throw new Error("simulated stock-write failure");
+      });
+
+      const tenant = await seedTenant("rollback-approve");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+      const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+      const itemId = await addItem(app, authHeader, purchaseId, tenant, "75");
+
+      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/approve`).set("Authorization", authHeader);
+      expect(approveRes.status).toBe(500);
+
+      const [purchase] = await withTenantSchema(tenant.schemaName, (tx) => tx.select().from(purchases).where(eq(purchases.id, purchaseId)));
+      expect(purchase?.status).toBe("draft");
+
+      const movements = await withTenantSchema(tenant.schemaName, (tx) =>
+        tx.select().from(stockMovements).where(and(eq(stockMovements.companyId, tenant.companyId), eq(stockMovements.referenceId, itemId))),
+      );
+      expect(movements).toHaveLength(0);
     },
     TEST_TIMEOUT_MS,
   );

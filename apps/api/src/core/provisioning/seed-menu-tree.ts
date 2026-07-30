@@ -124,6 +124,14 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
       },
     ],
   },
+  {
+    key: "inventory",
+    label: "Inventory",
+    path: "/inventory",
+    icon: "database",
+    moduleKey: "inventory",
+    requiredPermission: "inventory.stock.read",
+  },
 ];
 
 async function seedNode(

@@ -11,6 +11,7 @@ import { resolveMasterScreen } from "../modules/masters/master-registry";
 import { resolveAdminScreen } from "../modules/admin/admin-registry";
 import { resolveSupplierScreen } from "../modules/suppliers/supplier-registry";
 import { resolvePurchaseScreen } from "../modules/purchase/purchase-registry";
+import { resolveInventoryScreen } from "../modules/inventory/inventory-registry";
 import { SchemaFormDevPage } from "./dev/SchemaFormDevPage";
 import { SchemaTableDevPage } from "./dev/SchemaTableDevPage";
 
@@ -52,7 +53,8 @@ export const routes: RouteObject[] = [
                       resolveMasterScreen(entry, pathname) ??
                       resolveAdminScreen(entry, pathname) ??
                       resolveSupplierScreen(entry, pathname) ??
-                      resolvePurchaseScreen(entry, pathname)
+                      resolvePurchaseScreen(entry, pathname) ??
+                      resolveInventoryScreen(entry, pathname)
                     }
                   />
                 ),

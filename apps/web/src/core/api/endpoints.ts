@@ -55,6 +55,11 @@ export const endpoints = {
     `/attachments/${entity}/${entityId}/${fieldKey}`,
   attachmentDownloadUrl: (id: string) => `/attachments/${id}/download-url`,
   attachments: "/attachments",
+
+  // --- FR-108: Inventory (Stock Ledger) - read-only over the API ------------
+  inventoryBalances: "/inventory/balances",
+  inventoryMovements: "/inventory/movements",
+  inventoryMovementsForBalance: (itemId: string, warehouseId: string) => `/inventory/movements/${itemId}/${warehouseId}`,
 } as const;
 
 /** Appends a query string, skipping undefined values - `?tenantCode=` for an unset optional field is just noise. */

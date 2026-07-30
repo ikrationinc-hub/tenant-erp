@@ -35,6 +35,7 @@ import { mastersHandlers, resolveMasterFieldDefinitions, resolveMasterRowOptions
 import { adminHandlers, resolveAdminFieldDefinitions } from "./admin-handlers";
 import { suppliersHandlers, resolveSupplierFieldDefinitions } from "./suppliers-handlers";
 import { purchaseHandlers, resolvePurchaseFieldDefinitions } from "./purchase-handlers";
+import { inventoryHandlers } from "./inventory-handlers";
 import { attachmentsHandlers } from "./attachments-handlers";
 
 const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
@@ -211,6 +212,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
         },
       ],
     },
+    { id: "m-inventory", key: "inventory", label: "Inventory", path: "/inventory", icon: "database", sortOrder: 10, children: [] },
   ],
 });
 
@@ -236,6 +238,7 @@ const mockPermissions: MyPermissionsResponse = myPermissionsResponseSchema.parse
     "purchase.po.update",
     "purchase.po.approve",
     "purchase.po.post",
+    "inventory.stock.read",
     "suppliers.supplier.read",
     "suppliers.supplier.create",
     "suppliers.supplier.update",
@@ -377,5 +380,6 @@ export const handlers = [
   ...adminHandlers,
   ...suppliersHandlers,
   ...purchaseHandlers,
+  ...inventoryHandlers,
   ...attachmentsHandlers,
 ];

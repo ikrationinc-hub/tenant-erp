@@ -164,10 +164,11 @@ interface MockShipment extends Record<string, unknown> {
   lotNumber: string;
 }
 
-interface MockPurchase extends Record<string, unknown> {
+export interface MockPurchase extends Record<string, unknown> {
   id: string;
   purchaseNumber: string;
   status: "draft" | "approved" | "posted";
+  branchId?: unknown;
   shipment: MockShipment;
   items: Record<string, unknown>[];
   allocations: Record<string, unknown>[];
@@ -176,7 +177,8 @@ interface MockPurchase extends Record<string, unknown> {
   hedges: Record<string, unknown>[];
 }
 
-const purchases: MockPurchase[] = [];
+/** Shared with inventory-handlers.ts (FR-108): the mock stock ledger is derived from this SAME array's approved/posted purchases, exactly like the real backend derives stock_movements from approved purchases - so approving a purchase in the mock immediately shows up in the mock Inventory screen too. */
+export const purchases: MockPurchase[] = [];
 let nextPurchaseSequence = 1;
 let nextChildId = 1;
 

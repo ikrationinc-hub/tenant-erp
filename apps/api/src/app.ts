@@ -17,6 +17,7 @@ import { mastersRouter } from "./core/masters/registry.js";
 // import (however many times createApp() itself runs) only ever runs the
 // registration once - see inventory-subscriber.ts's doc comment.
 import "./modules/inventory/inventory-subscriber.js";
+import { inventoryRouter } from "./modules/inventory/inventory.routes.js";
 import { menusRouter } from "./modules/menus/menus.routes.js";
 import { platformRouter } from "./modules/platform/platform.routes.js";
 import { purchaseRouter } from "./modules/purchase/purchase.routes.js";
@@ -50,6 +51,7 @@ export function createApp(): Express {
   app.use("/api/v1/attachments", attachmentsRouter);
   app.use("/api/v1/suppliers", suppliersRouter);
   app.use("/api/v1/purchases", purchaseRouter);
+  app.use("/api/v1/inventory", inventoryRouter);
   app.use("/api/v1/companies", companiesRouter);
   app.use("/api/v1/branches", branchesRouter);
   app.use("/api/v1/roles", rolesRouter);
