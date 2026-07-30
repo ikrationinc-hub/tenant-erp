@@ -302,6 +302,34 @@ describe("Purchase - permission-gated workflow transitions", () => {
     },
     30000,
   );
+
+  it(
+    "hides Header/Costs/Add Item Save buttons on an approved purchase even WITH purchase.po.update - assertDraft locks these server-side at Approved, not just Posted (purchase.service.ts)",
+    async () => {
+      signIn();
+      server.use(
+        http.get(`${API_BASE}${endpoints.purchases}/purchase-approved-locked`, () =>
+          HttpResponse.json({ ...draftFixture("purchase-approved-locked"), status: "approved" }),
+        ),
+        http.get(`${API_BASE}${endpoints.myPermissions}`, () =>
+          HttpResponse.json({ permissions: ["purchase.po.read", "purchase.po.update", "purchase.po.create", "purchase.po.post"] }),
+        ),
+      );
+
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-approved-locked`] });
+
+      expect(await screen.findByText("Approved", {}, ASYNC)).toBeInTheDocument();
+      expect(
+        await screen.findByText(/Header, items, costs, and customer allocation are now locked/i, {}, ASYNC),
+      ).toBeInTheDocument();
+
+      await screen.findByText("Purchase Date", {}, ASYNC);
+      await screen.findByText("Other Charges", {}, ASYNC);
+      expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Add Item" })).not.toBeInTheDocument();
+    },
+    30000,
+  );
 });
 
 describe("Purchase - list view", () => {

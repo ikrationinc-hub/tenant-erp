@@ -202,6 +202,14 @@ export function PurchaseDetailScreen({
   const purchase = purchaseQuery.data;
   const status = purchase?.status;
   const posted = status === "posted";
+  const approved = status === "approved";
+  // Header/Items/Costs/Customer Allocation all call assertDraft server-side
+  // (purchase.service.ts) - they lock the moment a purchase is Approved,
+  // not just once it's Posted. LME Records and Hedges are the deliberate
+  // exception (purchase-lme.service.ts/purchase-hedges.service.ts never
+  // call assertDraft - open question #6's LME-after-approval flow), so
+  // those two panels stay gated on `posted` alone, further down.
+  const draft = status === "draft";
   const hasItems = rowsOf(purchase?.items).length > 0;
   const headerInitialValues =
     purchase &&
@@ -246,6 +254,13 @@ export function PurchaseDetailScreen({
         )}
       </Space>
 
+      {approved && (
+        <Alert
+          type="info"
+          showIcon
+          message="This purchase is approved. Header, items, costs, and customer allocation are now locked; LME pricing and hedging can still be recorded until it's posted."
+        />
+      )}
       {posted && (
         <Alert
           type="info"
@@ -258,7 +273,7 @@ export function PurchaseDetailScreen({
         <SchemaForm
           module="purchase"
           entity="header"
-          mode={posted || !canEditHeader ? "view" : mode === "create" ? "create" : "edit"}
+          mode={(mode === "edit" && !draft) || !canEditHeader ? "view" : mode === "create" ? "create" : "edit"}
           {...(headerInitialValues ? { initialValues: headerInitialValues } : {})}
           onSubmit={handleHeaderSubmit}
           {...(purchaseId ? { uploadContext: { entity: "purchase", entityId: purchaseId } } : {})}
@@ -267,14 +282,14 @@ export function PurchaseDetailScreen({
 
       {mode === "edit" && purchaseId && purchase && (
         <>
-          <PurchaseCostsPanel purchaseId={purchaseId} readOnly={posted || !canUpdate} onSaved={refresh} costs={purchase.additionalCosts} />
-          <PurchaseItemsPanel purchaseId={purchaseId} readOnly={posted} onAdded={refresh} items={rowsOf(purchase.items)} />
+          <PurchaseCostsPanel purchaseId={purchaseId} readOnly={!draft || !canUpdate} onSaved={refresh} costs={purchase.additionalCosts} />
+          <PurchaseItemsPanel purchaseId={purchaseId} readOnly={!draft} onAdded={refresh} items={rowsOf(purchase.items)} />
           <PurchaseSubResourceList
             title="Customer Allocation"
             entity="allocation"
             endpoint={endpoints.purchaseAllocations(purchaseId)}
             addPermission="purchase.po.update"
-            readOnly={posted}
+            readOnly={!draft}
             rows={rowsOf(purchase.allocations)}
             onAdded={refresh}
             columns={[
