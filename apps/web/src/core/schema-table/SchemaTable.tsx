@@ -9,6 +9,7 @@ import { usePermissions } from "../permissions/use-permissions";
 import { columnsFromFieldDefinitions } from "./columns-from-fields";
 import { useEntityListState } from "./use-entity-list-state";
 import { useEntityList } from "./use-entity-list";
+import { useMasterLabels } from "./use-master-labels";
 import { FilterBar } from "./FilterBar";
 import type { EntityRow, SchemaTableAction, SchemaTableExtraColumn, SchemaTableProps } from "./types";
 
@@ -134,6 +135,10 @@ export function SchemaTable({
   });
   const listQuery = useEntityList(endpoint, state);
   const { permissions } = usePermissions();
+  // Called unconditionally, before the early returns below (rules of
+  // hooks) - schemaQuery.data is undefined while loading, which the hook
+  // itself handles (an empty master set, an empty result map).
+  const masterLabels = useMasterLabels(schemaQuery.data);
 
   if (schemaQuery.isLoading) {
     return <Skeleton active data-testid="schema-table-loading" />;
@@ -152,7 +157,7 @@ export function SchemaTable({
     );
   }
 
-  const dataColumns = withExtraColumns(columnsFromFieldDefinitions(schemaQuery.data, columns), extraColumns);
+  const dataColumns = withExtraColumns(columnsFromFieldDefinitions(schemaQuery.data, columns, masterLabels), extraColumns);
   const actionsColumn = buildActionsColumn(actions, permissions);
   const tableColumns: TableColumnsType<EntityRow> = actionsColumn ? [...dataColumns, actionsColumn] : dataColumns;
 

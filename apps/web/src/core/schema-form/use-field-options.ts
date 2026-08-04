@@ -14,7 +14,8 @@ const NON_MASTER_OPTIONS_ENDPOINTS: Record<string, string> = {
   branches: endpoints.branchOptions,
 };
 
-function resolveOptionsEndpoint(master: string): string {
+/** Exported for schema-table/use-master-labels.ts - a read-only grid resolving a select column's stored id to its label needs the exact same endpoint routing this Dropdown field uses, not a second hand-maintained copy of NON_MASTER_OPTIONS_ENDPOINTS. */
+export function resolveOptionsEndpoint(master: string): string {
   return NON_MASTER_OPTIONS_ENDPOINTS[master] ?? endpoints.masterOptions(master);
 }
 

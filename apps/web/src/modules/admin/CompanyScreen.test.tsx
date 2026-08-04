@@ -27,6 +27,25 @@ function drawer() {
   return within(screen.getByRole("dialog"));
 }
 
+/**
+ * The list table now resolves master-backed select columns to their
+ * label too (Country/Currency), so an option's text can already be
+ * on-screen in an existing row before the dropdown is even opened - a
+ * bare `findByText` is ambiguous between that cell and the freshly-
+ * opened dropdown's own copy. The dropdown's own copy is always the
+ * LAST DOM match (AntD portals append), same fix as SupplierScreen/
+ * PurchaseFlow's own dropdown-selection helpers.
+ */
+async function selectDropdownOption(user: ReturnType<typeof userEvent.setup>, comboboxName: string, optionText: string): Promise<void> {
+  await user.click(drawer().getByRole("combobox", { name: comboboxName }));
+  const matches = await screen.findAllByText(optionText, {}, ASYNC);
+  const lastMatch = matches.at(-1);
+  if (!lastMatch) {
+    throw new Error(`expected at least one match for "${optionText}"`);
+  }
+  await user.click(lastMatch);
+}
+
 const testRoutes: RouteObject[] = [{ path: "/", element: <CompanyScreen /> }];
 
 describe("CompanyScreen", () => {
@@ -40,6 +59,18 @@ describe("CompanyScreen", () => {
       expect(await screen.findByRole("heading", { name: "Companies" }, ASYNC)).toBeInTheDocument();
       expect(await screen.findByText("Ikration Metals Trading", {}, ASYNC)).toBeInTheDocument();
 
+      // The list resolves Country/Currency (master-backed selects) to
+      // their names, not the raw stored id ("ae"/"aed") - SchemaTable's
+      // own useMasterLabels, not something CompanyScreen wires by hand.
+      const row = screen.getByText("Ikration Metals Trading").closest("tr");
+      if (!row) {
+        throw new Error("expected a table row for Ikration Metals Trading");
+      }
+      expect(within(row).getByText("United Arab Emirates")).toBeInTheDocument();
+      expect(within(row).getByText("UAE Dirham")).toBeInTheDocument();
+      expect(within(row).queryByText("ae")).not.toBeInTheDocument();
+      expect(within(row).queryByText("aed")).not.toBeInTheDocument();
+
       await user.click(await screen.findByRole("button", { name: /New Companies/ }, ASYNC));
 
       // The company's own tenant/company scope is never a rendered field -
@@ -50,19 +81,13 @@ describe("CompanyScreen", () => {
 
       await user.type(drawer().getByLabelText("Name"), "Ikration Testland LLC");
 
-      await user.click(drawer().getByRole("combobox", { name: "Country" }));
-      await user.click(await screen.findByText("United Arab Emirates"));
-
-      await user.click(drawer().getByRole("combobox", { name: "Currency" }));
-      await user.click(await screen.findByText("UAE Dirham"));
-
-      await user.click(drawer().getByRole("combobox", { name: "Fiscal Year Start Month" }));
-      await user.click(await screen.findByText("January"));
+      await selectDropdownOption(user, "Country", "United Arab Emirates");
+      await selectDropdownOption(user, "Currency", "UAE Dirham");
+      await selectDropdownOption(user, "Fiscal Year Start Month", "January");
 
       await user.type(drawer().getByLabelText("Timezone"), "Asia/Dubai");
 
-      await user.click(drawer().getByRole("combobox", { name: "Status" }));
-      await user.click(await screen.findByText("Active"));
+      await selectDropdownOption(user, "Status", "Active");
 
       await user.click(drawer().getByRole("button", { name: "Save" }));
 
