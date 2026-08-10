@@ -3,7 +3,7 @@ import { NotFoundError, UnauthorizedError, ValidationError } from "../../common/
 import { parseMoney, roundRate } from "../../common/money/decimal.js";
 import { insertAuditLog } from "../../core/audit/write.js";
 import { withTenantDb } from "../../database/get-db.js";
-import { insertAllocation, listAllocationsForPurchase, type PurchaseAllocationRow } from "./purchase-allocations.repository.js";
+import { insertAllocation, type PurchaseAllocationRow } from "./purchase-allocations.repository.js";
 import type { AddAllocationInput } from "./purchase-allocations.validator.js";
 import { findPurchaseById } from "./purchase.repository.js";
 import { assertDraft } from "./purchase.service.js";
@@ -16,7 +16,18 @@ function requireTenantScope(ctx: RequestContext) {
   return { ...scope, userId: scope.userId };
 }
 
-/** Sub Tab 2, table F. Draft only (rule 8). App-layer enforced (not a DB CHECK, which can't span rows): the sum of every non-deleted allocation for one purchase never exceeds 100%. */
+/**
+ * Sub Tab 2, table F. Draft only (rule 8). Prompt 21 item 6: allocation is
+ * a SOFT reservation - the client confirmed the eventual sale is NOT
+ * bound to it and may go to a different customer entirely. There is
+ * deliberately no sum-to-100/over-allocation block (an earlier prompt's
+ * hard >100% rejection was relaxed here) - the running total is still
+ * computed and returned so the UI can show it, but it never rejects a
+ * request. A single allocation still can't exceed 100% or be <= 0 on its
+ * own (a basic sanity bound on one row, not the cross-row constraint that
+ * was removed). See docs/adr/0013-allocation-is-soft-reservation.md -
+ * Sales must never treat an allocation as binding.
+ */
 export async function addAllocation(ctx: RequestContext, purchaseId: string, input: AddAllocationInput): Promise<PurchaseAllocationRow> {
   const scope = requireTenantScope(ctx);
 
@@ -30,15 +41,6 @@ export async function addAllocation(ctx: RequestContext, purchaseId: string, inp
     const pct = parseMoney(input.allocationPct);
     if (pct.lte(0) || pct.gt(100)) {
       throw new ValidationError("allocationPct must be greater than 0 and at most 100");
-    }
-
-    const existing = await listAllocationsForPurchase(tx, scope.companyId, purchaseId);
-    const existingSum = existing.reduce((sum, row) => sum.plus(parseMoney(row.allocationPct)), parseMoney("0"));
-    if (existingSum.plus(pct).gt(100)) {
-      throw new ValidationError(`Total allocation would be ${existingSum.plus(pct).toString()}%, exceeding 100%`, {
-        existingTotalPct: existingSum.toString(),
-        requestedPct: pct.toString(),
-      });
     }
 
     const row = await insertAllocation(tx, {

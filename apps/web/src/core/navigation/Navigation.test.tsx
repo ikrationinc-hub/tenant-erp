@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { screen, waitFor } from "@testing-library/react";
 import { menuTreeResponseSchema, type MenuTreeResponse } from "@ikration/contracts";
@@ -6,6 +7,8 @@ import { server } from "../../mocks/server";
 import { endpoints } from "../api/endpoints";
 import { renderApp } from "../../test/render-app";
 import { useAppStore } from "../store/app-store";
+
+const ASYNC = { timeout: 15000 };
 
 const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
 
@@ -80,4 +83,52 @@ describe("navigation", () => {
     await waitFor(() => expect(screen.getAllByText("Dashboard").length).toBeGreaterThan(0));
     expect(screen.queryByText("404")).not.toBeInTheDocument();
   });
+
+  // Prompt 21 acceptance: every new master/module must be reachable by
+  // CLICKING its menu item, not just by typing the URL - Brokers is its
+  // own top-level module (mirrors Suppliers); Divisions/Containers are
+  // generic masters nested one level under "Masters".
+  it(
+    "Brokers is reachable by clicking its top-level menu item",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      renderApp({ initialEntries: ["/"] });
+
+      await user.click(await screen.findByText("Brokers", {}, ASYNC));
+
+      expect(await screen.findByRole("heading", { name: "Brokers" }, ASYNC)).toBeInTheDocument();
+    },
+    30000,
+  );
+
+  it(
+    "Divisions is reachable by clicking Masters, then Divisions",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      renderApp({ initialEntries: ["/"] });
+
+      await user.click(await screen.findByText("Masters", {}, ASYNC));
+      await user.click(await screen.findByText("Divisions", {}, ASYNC));
+
+      expect(await screen.findByRole("heading", { name: "Divisions" }, ASYNC)).toBeInTheDocument();
+    },
+    30000,
+  );
+
+  it(
+    "Containers is reachable by clicking Masters, then Containers",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      renderApp({ initialEntries: ["/"] });
+
+      await user.click(await screen.findByText("Masters", {}, ASYNC));
+      await user.click(await screen.findByText("Containers", {}, ASYNC));
+
+      expect(await screen.findByRole("heading", { name: "Containers" }, ASYNC)).toBeInTheDocument();
+    },
+    30000,
+  );
 });

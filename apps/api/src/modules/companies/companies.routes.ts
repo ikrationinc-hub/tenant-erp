@@ -11,6 +11,18 @@ const readPermission = requirePermission("admin.company.read");
 const createPermission = requirePermission("admin.company.create");
 const updatePermission = requirePermission("admin.company.update");
 
+// "/options" registered before "/" - same precedent as branches.routes.ts:
+// other modules' own Dropdown fields (Purchase's buyerId) source options
+// from here, so it needs to resolve before any future "/:id"-shaped route
+// could swallow it.
+companiesRouter.get(
+  "/options",
+  scopeResolverMiddleware,
+  requireAdminModule,
+  readPermission,
+  companiesController.listOptions,
+);
+
 // No activate/deactivate route (task item 1) - status is just a field on
 // the record, edited through the normal PATCH like any other column.
 companiesRouter.get("/", scopeResolverMiddleware, requireAdminModule, readPermission, companiesController.list);

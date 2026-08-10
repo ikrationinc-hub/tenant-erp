@@ -3,7 +3,7 @@ import type { RequestContext } from "../../common/context/request-context.js";
 import { NotFoundError, UnauthorizedError, ValidationError } from "../../common/errors/index.js";
 import { parseMoney, roundAmount, roundRate } from "../../common/money/decimal.js";
 import { insertAuditLog } from "../../core/audit/write.js";
-import { withTenantDb } from "../../database/get-db.js";
+import { withTenantDb, type TenantTx } from "../../database/get-db.js";
 import {
   findItemById,
   findPricingByItemId,
@@ -14,8 +14,9 @@ import {
   type PurchaseItemWithPricing,
 } from "./purchase-items.repository.js";
 import type { AddPurchaseItemInput, UpdatePurchaseItemInput } from "./purchase-items.validator.js";
+import { findLatestLmeRecordForPurchase } from "./purchase-lme.repository.js";
 import { assertDraft } from "./purchase.service.js";
-import { findPurchaseById } from "./purchase.repository.js";
+import { findPurchaseById, type PurchaseRow } from "./purchase.repository.js";
 
 function requireTenantScope(ctx: RequestContext) {
   const scope = ctx.tenantScope;
@@ -43,6 +44,35 @@ function calculateAmounts(quantity: Decimal, rateUsd: Decimal, exchangeRate: Dec
   return { amountUsd, amountAed };
 }
 
+/**
+ * Prompt 21 item 2: under pricing_type='lme', the item rate is DERIVED
+ * from the purchase's LME record (the most recent one - see
+ * purchase-lme.repository.ts's findLatestLmeRecordForPurchase doc
+ * comment), never client-supplied - a client that sends purchaseRateUsd
+ * anyway is rejected outright rather than silently overridden, so a bug
+ * on the caller's side surfaces immediately instead of quietly writing
+ * the wrong rate. Under 'fixed' (or a legacy purchase with no
+ * pricingType at all - existing rows were deliberately left unset, see
+ * schema.ts), the manual rate this codebase has always required stays
+ * required.
+ */
+async function resolveItemRate(tx: TenantTx, companyId: string, purchase: PurchaseRow, purchaseRateUsdInput: string | undefined) {
+  if (purchase.pricingType === "lme") {
+    if (purchaseRateUsdInput !== undefined) {
+      throw new ValidationError("purchaseRateUsd is derived from the LME final rate under LME pricing - do not send it");
+    }
+    const latestLmeRecord = await findLatestLmeRecordForPurchase(tx, companyId, purchase.id);
+    if (!latestLmeRecord) {
+      throw new ValidationError("Add an LME record before adding items under LME pricing");
+    }
+    return parseMoney(latestLmeRecord.finalPurchaseRateUsd);
+  }
+  if (purchaseRateUsdInput === undefined) {
+    throw new ValidationError("purchaseRateUsd is required");
+  }
+  return parseMoney(purchaseRateUsdInput);
+}
+
 /** FR-104: user can add one or multiple purchase items. Draft only (rule 8). */
 export async function addItem(ctx: RequestContext, purchaseId: string, input: AddPurchaseItemInput): Promise<PurchaseItemWithPricing> {
   const scope = requireTenantScope(ctx);
@@ -55,7 +85,7 @@ export async function addItem(ctx: RequestContext, purchaseId: string, input: Ad
     assertDraft(purchase);
 
     const quantity = parseMoney(input.quantity);
-    const rateUsd = parseMoney(input.purchaseRateUsd);
+    const rateUsd = await resolveItemRate(tx, scope.companyId, purchase, input.purchaseRateUsd);
     const exchangeRate = parseMoney(input.exchangeRate);
     requirePositive(quantity, "quantity");
     requirePositive(rateUsd, "purchaseRateUsd");
@@ -136,6 +166,10 @@ export async function updatePurchaseItem(
         throw new NotFoundError("Purchase item not found");
       }
       item = updated;
+    }
+
+    if (rateInput !== undefined && purchase.pricingType === "lme") {
+      throw new ValidationError("purchaseRateUsd is derived from the LME final rate under LME pricing - do not send it");
     }
 
     let pricing = existingPricing;

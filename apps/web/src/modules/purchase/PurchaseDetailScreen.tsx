@@ -55,7 +55,7 @@ function attachmentInitialValues(attachments: AttachmentRow[]): Record<string, u
 
 const SHIPMENT_KEYS = new Set([
   "lotNumber",
-  "containerNumber",
+  "containerId",
   "blNo",
   "loadingDate",
   "transportModeId",
@@ -76,12 +76,12 @@ const ATTACHMENT_KEYS = new Set([
   "otherDocuments2",
 ]);
 
-/** createPurchaseSchema/updatePurchaseSchema are both `.strict()` - purchaseNumber/status are system-controlled, attachments go through their own API, and an empty-string optional (a UUID Dropdown left blank) must be OMITTED, not sent as `""` (`.uuid().optional()` rejects an empty string, unlike undefined). */
+/** createPurchaseSchema/updatePurchaseSchema are both `.strict()` - purchaseNumber/status are system-controlled, attachments go through their own API. (An empty-string optional, e.g. a UUID Dropdown left blank, is already stripped by SchemaForm itself before onSubmit ever fires - see stripEmptyOptionalFields.) */
 function splitHeaderPayload(values: Record<string, unknown>): Record<string, unknown> {
   const header: Record<string, unknown> = {};
   const shipment: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(values)) {
-    if (key === "purchaseNumber" || ATTACHMENT_KEYS.has(key) || value === "") {
+    if (key === "purchaseNumber" || ATTACHMENT_KEYS.has(key)) {
       continue;
     }
     if (SHIPMENT_KEYS.has(key)) {
@@ -211,6 +211,11 @@ export function PurchaseDetailScreen({
   // those two panels stay gated on `posted` alone, further down.
   const draft = status === "draft";
   const hasItems = rowsOf(purchase?.items).length > 0;
+  // Prompt 21 item 2: under "lme" pricing, item rate comes from the LME
+  // record (purchase-items.service.ts's resolveItemRate), not a manual
+  // entry - the LME Records section only applies there too.
+  const pricingType = asDisplayString(purchase?.pricingType);
+  const isLmePricing = pricingType === "lme";
   const headerInitialValues =
     purchase &&
     typeof purchase.shipment === "object" &&
@@ -283,7 +288,20 @@ export function PurchaseDetailScreen({
       {mode === "edit" && purchaseId && purchase && (
         <>
           <PurchaseCostsPanel purchaseId={purchaseId} readOnly={!draft || !canUpdate} onSaved={refresh} costs={purchase.additionalCosts} />
-          <PurchaseItemsPanel purchaseId={purchaseId} readOnly={!draft} onAdded={refresh} items={rowsOf(purchase.items)} />
+          {isLmePricing && rowsOf(purchase.lmeRecords).length === 0 && draft && (
+            <Alert
+              type="warning"
+              showIcon
+              message="This is an LME purchase. Add an LME record below before adding items - the item rate is derived from it."
+            />
+          )}
+          <PurchaseItemsPanel
+            purchaseId={purchaseId}
+            readOnly={!draft}
+            onAdded={refresh}
+            items={rowsOf(purchase.items)}
+            isLmePricing={isLmePricing}
+          />
           <PurchaseSubResourceList
             title="Customer Allocation"
             entity="allocation"
@@ -300,23 +318,32 @@ export function PurchaseDetailScreen({
               },
               { title: "Allocation %", dataIndex: "allocationPct" },
             ]}
+            // Allocation is a SOFT reservation (docs/adr - allocation is
+            // intent-only, Sales must never treat it as binding): this
+            // running total is informational only, never a validation -
+            // the server has no over-100% block to mirror (Prompt 21 item
+            // 6), so the UI must not invent one either.
+            footer={<AllocationTotal rows={rowsOf(purchase.allocations)} />}
           />
-          <PurchaseSubResourceList
-            title="LME Records"
-            entity="lme_record"
-            endpoint={endpoints.purchaseLmeRecords(purchaseId)}
-            addPermission="purchase.po.create"
-            readOnly={posted}
-            rows={rowsOf(purchase.lmeRecords)}
-            onAdded={refresh}
-            columns={[
-              { title: "Metal", dataIndex: "metal" },
-              { title: "LME Price (USD)", dataIndex: "lmePriceUsd" },
-              { title: "Fixing Date", dataIndex: "fixingDate" },
-              { title: "Premium %", dataIndex: "agreedPremiumPct" },
-              { title: "Final Rate (USD)", dataIndex: "finalPurchaseRateUsd" },
-            ]}
-          />
+          {isLmePricing && (
+            <PurchaseSubResourceList
+              title="LME Records"
+              entity="lme_record"
+              endpoint={endpoints.purchaseLmeRecords(purchaseId)}
+              addPermission="purchase.po.create"
+              readOnly={posted}
+              rows={rowsOf(purchase.lmeRecords)}
+              onAdded={refresh}
+              columns={[
+                { title: "Metal", dataIndex: "metal" },
+                { title: "LME Type", dataIndex: "lmeType" },
+                { title: "LME Price (USD)", dataIndex: "lmePriceUsd" },
+                { title: "Fixing Date", dataIndex: "fixingDate" },
+                { title: "Premium %", dataIndex: "agreedPremiumPct" },
+                { title: "Final Rate (USD)", dataIndex: "finalPurchaseRateUsd" },
+              ]}
+            />
+          )}
           <PurchaseHedgesPanel purchaseId={purchaseId} readOnly={posted} onAdded={refresh} hedges={rowsOf(purchase.hedges)} />
         </>
       )}
@@ -366,11 +393,13 @@ function PurchaseItemsPanel({
   readOnly,
   onAdded,
   items,
+  isLmePricing,
 }: {
   purchaseId: string;
   readOnly: boolean;
   onAdded: () => void;
   items: Record<string, unknown>[];
+  isLmePricing: boolean;
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const { message } = AntApp.useApp();
@@ -426,7 +455,21 @@ function PurchaseItemsPanel({
         ]}
       />
       <Drawer title="Add Purchase Item" open={open} onClose={() => setOpen(false)} width={420} destroyOnHidden>
-        <SchemaForm module="purchase" entity="item" mode="create" onSubmit={handleSubmit} />
+        {isLmePricing && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="Purchase Rate (USD) is derived from the LME record's final rate and isn't entered manually."
+          />
+        )}
+        <SchemaForm
+          module="purchase"
+          entity="item"
+          mode="create"
+          onSubmit={handleSubmit}
+          {...(isLmePricing ? { hiddenFields: ["purchaseRateUsd"] } : {})}
+        />
       </Drawer>
     </Card>
   );
@@ -538,6 +581,7 @@ function PurchaseSubResourceList({
   rows,
   onAdded,
   columns,
+  footer,
 }: {
   title: string;
   entity: string;
@@ -547,6 +591,7 @@ function PurchaseSubResourceList({
   rows: Record<string, unknown>[];
   onAdded: () => void;
   columns: SubResourceColumn[];
+  footer?: ReactNode;
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const { message } = AntApp.useApp();
@@ -582,9 +627,23 @@ function PurchaseSubResourceList({
           ...(column.render ? { render: column.render } : {}),
         }))}
       />
+      {footer}
       <Drawer title={`Add ${title}`} open={open} onClose={() => setOpen(false)} width={420} destroyOnHidden>
         <SchemaForm module="purchase" entity={entity} mode="create" onSubmit={handleSubmit} />
       </Drawer>
     </Card>
+  );
+}
+
+/** Prompt 21 item 6: purely informational running total - allocation is a soft reservation, never validated client-side against 100%. */
+function AllocationTotal({ rows }: { rows: Record<string, unknown>[] }): ReactElement {
+  const total = rows.reduce((sum, row) => {
+    const pct = typeof row.allocationPct === "string" || typeof row.allocationPct === "number" ? Number(row.allocationPct) : 0;
+    return sum + (Number.isFinite(pct) ? pct : 0);
+  }, 0);
+  return (
+    <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
+      Allocated: {total}% (soft reservation only - not a hard limit)
+    </Typography.Text>
   );
 }

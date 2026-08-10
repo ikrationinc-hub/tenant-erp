@@ -399,14 +399,18 @@ describe("field-definitions HTTP module", () => {
       const fields = await fetchOrderedFields(admin, "purchase", "header");
       expect(fields).toEqual([
         { fieldKey: "purchaseNumber", isMandatory: false },
+        { fieldKey: "divisionId", isMandatory: true },
         { fieldKey: "purchaseDate", isMandatory: true },
         { fieldKey: "branchId", isMandatory: true },
         { fieldKey: "buyerId", isMandatory: true },
         { fieldKey: "supplierId", isMandatory: true },
+        { fieldKey: "pricingType", isMandatory: true },
         { fieldKey: "supplierInvoiceNo", isMandatory: false },
         { fieldKey: "supplierReferenceNo", isMandatory: false },
+        { fieldKey: "brokerId", isMandatory: false },
+        { fieldKey: "brokerCommission", isMandatory: false },
         { fieldKey: "lotNumber", isMandatory: true },
-        { fieldKey: "containerNumber", isMandatory: true },
+        { fieldKey: "containerId", isMandatory: true },
         { fieldKey: "blNo", isMandatory: true },
         { fieldKey: "loadingDate", isMandatory: true },
         { fieldKey: "transportModeId", isMandatory: true },
@@ -497,6 +501,7 @@ describe("field-definitions HTTP module", () => {
       expect(fields).toEqual([
         { fieldKey: "lmeExchangeId", isMandatory: true },
         { fieldKey: "metal", isMandatory: true },
+        { fieldKey: "lmeType", isMandatory: true },
         { fieldKey: "lmePriceUsd", isMandatory: true },
         { fieldKey: "fixingDate", isMandatory: true },
         { fieldKey: "agreedPremiumPct", isMandatory: true },

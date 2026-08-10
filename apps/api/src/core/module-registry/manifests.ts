@@ -6,6 +6,7 @@ import { healthRouter } from "../../modules/health/health.routes.js";
 import { inventoryRouter } from "../../modules/inventory/inventory.routes.js";
 import { menusRouter } from "../../modules/menus/menus.routes.js";
 import { purchaseRouter } from "../../modules/purchase/purchase.routes.js";
+import { brokersRouter } from "../../modules/brokers/brokers.routes.js";
 import { suppliersRouter } from "../../modules/suppliers/suppliers.routes.js";
 import { usersRouter } from "../../modules/users/users.routes.js";
 import { ALL_MASTER_PERMISSIONS, mastersRouter } from "../masters/registry.js";
@@ -208,6 +209,23 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     // "masters": suppliers.supplier_type_id/country_id/city_id/payment_term_id/currency_id all FK into core/masters tables.
     dependsOn: ["auth", "roles", "masters"],
     migrations: ["0014_shiny_lilandra"],
+  },
+  {
+    key: "brokers",
+    name: "Broker Master",
+    version: "1.0.0",
+    // Prompt 21 item 4: full dedicated module mirroring suppliers' own
+    // shape (own table + contacts/banks child tables, own permission
+    // namespace) rather than a generic core/masters/factory.ts master -
+    // same reasoning suppliers itself isn't one.
+    routes: brokersRouter,
+    permissions: [
+      permissionEntry("brokers", "broker", "create", "Create a broker"),
+      permissionEntry("brokers", "broker", "read", "View brokers"),
+      permissionEntry("brokers", "broker", "update", "Edit a broker, or activate/deactivate it"),
+    ],
+    dependsOn: ["auth", "roles", "masters"],
+    migrations: ["0023_prompt21_masters_and_purchase_columns"],
   },
   {
     key: "purchase",

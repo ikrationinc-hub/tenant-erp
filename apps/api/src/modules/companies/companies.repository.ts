@@ -50,6 +50,15 @@ export async function listCompanies(tx: TenantTx, params: CompaniesListParams): 
   };
 }
 
+/** Active-only, unpaginated, sorted for display - powers a dropdown (GET /api/v1/companies/options), e.g. Purchase's own buyerId field (Prompt 21 follow-up: "Buyer" names a tenant company, not a user). Tenant-wide, same reasoning as listCompanies' own doc comment - no company_id scope to filter by. */
+export async function listActiveCompanies(tx: TenantTx): Promise<CompanyRow[]> {
+  return tx
+    .select()
+    .from(companies)
+    .where(and(eq(companies.status, "active"), isNull(companies.deletedAt)))
+    .orderBy(asc(companies.name));
+}
+
 export async function findCompanyById(tx: TenantTx, id: string): Promise<CompanyRow | undefined> {
   const [row] = await tx
     .select()

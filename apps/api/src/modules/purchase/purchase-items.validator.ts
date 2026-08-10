@@ -14,6 +14,13 @@ const decimalStringSchema = z.string().regex(/^\d+(\.\d+)?$/, "Expected a positi
  * (resolved open questions #1/#2). `purchaseAmountUsd`/`purchaseAmountAed`
  * are never accepted - FR-105/FR-106's calculated fields, always
  * server-derived.
+ *
+ * `purchaseRateUsd` is optional here (Prompt 21 item 2) - required under
+ * the parent purchase's pricing_type='fixed' (manual entry, as before),
+ * but under 'lme' the server derives it from the LME record's final rate
+ * and REJECTS a client-supplied value instead of silently overriding it -
+ * both checks live in purchase-items.service.ts, since only it has the
+ * parent purchase's pricingType to branch on.
  */
 export const addPurchaseItemSchema = z
   .object({
@@ -21,7 +28,7 @@ export const addPurchaseItemSchema = z
     gradeId: z.string().uuid().optional(),
     quantity: decimalStringSchema,
     uomId: z.string().uuid(),
-    purchaseRateUsd: decimalStringSchema,
+    purchaseRateUsd: decimalStringSchema.optional(),
     exchangeRate: decimalStringSchema,
   })
   .strict();

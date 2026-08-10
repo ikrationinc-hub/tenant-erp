@@ -1,0 +1,2 @@
+ALTER TABLE "purchase_shipments" ADD COLUMN "container_id" uuid;--> statement-breakpoint
+ALTER TABLE "purchase_shipments" ADD CONSTRAINT "purchase_shipments_container_id_containers_id_fk" FOREIGN KEY ("container_id") REFERENCES "containers"("id") ON DELETE restrict ON UPDATE no action;

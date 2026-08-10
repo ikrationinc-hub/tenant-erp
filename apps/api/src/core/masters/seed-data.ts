@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { withTenantSchema } from "../../database/get-db.js";
-import { countries, currencies, incoterms, uom } from "../../database/tenant/schema.js";
+import { countries, currencies, divisions, incoterms, uom } from "../../database/tenant/schema.js";
 import type { MasterTable } from "./types.js";
 
 export interface SeedMasterDataInput {
@@ -72,6 +72,14 @@ const UOM_SEEDS: CodeNameSeed[] = pairs([
   ["CBM", "Cubic Meter"],
 ]);
 
+/** Prompt 21 item 1: the four divisions the client named explicitly - this list IS complete, unlike the reference-data ones above. */
+const DIVISION_SEEDS: CodeNameSeed[] = pairs([
+  ["CONTAINER", "Container"],
+  ["ELECTRONICS", "Electronics"],
+  ["SCRAP", "Scrap"],
+  ["BULK", "Bulk"],
+]);
+
 /**
  * Seeds the four masters docs/spec/Purchase-V2.md's provisioning task item
  * 4 names as needing "real reference data" - the other 11 masters (ports,
@@ -112,5 +120,6 @@ export async function seedMasterData(input: SeedMasterDataInput): Promise<void> 
     await seed(currencies, CURRENCY_SEEDS);
     await seed(incoterms, INCOTERM_SEEDS);
     await seed(uom, UOM_SEEDS);
+    await seed(divisions, DIVISION_SEEDS);
   });
 }

@@ -12,7 +12,7 @@ import { resetMailer, setMailer } from "../../../core/notification/mailer.js";
 import { signPlatformAdminToken } from "../../../core/platform-auth/jwt.js";
 import { closeTenantDbPool, withTenantSchema } from "../../../database/get-db.js";
 import { tenants } from "../../../database/platform/schema.js";
-import { menus, roles, userRoles, users } from "../../../database/tenant/schema.js";
+import { divisions, menus, roles, userRoles, users } from "../../../database/tenant/schema.js";
 import { insertPlatformAdmin } from "../../../modules/platform/platform.repository.js";
 import { provisionTenant } from "../provision-tenant.js";
 import { DEFAULT_ROLE_NAMES } from "../seed-roles.js";
@@ -133,6 +133,30 @@ describe("core/provisioning: provisionTenant", () => {
 
       expect(mailer.sent).toHaveLength(1);
       expect(mailer.sent[0]?.to).toBe(`admin-${slug}@example.com`);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    // Prompt 21 item 1: the four divisions the client named explicitly,
+    // seeded by core/masters/seed-data.ts's DIVISION_SEEDS (same
+    // provisioning step that seeds countries/currencies/incoterms/uom).
+    "provisioning seeds the four named divisions - Container, Electronics, Scrap, Bulk",
+    async () => {
+      useFakeMailer();
+      const platformAdmin = await seedPlatformAdmin();
+      const slug = uniqueSlug("provision-divisions");
+
+      const result = await provisionTenant(
+        { name: "Divisions Co", slug, adminEmail: `admin-${slug}@example.com`, adminName: "Ada Admin", modules: ["purchase"] },
+        platformAdmin.id,
+      );
+
+      const seededDivisions = await withTenantSchema(result.schemaName, (tx) =>
+        tx.select({ code: divisions.code, name: divisions.name }).from(divisions).where(eq(divisions.companyId, result.companyId)),
+      );
+      expect(new Set(seededDivisions.map((d) => d.code))).toEqual(new Set(["CONTAINER", "ELECTRONICS", "SCRAP", "BULK"]));
+      expect(new Set(seededDivisions.map((d) => d.name))).toEqual(new Set(["Container", "Electronics", "Scrap", "Bulk"]));
     },
     TEST_TIMEOUT_MS,
   );

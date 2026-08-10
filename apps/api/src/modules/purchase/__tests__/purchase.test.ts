@@ -14,8 +14,10 @@ import { closeTenantDbPool, withTenantSchema } from "../../../database/get-db.js
 import {
   branches,
   companies,
+  containers,
   countries,
   currencies,
+  divisions,
   incoterms,
   items,
   paymentTerms,
@@ -37,7 +39,7 @@ const shipmentSchema = z.object({
   purchaseId: z.string(),
   shipmentYear: z.number(),
   lotNumber: z.string(),
-  containerNumber: z.string(),
+  containerId: z.string(),
   blNo: z.string(),
   loadingDate: z.string(),
   transportModeId: z.string(),
@@ -53,11 +55,15 @@ const purchaseRowSchema = z.object({
   purchaseNumber: z.string(),
   purchaseDate: z.string(),
   status: z.enum(["draft", "approved", "posted"]),
+  divisionId: z.string().nullable().optional(),
+  pricingType: z.enum(["lme", "fixed"]).nullable().optional(),
   branchId: z.string(),
   buyerId: z.string(),
   supplierId: z.string(),
   supplierInvoiceNo: z.string().nullable().optional(),
   supplierReferenceNo: z.string().nullable().optional(),
+  brokerId: z.string().nullable().optional(),
+  brokerCommission: z.string().nullable().optional(),
   shipment: shipmentSchema.optional(),
 });
 
@@ -90,6 +96,7 @@ interface SeededPurchaseTenant {
   roleId: string;
   accessToken: string;
   refs: {
+    divisionId: string;
     branchId: string;
     buyerId: string;
     supplierId: string;
@@ -98,6 +105,8 @@ interface SeededPurchaseTenant {
     portBId: string;
     warehouseId: string;
     incotermId: string;
+    containerId: string;
+    containerId2: string;
   };
 }
 
@@ -151,7 +160,10 @@ async function seedPurchaseTenant(label: string): Promise<SeededPurchaseTenant> 
     const [portB] = await tx.insert(ports).values({ companyId: company.id, code: "SHA", name: "Shanghai", createdBy: user.id }).returning();
     const [warehouse] = await tx.insert(warehouses).values({ companyId: company.id, code: "WH1", name: "Main Warehouse", createdBy: user.id }).returning();
     const [incoterm] = await tx.insert(incoterms).values({ companyId: company.id, code: "CIF", name: "Cost, Insurance and Freight", createdBy: user.id }).returning();
-    if (!branch || !supplier || !transportMode || !portA || !portB || !warehouse || !incoterm) {
+    const [division] = await tx.insert(divisions).values({ companyId: company.id, code: "CONTAINER", name: "Container", createdBy: user.id }).returning();
+    const [container] = await tx.insert(containers).values({ companyId: company.id, code: "CONT-1", name: "CONT-1", createdBy: user.id }).returning();
+    const [container2] = await tx.insert(containers).values({ companyId: company.id, code: "CONT-9", name: "CONT-9", createdBy: user.id }).returning();
+    if (!branch || !supplier || !transportMode || !portA || !portB || !warehouse || !incoterm || !division || !container || !container2) {
       throw new Error("failed to insert shipment prerequisite masters");
     }
 
@@ -159,14 +171,20 @@ async function seedPurchaseTenant(label: string): Promise<SeededPurchaseTenant> 
       companyId: company.id,
       userId: user.id,
       refs: {
+        divisionId: division.id,
         branchId: branch.id,
-        buyerId: user.id,
+        // buyerId names a tenant company, not a user (client correction) -
+        // reusing the seeded company itself is a valid, always-satisfiable
+        // FK target for these tests, same as any other purchase.
+        buyerId: company.id,
         supplierId: supplier.id,
         transportModeId: transportMode.id,
         portAId: portA.id,
         portBId: portB.id,
         warehouseId: warehouse.id,
         incotermId: incoterm.id,
+        containerId: container.id,
+        containerId2: container2.id,
       },
     };
   });
@@ -188,12 +206,14 @@ async function seedPurchaseTenant(label: string): Promise<SeededPurchaseTenant> 
 function basePayload(refs: SeededPurchaseTenant["refs"], overrides: Record<string, unknown> = {}) {
   return {
     purchaseDate: "2024-06-15",
+    divisionId: refs.divisionId,
+    pricingType: "fixed",
     branchId: refs.branchId,
     buyerId: refs.buyerId,
     supplierId: refs.supplierId,
     shipment: {
       lotNumber: "LOT-1",
-      containerNumber: "CONT-1",
+      containerId: refs.containerId,
       blNo: "BL-1",
       loadingDate: "2024-06-10",
       transportModeId: refs.transportModeId,
@@ -253,19 +273,19 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
       const updateRes = await request(app)
         .patch(`/api/v1/purchases/${created.id}`)
         .set("Authorization", authHeader)
-        .send({ supplierInvoiceNo: "INV-99", shipment: { containerNumber: "CONT-9", loadingDate: "2023-01-05" } });
+        .send({ supplierInvoiceNo: "INV-99", shipment: { containerId: tenant.refs.containerId2, loadingDate: "2023-01-05" } });
 
       expect(updateRes.status).toBe(200);
       const updated = asPurchase(updateRes);
       expect(updated.supplierInvoiceNo).toBe("INV-99");
-      expect(updated.shipment?.containerNumber).toBe("CONT-9");
+      expect(updated.shipment?.containerId).toBe(tenant.refs.containerId2);
       // Changing Loading Date recomputes Shipment Year - it's derived, never stale.
       expect(updated.shipment?.shipmentYear).toBe(2023);
       // Purchase Number is read-only - never touched by an edit.
       expect(updated.purchaseNumber).toBe(created.purchaseNumber);
 
       const getRes = await request(app).get(`/api/v1/purchases/${created.id}`).set("Authorization", authHeader);
-      expect(asPurchase(getRes).shipment?.containerNumber).toBe("CONT-9");
+      expect(asPurchase(getRes).shipment?.containerId).toBe(tenant.refs.containerId2);
     },
     TEST_TIMEOUT_MS,
   );

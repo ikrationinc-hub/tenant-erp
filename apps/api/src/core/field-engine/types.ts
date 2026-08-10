@@ -92,6 +92,8 @@ export interface FieldDefault {
   fieldType?: FieldType;
   /** Dropdown only - a role picker etc. renders as a multi-select and stores an array, not a single string. Mirrors packages/contracts/src/field-definitions.ts's fieldDefinitionSchema.multiple. */
   multiple?: boolean;
+  /** Lookup only (Prompt 21 item 5) - lets the field's own Select create a new row in the referenced master inline (POST /masters/:urlSegment with {code, name} = the search text) when nothing matches, rather than requiring pre-registration. Code-declared and never field_definitions-row-overridable, same as dataType - this is structural to the field, not a per-company label/visibility preference. */
+  allowCreate?: boolean;
   validationJson?: FieldValidationRules;
   sortOrder: number;
   isSystem: boolean;
@@ -119,6 +121,7 @@ export interface EffectiveField {
   optionsSource: FieldOptionsSource | undefined;
   fieldType: FieldType | undefined;
   multiple: boolean | undefined;
+  allowCreate: boolean | undefined;
   validationJson: FieldValidationRules | undefined;
   sortOrder: number;
   isSystem: boolean;

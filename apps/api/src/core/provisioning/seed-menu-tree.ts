@@ -103,6 +103,14 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     requiredPermission: "suppliers.supplier.read",
   },
   {
+    key: "brokers",
+    label: "Brokers",
+    path: "/brokers",
+    icon: "shop",
+    moduleKey: "brokers",
+    requiredPermission: "brokers.broker.read",
+  },
+  {
     key: "masters",
     label: "Masters",
     icon: "database",
@@ -161,7 +169,7 @@ async function seedNode(
   }
 }
 
-/** Not idempotent on its own, same reasoning as seed-roles.ts's seedDefaultRoles - see provision-tenant.ts. */
+/** Safely re-runnable against an already-provisioned tenant: createMenu upserts by (companyId, key), so a node added to DEFAULT_MENU_TREE after a tenant was first provisioned gets inserted on the next call instead of erroring or duplicating - the backfill path for exactly that gap. */
 export async function seedDefaultMenuTree(input: SeedMenuTreeInput): Promise<void> {
   for (const [i, node] of DEFAULT_MENU_TREE.entries()) {
     // Sequential on purpose, see above

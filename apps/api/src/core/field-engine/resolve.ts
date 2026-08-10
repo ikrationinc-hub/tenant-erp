@@ -89,6 +89,7 @@ export async function resolveBaseFieldDefinitions(
         defaultValue: fallback.defaultValue,
         optionsSource: fallback.optionsSource,
         multiple: fallback.multiple,
+        allowCreate: fallback.allowCreate,
         fieldType: fallback.fieldType,
         validationJson: fallback.validationJson,
         sortOrder: fallback.sortOrder,

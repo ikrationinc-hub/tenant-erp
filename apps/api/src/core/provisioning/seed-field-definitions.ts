@@ -57,6 +57,18 @@ export async function seedDefaultFieldDefinitions(input: SeedFieldDefinitionsInp
             isEditable: field.isEditable,
             sortOrder: field.sortOrder,
             isSystem: field.isSystem,
+            // Nothing PATCH-able ever writes these two (field-definitions.
+            // validator.ts's updateFieldDefinitionSchema doesn't accept
+            // either) - core/field-engine/defaults.ts is their only real
+            // source, so a re-seed must refresh them too. Omitting them
+            // from this `set` was itself a real bug: a field whose code
+            // default CHANGED (e.g. purchase/header's buyerId moving from
+            // optionsSource "users" to "companies") kept resolving to the
+            // stale DB value forever on an already-provisioned tenant,
+            // since resolve.ts's mergeRow always prefers a non-null row
+            // value over the code fallback.
+            optionsSource: typeof field.optionsSource === "string" ? field.optionsSource : null,
+            defaultValue: field.defaultValue ?? null,
             updatedBy: input.createdBy,
             updatedAt: new Date(),
           },

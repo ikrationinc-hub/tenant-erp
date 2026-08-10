@@ -14,8 +14,10 @@ import { closeTenantDbPool, withTenantSchema } from "../../../database/get-db.js
 import {
   branches,
   companies,
+  containers,
   countries,
   currencies,
+  divisions,
   incoterms,
   itemGrades,
   items,
@@ -68,6 +70,7 @@ interface SeededTenant {
   userId: string;
   accessToken: string;
   purchaseRefs: {
+    divisionId: string;
     branchId: string;
     buyerId: string;
     supplierId: string;
@@ -76,6 +79,7 @@ interface SeededTenant {
     portBId: string;
     warehouseId: string;
     incotermId: string;
+    containerId: string;
   };
   itemRefs: { itemId: string; gradeId: string; uomId: string };
 }
@@ -134,8 +138,10 @@ async function seedTenant(label: string): Promise<SeededTenant> {
     const [item] = await tx.insert(items).values({ companyId: company.id, code: "CU-CATH", name: "Copper Cathode", itemType: "metals", createdBy: user.id }).returning();
     const [grade] = await tx.insert(itemGrades).values({ companyId: company.id, code: "A", name: "Grade A", createdBy: user.id }).returning();
     const [unit] = await tx.insert(uom).values({ companyId: company.id, code: "MT", name: "Metric Ton", createdBy: user.id }).returning();
+    const [division] = await tx.insert(divisions).values({ companyId: company.id, code: "CONTAINER", name: "Container", createdBy: user.id }).returning();
+    const [container] = await tx.insert(containers).values({ companyId: company.id, code: "CONT-1", name: "CONT-1", createdBy: user.id }).returning();
 
-    if (!branch || !supplier || !transportMode || !portA || !portB || !warehouse || !incoterm || !item || !grade || !unit) {
+    if (!branch || !supplier || !transportMode || !portA || !portB || !warehouse || !incoterm || !item || !grade || !unit || !division || !container) {
       throw new Error("failed to insert prerequisite masters");
     }
 
@@ -143,14 +149,16 @@ async function seedTenant(label: string): Promise<SeededTenant> {
       companyId: company.id,
       userId: user.id,
       purchaseRefs: {
+        divisionId: division.id,
         branchId: branch.id,
-        buyerId: user.id,
+        buyerId: company.id, // buyer names a company, not a user (client correction)
         supplierId: supplier.id,
         transportModeId: transportMode.id,
         portAId: portA.id,
         portBId: portB.id,
         warehouseId: warehouse.id,
         incotermId: incoterm.id,
+        containerId: container.id,
       },
       itemRefs: { itemId: item.id, gradeId: grade.id, uomId: unit.id },
     };
@@ -176,12 +184,14 @@ async function createDraftPurchase(app: ReturnType<typeof createApp>, authHeader
     .set("Authorization", authHeader)
     .send({
       purchaseDate: "2024-06-15",
+      divisionId: tenant.purchaseRefs.divisionId,
+      pricingType: "fixed",
       branchId: tenant.purchaseRefs.branchId,
       buyerId: tenant.purchaseRefs.buyerId,
       supplierId: tenant.purchaseRefs.supplierId,
       shipment: {
         lotNumber: "LOT-1",
-        containerNumber: "CONT-1",
+        containerId: tenant.purchaseRefs.containerId,
         blNo: "BL-1",
         loadingDate: "2024-06-10",
         transportModeId: tenant.purchaseRefs.transportModeId,

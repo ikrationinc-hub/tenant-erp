@@ -37,6 +37,7 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/roles",
   "/admin/field-definitions",
   "/suppliers",
+  "/brokers",
   "/purchase/orders",
   "/inventory",
   ...MASTER_MODULES.filter((module) => module.entity !== "customer").map((module) => `/masters/${module.urlSegment}`),

@@ -38,6 +38,10 @@ const REAL_MIGRATION_VERSIONS = [
   "0020_companies_country_currency_fk",
   "0021_companies_drop_country_currency_code",
   "0022_add_lme_records_metal",
+  "0023_prompt21_masters_and_purchase_columns",
+  "0024_prompt21_add_shipment_container_id",
+  "0025_prompt21_finalize_shipment_container",
+  "0026_buyer_references_companies",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

@@ -14,9 +14,11 @@ import { closeTenantDbPool, withTenantSchema } from "../../../database/get-db.js
 import {
   branches,
   companies,
+  containers,
   countries,
   currencies,
   customers,
+  divisions,
   incoterms,
   paymentTerms,
   permissions,
@@ -56,6 +58,7 @@ interface SeededTenant {
   userId: string;
   accessToken: string;
   purchaseRefs: {
+    divisionId: string;
     branchId: string;
     buyerId: string;
     supplierId: string;
@@ -64,6 +67,7 @@ interface SeededTenant {
     portBId: string;
     warehouseId: string;
     incotermId: string;
+    containerId: string;
   };
   customerAId: string;
   customerBId: string;
@@ -121,8 +125,10 @@ async function seedTenant(label: string): Promise<SeededTenant> {
 
     const [customerA] = await tx.insert(customers).values({ companyId: company.id, code: "CUST-A", name: "Customer A", createdBy: user.id }).returning();
     const [customerB] = await tx.insert(customers).values({ companyId: company.id, code: "CUST-B", name: "Customer B", createdBy: user.id }).returning();
+    const [division] = await tx.insert(divisions).values({ companyId: company.id, code: "CONTAINER", name: "Container", createdBy: user.id }).returning();
+    const [container] = await tx.insert(containers).values({ companyId: company.id, code: "CONT-1", name: "CONT-1", createdBy: user.id }).returning();
 
-    if (!supplier || !transportMode || !portA || !portB || !warehouse || !incoterm || !customerA || !customerB) {
+    if (!supplier || !transportMode || !portA || !portB || !warehouse || !incoterm || !customerA || !customerB || !division || !container) {
       throw new Error("failed to insert prerequisite masters");
     }
 
@@ -130,14 +136,16 @@ async function seedTenant(label: string): Promise<SeededTenant> {
       companyId: company.id,
       userId: user.id,
       purchaseRefs: {
+        divisionId: division.id,
         branchId: branch.id,
-        buyerId: user.id,
+        buyerId: company.id, // buyer names a company, not a user (client correction)
         supplierId: supplier.id,
         transportModeId: transportMode.id,
         portAId: portA.id,
         portBId: portB.id,
         warehouseId: warehouse.id,
         incotermId: incoterm.id,
+        containerId: container.id,
       },
       customerAId: customerA.id,
       customerBId: customerB.id,
@@ -164,12 +172,14 @@ async function createDraftPurchase(app: ReturnType<typeof createApp>, authHeader
     .set("Authorization", authHeader)
     .send({
       purchaseDate: "2024-06-15",
+      divisionId: tenant.purchaseRefs.divisionId,
+      pricingType: "fixed",
       branchId: tenant.purchaseRefs.branchId,
       buyerId: tenant.purchaseRefs.buyerId,
       supplierId: tenant.purchaseRefs.supplierId,
       shipment: {
         lotNumber: "LOT-1",
-        containerNumber: "CONT-1",
+        containerId: tenant.purchaseRefs.containerId,
         blNo: "BL-1",
         loadingDate: "2024-06-10",
         transportModeId: tenant.purchaseRefs.transportModeId,
@@ -222,7 +232,11 @@ describe("modules/purchase - Record Purchase, session (c): customer allocation (
   );
 
   it(
-    "an allocation that would push the purchase's total over 100% is rejected",
+    // Prompt 21 item 6: allocation is a SOFT reservation - the client
+    // confirmed the eventual sale is not bound to it and may go to a
+    // different customer entirely, so an earlier hard >100% block was
+    // relaxed. docs/adr/0013-allocation-is-soft-reservation.md.
+    "an allocation that pushes the purchase's total over 100% is NOT rejected - a non-blocking soft reservation",
     async () => {
       const tenant = await seedTenant("overallocate");
       const app = createApp();
@@ -239,7 +253,36 @@ describe("modules/purchase - Record Purchase, session (c): customer allocation (
         .post(`/api/v1/purchases/${purchaseId}/allocations`)
         .set("Authorization", authHeader)
         .send({ reservedCustomerId: tenant.customerBId, allocationPct: "50" });
-      expect(secondRes.status).toBe(422);
+      expect(secondRes.status).toBe(201);
+
+      const getRes = await request(app).get(`/api/v1/purchases/${purchaseId}`).set("Authorization", authHeader);
+      const allocations = (getRes.body as { allocations: { allocationPct: string }[] }).allocations;
+      expect(allocations).toHaveLength(2);
+      const total = allocations.reduce((sum, row) => sum + Number(row.allocationPct), 0);
+      expect(total).toBe(110);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a single allocation still can't exceed 100% or be zero/negative on its own - a basic sanity bound, not the removed cross-row constraint",
+    async () => {
+      const tenant = await seedTenant("single-bound");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+      const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+
+      const overRes = await request(app)
+        .post(`/api/v1/purchases/${purchaseId}/allocations`)
+        .set("Authorization", authHeader)
+        .send({ reservedCustomerId: tenant.customerAId, allocationPct: "150" });
+      expect(overRes.status).toBe(422);
+
+      const zeroRes = await request(app)
+        .post(`/api/v1/purchases/${purchaseId}/allocations`)
+        .set("Authorization", authHeader)
+        .send({ reservedCustomerId: tenant.customerAId, allocationPct: "0" });
+      expect(zeroRes.status).toBe(422);
     },
     TEST_TIMEOUT_MS,
   );

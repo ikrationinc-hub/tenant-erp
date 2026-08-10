@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { withTenantSchema } from "../../database/get-db.js";
 import { menus } from "../../database/tenant/schema.js";
 import { bumpMenuVersion } from "./cache.js";
@@ -25,30 +25,55 @@ export interface CreateMenuInput {
   createdBy: string;
 }
 
+/**
+ * Upsert by (companyId, key) - NOT a plain insert. seed-menu-tree.ts's
+ * seedDefaultMenuTree walks the whole default tree unconditionally, and
+ * needs to be safely re-runnable against a tenant that was provisioned
+ * before a node existed (e.g. a module added in a later release): without
+ * this, re-running it either throws (duplicate key) or silently produces
+ * a second, orphaned row for the same key. Mirrors core/rbac/seed.ts's
+ * seedPermissionCatalogue's own "upsert every catalogue entry" idiom -
+ * also keeps an existing tenant's label/path/icon/permission in sync if
+ * DEFAULT_MENU_TREE's copy for that key changes later.
+ */
 export async function createMenu(input: CreateMenuInput): Promise<typeof menus.$inferSelect> {
   const menu = await withTenantSchema(input.schemaName, async (tx) => {
-    const [inserted] = await tx
+    const values = {
+      companyId: input.companyId,
+      key: input.key,
+      label: input.label,
+      sortOrder: input.sortOrder ?? 0,
+      isVisible: input.isVisible ?? true,
+      createdBy: input.createdBy,
+      path: input.path ?? null,
+      icon: input.icon ?? null,
+      parentId: input.parentId ?? null,
+      requiredPermission: input.requiredPermission ?? null,
+      moduleKey: input.moduleKey ?? null,
+    };
+    const [upserted] = await tx
       .insert(menus)
-      .values({
-        companyId: input.companyId,
-        key: input.key,
-        label: input.label,
-        sortOrder: input.sortOrder ?? 0,
-        isVisible: input.isVisible ?? true,
-        createdBy: input.createdBy,
-        ...(input.path !== undefined ? { path: input.path } : {}),
-        ...(input.icon !== undefined ? { icon: input.icon } : {}),
-        ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
-        ...(input.requiredPermission !== undefined
-          ? { requiredPermission: input.requiredPermission }
-          : {}),
-        ...(input.moduleKey !== undefined ? { moduleKey: input.moduleKey } : {}),
+      .values(values)
+      .onConflictDoUpdate({
+        target: [menus.companyId, menus.key],
+        targetWhere: sql`${menus.deletedAt} is null`,
+        set: {
+          label: values.label,
+          sortOrder: values.sortOrder,
+          path: values.path,
+          icon: values.icon,
+          parentId: values.parentId,
+          requiredPermission: values.requiredPermission,
+          moduleKey: values.moduleKey,
+          updatedBy: input.createdBy,
+          updatedAt: new Date(),
+        },
       })
       .returning();
-    if (!inserted) {
-      throw new Error("failed to insert menu");
+    if (!upserted) {
+      throw new Error("failed to upsert menu");
     }
-    return inserted;
+    return upserted;
   });
   await bumpMenuVersion(input.companyId);
   return menu;

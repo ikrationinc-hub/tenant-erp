@@ -7,9 +7,11 @@ import { tenants } from "../src/database/platform/schema.js";
 import {
   branches,
   companies,
+  containers,
   countries,
   currencies,
   customers,
+  divisions,
   hedgePlatforms,
   incoterms,
   itemGrades,
@@ -136,6 +138,7 @@ export async function seedDevData(tenantSlug: string): Promise<SeedDevResult> {
     const gradeId = await ensureMaster(schemaName, itemGrades, companyId, createdBy, "DEV-GR-A", "Grade A");
     const lmeExchangeId = await ensureMaster(schemaName, lmeExchanges, companyId, createdBy, "DEV-LME", "London Metal Exchange");
     const hedgePlatformId = await ensureMaster(schemaName, hedgePlatforms, companyId, createdBy, "DEV-CME", "CME Group");
+    const divisionId = await ensureMaster(schemaName, divisions, companyId, createdBy, "DEV-CONTAINER", "Container");
     await ensureMaster(schemaName, customers, companyId, createdBy, "DEV-CUST-1", "Copperline Industries");
     await ensureMaster(schemaName, customers, companyId, createdBy, "DEV-CUST-2", "Northgate Metals");
 
@@ -169,15 +172,19 @@ export async function seedDevData(tenantSlug: string): Promise<SeedDevResult> {
       if (existing) {
         return { purchase: existing, alreadyExisted: true as const };
       }
+      const containerId = await ensureMaster(schemaName, containers, companyId, createdBy, `CONT-${supplierInvoiceNo}`, `CONT-${supplierInvoiceNo}`);
       const purchase = await purchaseService.create(ctx, {
         purchaseDate: "2025-01-15",
+        divisionId,
+        pricingType: "fixed",
         branchId,
-        buyerId: createdBy,
+        // buyerId names a tenant company, not a user (client correction).
+        buyerId: companyId,
         supplierId,
         supplierInvoiceNo,
         shipment: {
           lotNumber: `LOT-${supplierInvoiceNo}`,
-          containerNumber: `CONT-${supplierInvoiceNo}`,
+          containerId,
           blNo: `BL-${supplierInvoiceNo}`,
           loadingDate: "2025-01-10",
           transportModeId,
@@ -224,6 +231,7 @@ export async function seedDevData(tenantSlug: string): Promise<SeedDevResult> {
       await purchaseLmeService.addLmeRecord(ctx, posted.purchase.id, {
         lmeExchangeId,
         metal: "Copper",
+        lmeType: "close",
         lmePriceUsd: decimalString(8200, 6),
         fixingDate: "2025-01-14",
         agreedPremiumPct: decimalString(2.35, 6),

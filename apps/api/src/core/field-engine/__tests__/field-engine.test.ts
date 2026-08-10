@@ -139,6 +139,46 @@ describe("core/field-engine", () => {
   );
 
   it(
+    // Real incident: purchase/header's buyerId moved from optionsSource
+    // "users" to "companies" mid-development. Re-running
+    // seedDefaultFieldDefinitions against an already-provisioned tenant
+    // (the only way an existing tenant ever picks up a code-default
+    // change) silently left the STALE optionsSource in place, because
+    // onConflictDoUpdate's `set` clause excluded that column - a real
+    // purchase create then submitted a user id as buyer_id and violated
+    // the new FK. This locks in that re-seeding actually refreshes it.
+    "re-seeding refreshes a field's optionsSource when its code default has changed - not just label/visibility",
+    async () => {
+      const seed = await seedTenantWithUser("field-options-source-refresh");
+
+      // Simulate a tenant provisioned back when buyerId's code default was
+      // "users" - directly writing the stale value, the same way an
+      // already-provisioned tenant's row would have been left.
+      await withTenantSchema(seed.tenant.schemaName, (tx) =>
+        tx
+          .update(fieldDefinitions)
+          .set({ optionsSource: "users" })
+          .where(
+            and(
+              eq(fieldDefinitions.companyId, seed.companyId),
+              eq(fieldDefinitions.module, "purchase"),
+              eq(fieldDefinitions.entity, "header"),
+              eq(fieldDefinitions.fieldKey, "buyerId"),
+            ),
+          ),
+      );
+
+      await seedDefaultFieldDefinitions({ schemaName: seed.tenant.schemaName, companyId: seed.companyId, createdBy: seed.userId });
+
+      const ctx = ctxFor(seed);
+      const fields = await resolveFieldDefinitions(ctx, "purchase", "header");
+      const buyerId = fields.find((f) => f.fieldKey === "buyerId");
+      expect(buyerId?.optionsSource).toBe("companies");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "an is_system field cannot be hidden",
     async () => {
       const seed = await seedTenantWithUser("field-system-hide");

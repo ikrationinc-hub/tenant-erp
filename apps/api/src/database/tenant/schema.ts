@@ -671,6 +671,12 @@ export const transportModes = defineMasterTable("transport_modes", {});
 export const lmeExchanges = defineMasterTable("lme_exchanges", {});
 export const hedgePlatforms = defineMasterTable("hedge_platforms", {});
 export const supplierTypes = defineMasterTable("supplier_types", {});
+/** Prompt 21 item 1: the purchase-scoping master (Container/Electronics/Scrap/Bulk, seeded by core/masters/seed-data.ts) - the seam for the future vertical model. Deliberately no vertical-specific behavior yet (task's own instruction) - just a scoping FK on purchases. */
+export const divisions = defineMasterTable("divisions", {});
+/** Prompt 21 item 5: was free text on purchase_shipments.container_number - promoted to a master so a container is a real, reusable reference instead of a string a user could misspell across shipments. `containerType` is optional (the task's "optional type/size"), never required. */
+export const containers = defineMasterTable("containers", {
+  containerType: text("container_type"),
+});
 /**
  * Stub only (docs/spec/Purchase-V2.md §4: "customers *(stub only - Reserved
  * Customer needs the dropdown)*", and manifests.ts's "masters" entry: "customer
@@ -965,6 +971,96 @@ export const supplierBanksRelations = relations(supplierBanks, ({ one }) => ({
   }),
 }));
 
+// --- Broker / "D" party (Prompt 21 item 4) ------------------------------
+// Mirrors the supplier module's own shape (its own table + contacts + banks
+// child tables, own repository/service/controller/routes, own permission
+// namespace) - deliberately NOT a generic core/masters/factory.ts master,
+// same reasoning suppliers itself isn't one: a broker needs contacts/banks
+// sub-tables a defineMasterModule call has no room for. Narrower than
+// supplier's own field set on purpose - no supplierTypeId/countryId/
+// cityId/paymentTermId/currencyId equivalents, since a broker is a
+// commission-earning intermediary, not a trading counterparty with its own
+// payment terms/currency (the task's own wording: "name, code, contact
+// fields (mirror the supplier master shape), status, audit columns").
+export const brokerStatusEnum = pgEnum("broker_status", ["active", "inactive"]);
+
+export const brokers = pgTable(
+  "brokers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    status: brokerStatusEnum("status").notNull().default("active"),
+    remarks: text("remarks"),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("brokers_company_id_name_key").on(table.companyId, table.name).where(sql`${table.deletedAt} is null`),
+    uniqueIndex("brokers_company_id_code_key").on(table.companyId, table.code).where(sql`${table.deletedAt} is null`),
+  ],
+);
+
+export const brokerContacts = pgTable(
+  "broker_contacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    brokerId: uuid("broker_id")
+      .notNull()
+      .references(() => brokers.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    contactPerson: text("contact_person").notNull(),
+    mobile: text("mobile"),
+    email: text("email"),
+    ...auditColumns(),
+  },
+  (table) => [index("broker_contacts_broker_id_idx").on(table.brokerId)],
+);
+
+export const brokerBanks = pgTable(
+  "broker_banks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    brokerId: uuid("broker_id")
+      .notNull()
+      .references(() => brokers.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    details: text("details").notNull(),
+    ...auditColumns(),
+  },
+  (table) => [index("broker_banks_broker_id_idx").on(table.brokerId)],
+);
+
+export const brokersRelations = relations(brokers, ({ one, many }) => ({
+  company: one(companies, {
+    fields: [brokers.companyId],
+    references: [companies.id],
+  }),
+  contacts: many(brokerContacts),
+  banks: many(brokerBanks),
+}));
+
+export const brokerContactsRelations = relations(brokerContacts, ({ one }) => ({
+  broker: one(brokers, {
+    fields: [brokerContacts.brokerId],
+    references: [brokers.id],
+  }),
+}));
+
+export const brokerBanksRelations = relations(brokerBanks, ({ one }) => ({
+  broker: one(brokers, {
+    fields: [brokerBanks.brokerId],
+    references: [brokers.id],
+  }),
+}));
+
 // --- Purchase: header + shipment (docs/spec/Purchase-V2.md Sub Tab 2, A-C) -
 // Session (a) of the Purchase build ("the big one" - split across
 // sessions per that task's instruction). Items/pricing/allocation/costs/
@@ -975,6 +1071,10 @@ export const supplierBanksRelations = relations(supplierBanks, ({ one }) => ({
 // transitions, their permissions, and Posted immutability (CLAUDE.md rule
 // 8) are the workflow engine, explicitly deferred to session (e).
 export const purchaseStatusEnum = pgEnum("purchase_status", ["draft", "approved", "posted"]);
+/** Prompt 21 item 2: drives which section is active - 'fixed' keeps today's manual item rate and hides LME Records; 'lme' shows LME Records and derives the item rate from the LME final rate (purchase-items.service.ts). */
+export const purchasePricingTypeEnum = pgEnum("purchase_pricing_type", ["lme", "fixed"]);
+/** Prompt 21 item 4: unused today (a single broker_commission amount is all the form captures) - added now, nullable, so a %/flat split can be introduced later without a migration. Nothing reads or writes this column yet. */
+export const brokerCommissionTypeEnum = pgEnum("broker_commission_type", ["percentage", "flat"]);
 
 export const purchases = pgTable(
   "purchases",
@@ -987,19 +1087,35 @@ export const purchases = pgTable(
     purchaseNumber: text("purchase_number").notNull(),
     purchaseDate: date("purchase_date").notNull(),
     status: purchaseStatusEnum("status").notNull().default("draft"),
+    /**
+     * Prompt 21 item 1: the purchase-scoping master, selected first on the
+     * form. NULLABLE at the DB level on purpose, unlike branchId/buyerId/
+     * supplierId - required going forward via createPurchaseSchema for
+     * every NEW purchase, but existing purchases (real data already on
+     * the droplet) are deliberately left with no division rather than
+     * backfilled to a guessed one (explicit decision: "leave them").
+     */
+    divisionId: uuid("division_id").references(() => divisions.id, { onDelete: "restrict" }),
     branchId: uuid("branch_id")
       .notNull()
       .references(() => branches.id, { onDelete: "restrict" }),
-    /** "Buyer | Dropdown | User" (spec table A) - a tenant user, not a master. */
+    /** Client correction: "Buyer" names which of the tenant's own legal entities (companies) is the buyer of record - NOT the user who negotiated it (originally spec table A's "Buyer | Dropdown | User", superseded). Distinct from companyId above: companyId is the purchase's own scope/branch owner; buyerId can name a different affiliated company for intercompany purchasing. */
     buyerId: uuid("buyer_id")
       .notNull()
-      .references(() => users.id, { onDelete: "restrict" }),
+      .references(() => companies.id, { onDelete: "restrict" }),
     /** FR-102: from Supplier Master, never free text. */
     supplierId: uuid("supplier_id")
       .notNull()
       .references(() => suppliers.id, { onDelete: "restrict" }),
     supplierInvoiceNo: text("supplier_invoice_no"),
     supplierReferenceNo: text("supplier_reference_no"),
+    /** Prompt 21 item 2 - same "leave existing rows unset, require going forward" treatment as divisionId, for the same reason (no sensible value to backfill existing purchases to). */
+    pricingType: purchasePricingTypeEnum("pricing_type"),
+    /** Prompt 21 item 4: nullable - "not every deal has a broker". */
+    brokerId: uuid("broker_id").references(() => brokers.id, { onDelete: "restrict" }),
+    /** Money (rule 1): numeric, decimal.js at the repository boundary, never a float. Nullable - only meaningful when brokerId is set. */
+    brokerCommission: numeric("broker_commission", { precision: 18, scale: 2 }),
+    brokerCommissionType: brokerCommissionTypeEnum("broker_commission_type"),
     /** Sub Tab 2's "Standard fields - every record": "Approved By · Approved Date" - the only workflow-transition actor/timestamp the spec names explicitly (no "Posted By/Date" - that transition's actor is still fully recoverable from audit_logs, same as everywhere else in this build). Set once, by session (e)'s approve() transition; never touched again. */
     approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "restrict" }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
@@ -1035,7 +1151,10 @@ export const purchaseShipments = pgTable(
       .references(() => companies.id, { onDelete: "restrict" }),
     shipmentYear: integer("shipment_year").notNull(),
     lotNumber: text("lot_number").notNull(),
-    containerNumber: text("container_number").notNull(),
+    /** Prompt 21 item 5: was free text (container_number) - promoted to a lookup against the containers master. 0025's migration backfills every distinct existing container_number into the containers master and links it here before adding this NOT NULL, so no data is lost. */
+    containerId: uuid("container_id")
+      .notNull()
+      .references(() => containers.id, { onDelete: "restrict" }),
     blNo: text("bl_no").notNull(),
     loadingDate: date("loading_date").notNull(),
     transportModeId: uuid("transport_mode_id")
@@ -1069,13 +1188,21 @@ export const purchasesRelations = relations(purchases, ({ one }) => ({
     fields: [purchases.branchId],
     references: [branches.id],
   }),
-  buyer: one(users, {
+  buyer: one(companies, {
     fields: [purchases.buyerId],
-    references: [users.id],
+    references: [companies.id],
   }),
   supplier: one(suppliers, {
     fields: [purchases.supplierId],
     references: [suppliers.id],
+  }),
+  division: one(divisions, {
+    fields: [purchases.divisionId],
+    references: [divisions.id],
+  }),
+  broker: one(brokers, {
+    fields: [purchases.brokerId],
+    references: [brokers.id],
   }),
   shipment: one(purchaseShipments, {
     fields: [purchases.id],
@@ -1087,6 +1214,10 @@ export const purchaseShipmentsRelations = relations(purchaseShipments, ({ one })
   purchase: one(purchases, {
     fields: [purchaseShipments.purchaseId],
     references: [purchases.id],
+  }),
+  container: one(containers, {
+    fields: [purchaseShipments.containerId],
+    references: [containers.id],
   }),
   transportMode: one(transportModes, {
     fields: [purchaseShipments.transportModeId],
@@ -1348,6 +1479,8 @@ export const marketPrices = pgTable("market_prices", {
  * `(1 + agreed_premium_pct / 100)` - never recomputed later, since this
  * row is never updated.
  */
+export const lmeTypeEnum = pgEnum("lme_type", ["open", "close", "cash"]);
+
 export const lmeRecords = pgTable(
   "lme_records",
   {
@@ -1367,6 +1500,8 @@ export const lmeRecords = pgTable(
       .references(() => marketPrices.id, { onDelete: "restrict" }),
     /** Snapshotted from market_prices.metal at insert time (purchase-lme.service.ts) - same reasoning as lmePriceUsd/fixingDate/agreedPremiumPct below: a value that also lives on market_prices, but captured here too so this row is a self-contained record of what was recorded, not a dangling reference. */
     metal: text("metal").notNull(),
+    /** Prompt 21 item 3: a categorization field only - no calculation depends on it yet. Nullable at the DB level: existing lme_records rows have no sensible value to backfill to, so they're left null; new rows require it via addLmeRecordSchema. */
+    lmeType: lmeTypeEnum("lme_type"),
     lmePriceUsd: numeric("lme_price_usd", { precision: 18, scale: 6 }).notNull(),
     fixingDate: date("fixing_date").notNull(),
     agreedPremiumPct: numeric("agreed_premium_pct", { precision: 18, scale: 6 }).notNull(),

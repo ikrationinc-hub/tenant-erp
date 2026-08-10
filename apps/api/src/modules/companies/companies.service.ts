@@ -1,10 +1,10 @@
 import type { RequestContext } from "../../common/context/request-context.js";
 import { NotFoundError, UnauthorizedError } from "../../common/errors/index.js";
 import { insertAuditLog } from "../../core/audit/write.js";
-import type { PaginatedRows } from "../../core/masters/types.js";
+import type { MasterOption, PaginatedRows } from "../../core/masters/types.js";
 import { withTenantDb } from "../../database/get-db.js";
 import type { CompaniesListParams, CompanyRow } from "./companies.repository.js";
-import { findCompanyById, insertCompany, listCompanies, updateCompany } from "./companies.repository.js";
+import { findCompanyById, insertCompany, listActiveCompanies, listCompanies, updateCompany } from "./companies.repository.js";
 import type { CreateCompanyInput, UpdateCompanyInput } from "./companies.validator.js";
 
 function requireTenantScope(ctx: RequestContext) {
@@ -18,6 +18,12 @@ function requireTenantScope(ctx: RequestContext) {
 export async function list(ctx: RequestContext, params: CompaniesListParams): Promise<PaginatedRows<CompanyRow>> {
   requireTenantScope(ctx);
   return withTenantDb(ctx, (tx) => listCompanies(tx, params));
+}
+
+export async function listOptions(ctx: RequestContext): Promise<MasterOption[]> {
+  requireTenantScope(ctx);
+  const rows = await withTenantDb(ctx, (tx) => listActiveCompanies(tx));
+  return rows.map((row) => ({ value: row.id, label: row.name }));
 }
 
 export async function create(ctx: RequestContext, input: CreateCompanyInput): Promise<CompanyRow> {

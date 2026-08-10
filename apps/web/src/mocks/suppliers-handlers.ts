@@ -141,6 +141,15 @@ export const suppliersHandlers = [
   // FR-005: duplicate name -> 409, matching suppliers.service.ts's ConflictError, surfaced through the same ApiError/toast pipeline as any other conflict.
   http.post(`${API_BASE}${endpoints.suppliers}`, async ({ request }) => {
     const body = (await request.json()) as Record<string, unknown>;
+    // Mirrors suppliers.validator.ts's createSupplierSchema exactly:
+    // remarks is z.string().min(1).optional() - see brokers-handlers.ts's
+    // own copy of this check for why.
+    if (body.remarks === "") {
+      return HttpResponse.json(
+        { error: { code: "VALIDATION_ERROR", message: "Validation failed", details: { issues: [{ path: ["remarks"], message: "Too small: expected string to have >=1 characters" }] } } },
+        { status: 422 },
+      );
+    }
     if (suppliers.some((row) => row.name === body.name)) {
       return HttpResponse.json(
         { error: { code: "CONFLICT", message: `A supplier with the name "${String(body.name)}" already exists` } },

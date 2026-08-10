@@ -34,6 +34,7 @@ import { MASTER_REGISTRY } from "../modules/masters/master-registry";
 import { mastersHandlers, resolveMasterFieldDefinitions, resolveMasterRowOptions } from "./masters-handlers";
 import { adminHandlers, resolveAdminFieldDefinitions } from "./admin-handlers";
 import { suppliersHandlers, resolveSupplierFieldDefinitions } from "./suppliers-handlers";
+import { brokersHandlers, resolveBrokerFieldDefinitions } from "./brokers-handlers";
 import { purchaseHandlers, resolvePurchaseFieldDefinitions } from "./purchase-handlers";
 import { inventoryHandlers } from "./inventory-handlers";
 import { attachmentsHandlers } from "./attachments-handlers";
@@ -147,6 +148,7 @@ const mockFieldDefinitionModules = fieldDefinitionModulesResponseSchema.parse({
     { module: "purchase", entity: "lme_record" },
     { module: "purchase", entity: "hedge" },
     { module: "suppliers", entity: "supplier" },
+    { module: "brokers", entity: "broker" },
     { module: "admin", entity: "company" },
     { module: "admin", entity: "branch" },
     { module: "users", entity: "user" },
@@ -171,13 +173,14 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       children: [],
     },
     { id: "m-suppliers", key: "suppliers", label: "Suppliers", path: "/suppliers", icon: "shop", sortOrder: 7, children: [] },
+    { id: "m-brokers", key: "brokers", label: "Brokers", path: "/brokers", icon: "shop", sortOrder: 8, children: [] },
     {
       id: "m-masters",
       key: "masters",
       label: "Masters",
       path: null,
       icon: "database",
-      sortOrder: 8,
+      sortOrder: 9,
       // Generated from the same registry MasterScreen resolves against
       // (modules/masters/master-registry.tsx) - the real backend seeds one
       // menu row per master the same way (core/provisioning/
@@ -199,7 +202,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Purchase",
       path: null,
       icon: "shopping-cart",
-      sortOrder: 9,
+      sortOrder: 10,
       children: [
         {
           id: "m-purchase-orders",
@@ -212,7 +215,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
         },
       ],
     },
-    { id: "m-inventory", key: "inventory", label: "Inventory", path: "/inventory", icon: "database", sortOrder: 10, children: [] },
+    { id: "m-inventory", key: "inventory", label: "Inventory", path: "/inventory", icon: "database", sortOrder: 11, children: [] },
   ],
 });
 
@@ -242,6 +245,9 @@ const mockPermissions: MyPermissionsResponse = myPermissionsResponseSchema.parse
     "suppliers.supplier.read",
     "suppliers.supplier.create",
     "suppliers.supplier.update",
+    "brokers.broker.read",
+    "brokers.broker.create",
+    "brokers.broker.update",
     "storage.attachment.create",
     "storage.attachment.read",
     // Full CRUD on every master - matches core/masters/factory.ts's
@@ -320,6 +326,10 @@ export const handlers = [
     if (supplierFields) {
       return HttpResponse.json(supplierFields);
     }
+    const brokerFields = resolveBrokerFieldDefinitions(module, entity);
+    if (brokerFields) {
+      return HttpResponse.json(brokerFields);
+    }
     const purchaseFields = resolvePurchaseFieldDefinitions(module, entity);
     if (purchaseFields) {
       return HttpResponse.json(purchaseFields);
@@ -379,6 +389,7 @@ export const handlers = [
   ...mastersHandlers,
   ...adminHandlers,
   ...suppliersHandlers,
+  ...brokersHandlers,
   ...purchaseHandlers,
   ...inventoryHandlers,
   ...attachmentsHandlers,

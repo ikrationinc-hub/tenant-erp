@@ -131,6 +131,8 @@ export const fieldDefinitionSchema = z.object({
   defaultValue: z.unknown().nullable().optional(),
   /** Dropdown only - a role picker etc. renders as a multi-select and stores an array, not a single string. No backend equivalent yet; set only by apps/web's own admin screens (modules/admin). */
   multiple: z.boolean().optional(),
+  /** Lookup only - lets the field's Select create a new row in the referenced master inline when nothing matches (core/schema-form/field-types/LookupField.tsx), instead of requiring pre-registration. Code-declared, never company-overridable. */
+  allowCreate: z.boolean().optional(),
   optionsSource: optionsSourceSchema.nullable().optional(),
   visibilityCondition: visibilityConditionSchema.nullable().optional(),
   validation: z.record(z.string(), z.unknown()).nullable().optional(),

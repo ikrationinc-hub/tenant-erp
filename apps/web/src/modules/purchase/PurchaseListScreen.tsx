@@ -42,11 +42,13 @@ export function PurchaseListScreen(): ReactElement {
   const navigate = useNavigate();
   const suppliers = useMasterOptions(endpoints.supplierOptions);
   const branches = useMasterOptions(endpoints.branchOptions);
-  const buyers = useMasterOptions(endpoints.userOptions);
+  const buyers = useMasterOptions(endpoints.companyOptions);
+  const divisions = useMasterOptions(endpoints.masterOptions("divisions"));
 
   const supplierLabels = useMemo(() => new Map(suppliers.map((option) => [option.value, option.label])), [suppliers]);
   const branchLabels = useMemo(() => new Map(branches.map((option) => [option.value, option.label])), [branches]);
   const buyerLabels = useMemo(() => new Map(buyers.map((option) => [option.value, option.label])), [buyers]);
+  const divisionLabels = useMemo(() => new Map(divisions.map((option) => [option.value, option.label])), [divisions]);
 
   function resolvedLabel(labels: Map<string, string>, value: unknown): string {
     const id = asDisplayString(value);
@@ -78,12 +80,16 @@ export function PurchaseListScreen(): ReactElement {
         // at all (it's system-controlled, never part of the create/edit
         // form) - see extraColumns below.
         columns={[
+          { fieldKey: "divisionId", title: "Division", render: (value) => resolvedLabel(divisionLabels, value) },
           { fieldKey: "branchId", render: (value) => resolvedLabel(branchLabels, value) },
           { fieldKey: "buyerId", render: (value) => resolvedLabel(buyerLabels, value) },
           { fieldKey: "supplierId", render: (value) => resolvedLabel(supplierLabels, value) },
+          { fieldKey: "pricingType", hidden: true },
           { fieldKey: "supplierReferenceNo", hidden: true },
+          { fieldKey: "brokerId", hidden: true },
+          { fieldKey: "brokerCommission", hidden: true },
           { fieldKey: "lotNumber", hidden: true },
-          { fieldKey: "containerNumber", hidden: true },
+          { fieldKey: "containerId", hidden: true },
           { fieldKey: "blNo", hidden: true },
           { fieldKey: "loadingDate", hidden: true },
           { fieldKey: "transportModeId", hidden: true },

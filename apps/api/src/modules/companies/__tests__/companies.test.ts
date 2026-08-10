@@ -217,6 +217,44 @@ describe("modules/companies - tenant-admin API surface", () => {
   );
 
   it(
+    // Client correction: Purchase's buyerId names a tenant company, not a
+    // user - this is the endpoint that dropdown sources from.
+    "GET /companies/options lists active companies for a dropdown, and drops out once deactivated",
+    async () => {
+      const tenant = await seedTenant("options");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+
+      const created = asCompany(
+        await request(app)
+          .post("/api/v1/companies")
+          .set("Authorization", authHeader)
+          .send({
+            name: "Options Co",
+            countryId: tenant.masters.countryId,
+            currencyId: tenant.masters.currencyId,
+            fiscalYearStartMonth: 1,
+            timezone: "UTC",
+          }),
+      );
+
+      const optionsSchema = z.object({ options: z.array(z.object({ value: z.string(), label: z.string() })) });
+      const before = optionsSchema.parse(
+        (await request(app).get("/api/v1/companies/options").set("Authorization", authHeader)).body,
+      );
+      expect(before.options.some((option) => option.value === created.id && option.label === "Options Co")).toBe(true);
+
+      await request(app).patch(`/api/v1/companies/${created.id}`).set("Authorization", authHeader).send({ status: "inactive" });
+
+      const after = optionsSchema.parse(
+        (await request(app).get("/api/v1/companies/options").set("Authorization", authHeader)).body,
+      );
+      expect(after.options.some((option) => option.value === created.id)).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "rejects requests without admin.company.read/create",
     async () => {
       const tenant = await seedTenant("forbidden", []);

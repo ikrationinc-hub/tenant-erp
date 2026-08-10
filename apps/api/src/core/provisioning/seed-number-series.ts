@@ -23,6 +23,8 @@ const DEFAULT_SERIES: DefaultSeries[] = [
   // FR-002 (docs/spec/Purchase-V2.md Sub Tab 1): supplier code is auto-generated,
   // company-wide (no fiscal year in the pattern - a supplier isn't a fiscal document).
   { docType: "SUPPLIER", prefixPattern: "SUP-{0000}", padding: 4 },
+  // Prompt 21 item 4: broker code, same reasoning as SUPPLIER above.
+  { docType: "BROKER", prefixPattern: "BRK-{0000}", padding: 4 },
 ];
 
 /** Idempotent: number_series' own (company, branch, doc_type, fiscal_year) unique constraint (nullsNotDistinct) makes a second insert for the same series a no-op via onConflictDoNothing - re-running provisioning never resets an in-flight counter. */

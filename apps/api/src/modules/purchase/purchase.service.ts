@@ -1,7 +1,7 @@
 import { eventBus } from "../../common/events/bus.js";
 import type { RequestContext } from "../../common/context/request-context.js";
 import { ConflictError, NotFoundError, UnauthorizedError } from "../../common/errors/index.js";
-import { parseMoney } from "../../common/money/decimal.js";
+import { parseMoney, roundAmount } from "../../common/money/decimal.js";
 import { insertAuditLog } from "../../core/audit/write.js";
 import type { PaginatedRows } from "../../core/masters/types.js";
 import { nextNumber } from "../../core/numbering/next-number.js";
@@ -29,6 +29,15 @@ import {
 
 interface ApproveGuardContext {
   items: PurchaseItemWithPricing[];
+  pricingType: PurchaseRow["pricingType"];
+  hasLmeRecord: boolean;
+}
+
+/** Prompt 21 item 2: under pricing_type='lme', an LME record is the source the item rate was derived from (purchase-items.service.ts) - approving without one would lock in a rate with nothing behind it. Under 'fixed' (or a legacy purchase with pricingType unset), this guard is a no-op. */
+function requireLmeRecordUnderLmePricing(context: ApproveGuardContext): void {
+  if (context.pricingType === "lme" && !context.hasLmeRecord) {
+    throw new ConflictError("Cannot approve: LME pricing requires at least one LME record");
+  }
 }
 
 /**
@@ -67,6 +76,7 @@ const PURCHASE_WORKFLOW: WorkflowTransition<PurchaseRow["status"], ApproveGuardC
     guards: [
       (context) =>
         requireAtLeastOneValidLine(context.items, validatePurchaseItemForApproval, "Cannot approve: purchase has no items"),
+      requireLmeRecordUnderLmePricing,
     ],
   },
   { name: "post", from: "approved", to: "posted", permission: "purchase.po.post" },
@@ -133,7 +143,7 @@ export async function getById(ctx: RequestContext, id: string): Promise<Purchase
 /** FR-101/FR-102/FR-103. */
 export async function create(ctx: RequestContext, input: CreatePurchaseInput): Promise<PurchaseWithShipment> {
   const scope = requireTenantScope(ctx);
-  const { shipment: shipmentInput, ...header } = input;
+  const { shipment: shipmentInput, brokerCommission: brokerCommissionInput, ...header } = input;
 
   return withTenantDb(ctx, async (tx) => {
     // Company-wide series (core/provisioning/seed-number-series.ts seeds "PO"
@@ -147,6 +157,10 @@ export async function create(ctx: RequestContext, input: CreatePurchaseInput): P
 
     const purchase = await insertPurchase(tx, {
       ...header,
+      // Money (rule 1): never the raw client string straight onto a numeric
+      // column - parsed to Decimal and rounded to the column's own scale
+      // here, at the repository boundary, same as every other amount field.
+      ...(brokerCommissionInput ? { brokerCommission: roundAmount(parseMoney(brokerCommissionInput)) } : {}),
       purchaseNumber,
       companyId: scope.companyId,
       createdBy: scope.userId,
@@ -166,7 +180,7 @@ export async function create(ctx: RequestContext, input: CreatePurchaseInput): P
       entity: "purchase",
       entityId: purchase.id,
       action: "purchase.created",
-      after: { ...header, purchaseNumber, shipment: shipmentInput },
+      after: { ...header, brokerCommission: purchase.brokerCommission, purchaseNumber, shipment: shipmentInput },
     });
 
     return { ...purchase, shipment };
@@ -176,7 +190,7 @@ export async function create(ctx: RequestContext, input: CreatePurchaseInput): P
 /** FR-103 (edit shipment info)/general header edits - Draft only (rule 8). */
 export async function update(ctx: RequestContext, id: string, input: UpdatePurchaseInput): Promise<PurchaseWithShipment> {
   const scope = requireTenantScope(ctx);
-  const { shipment: shipmentInput, ...header } = input;
+  const { shipment: shipmentInput, brokerCommission: brokerCommissionInput, ...header } = input;
 
   return withTenantDb(ctx, async (tx) => {
     const existing = await findPurchaseById(tx, scope.companyId, id);
@@ -186,8 +200,14 @@ export async function update(ctx: RequestContext, id: string, input: UpdatePurch
     assertDraft(existing);
 
     let purchase = existing;
-    if (Object.keys(header).length > 0) {
-      const updated = await updatePurchase(tx, scope.companyId, id, { ...header, updatedBy: scope.userId });
+    if (Object.keys(header).length > 0 || brokerCommissionInput !== undefined) {
+      const updated = await updatePurchase(tx, scope.companyId, id, {
+        ...header,
+        // Money (rule 1): parsed to Decimal and rounded at the repository
+        // boundary, same as create() - never the raw client string.
+        ...(brokerCommissionInput !== undefined ? { brokerCommission: roundAmount(parseMoney(brokerCommissionInput)) } : {}),
+        updatedBy: scope.userId,
+      });
       if (!updated) {
         throw new NotFoundError("Purchase not found");
       }
@@ -211,14 +231,15 @@ export async function update(ctx: RequestContext, id: string, input: UpdatePurch
       shipment = updatedShipment;
     }
 
+    const changedKeys = brokerCommissionInput !== undefined ? [...Object.keys(header), "brokerCommission"] : Object.keys(header);
     await insertAuditLog(tx, {
       companyId: scope.companyId,
       changedBy: scope.userId,
       entity: "purchase",
       entityId: id,
       action: "purchase.updated",
-      before: pick(existing, Object.keys(header)),
-      after: pick(purchase, Object.keys(header)),
+      before: pick(existing, changedKeys),
+      after: pick(purchase, changedKeys),
     });
 
     return { ...purchase, shipment };
@@ -249,8 +270,9 @@ export async function approve(ctx: RequestContext, id: string): Promise<Purchase
       throw new Error(`Purchase ${id} has no shipment row - the 1:1 invariant was violated`);
     }
     const items = await listItemsWithPricingForPurchase(tx, scope.companyId, id);
+    const lmeRecordsForPurchase = await listLmeRecordsForPurchase(tx, scope.companyId, id);
 
-    runGuards(transition, { items });
+    runGuards(transition, { items, pricingType: existing.pricingType, hasLmeRecord: lmeRecordsForPurchase.length > 0 });
 
     const row = await transitionPurchaseStatus(tx, scope.companyId, id, {
       from: transition.from,

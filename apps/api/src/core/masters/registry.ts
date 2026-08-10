@@ -6,9 +6,11 @@ import { requirePermission } from "../../common/middleware/rbac.js";
 import { scopeResolverMiddleware } from "../../common/middleware/scope-resolver.js";
 import {
   cities,
+  containers,
   countries,
   currencies,
   customers,
+  divisions,
   hedgePlatforms,
   incoterms,
   itemGrades,
@@ -227,6 +229,30 @@ export const customerModule = defineMasterModule({
   updateSchema: noExtraUpdateSchema,
 });
 
+/** Prompt 21 item 1: the purchase-scoping master (Container/Electronics/Scrap/Bulk, seeded by seed-data.ts). No extra fields - just the vertical-model seam, not vertical-specific behavior yet. */
+export const divisionModule = defineMasterModule({
+  entity: "division",
+  urlSegment: "divisions",
+  label: "Divisions",
+  table: divisions,
+  createSchema: noExtraCreateSchema,
+  updateSchema: noExtraUpdateSchema,
+});
+
+const containerCreateSchema = masterCreateBaseSchema.extend({ containerType: z.string().min(1).optional() }).strict();
+const containerUpdateSchema = masterCreateBaseSchema.partial().extend({ containerType: z.string().min(1).optional() }).strict();
+
+/** Prompt 21 item 5: was free text on purchase_shipments.container_number - promoted to a master, with create-on-the-fly from the shipment form's own combobox (core/schema-form/field-types' CreatableLookup), since container numbers are too numerous to expect pre-registration. `code` IS the container number (every master's own code/name split doesn't map cleanly onto a container, which has only one natural identifier - name mirrors code rather than inventing a second value nothing asks for). */
+export const containerModule = defineMasterModule({
+  entity: "container",
+  urlSegment: "containers",
+  label: "Containers",
+  table: containers,
+  createSchema: containerCreateSchema,
+  updateSchema: containerUpdateSchema,
+  extraFieldDefaults: [{ fieldKey: "containerType", label: "Type", dataType: "text" }],
+});
+
 export const MASTER_MODULES: MasterModule[] = [
   countryModule,
   cityModule,
@@ -244,6 +270,8 @@ export const MASTER_MODULES: MasterModule[] = [
   hedgePlatformModule,
   supplierTypeModule,
   customerModule,
+  divisionModule,
+  containerModule,
 ];
 
 export const mastersRouter: Router = Router();

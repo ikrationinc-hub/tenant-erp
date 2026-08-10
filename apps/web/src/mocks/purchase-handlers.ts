@@ -14,29 +14,59 @@ const HEADER_FIELDS = fieldDefinitionsResponseSchema.parse({
   entity: "header",
   fields: [
     { fieldKey: "purchaseNumber", label: "Purchase Number", dataType: "text", isMandatory: false, isEditable: false, isSystem: true, sortOrder: 0 },
-    { fieldKey: "purchaseDate", label: "Purchase Date", dataType: "date", isMandatory: true, isEditable: true, isSystem: true, sortOrder: 1 },
-    { fieldKey: "branchId", label: "Branch", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 2, optionsSource: "branches" },
-    { fieldKey: "buyerId", label: "Buyer", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 3, optionsSource: "users" },
-    { fieldKey: "supplierId", label: "Supplier", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 4, optionsSource: "suppliers" },
-    { fieldKey: "supplierInvoiceNo", label: "Supplier Invoice No.", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 5 },
-    { fieldKey: "supplierReferenceNo", label: "Supplier Reference No.", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 6 },
-    { fieldKey: "lotNumber", label: "Shipment Lot Number", dataType: "text", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 7 },
-    { fieldKey: "containerNumber", label: "Container Number", dataType: "text", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 8 },
-    { fieldKey: "blNo", label: "Bill of Lading No.", dataType: "text", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 9 },
-    { fieldKey: "loadingDate", label: "Loading Date", dataType: "date", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 10 },
-    { fieldKey: "transportModeId", label: "Through", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 11, optionsSource: "masters:transport-modes" },
-    { fieldKey: "vesselId", label: "Vessel Name", dataType: "select", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 12, optionsSource: "masters:vessels" },
-    { fieldKey: "voyageNumber", label: "Voyage Number", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 13 },
-    { fieldKey: "portOfLoadingId", label: "Port of Loading", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 14, optionsSource: "masters:ports" },
-    { fieldKey: "portOfDischargeId", label: "Port of Discharge", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 15, optionsSource: "masters:ports" },
-    { fieldKey: "warehouseId", label: "Warehouse", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 16, optionsSource: "masters:warehouses" },
-    { fieldKey: "incotermId", label: "Incoterm", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 17, optionsSource: "masters:incoterms" },
-    { fieldKey: "invoice", label: "Invoice", fieldType: "FileUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 18 },
-    { fieldKey: "billOfLading", label: "Bill of Lading", fieldType: "FileUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 19 },
-    { fieldKey: "packingList", label: "Packing List", fieldType: "FileUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 20 },
-    { fieldKey: "certificateOfOrigin", label: "Certificate of Origin", fieldType: "FileUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 21 },
-    { fieldKey: "otherDocuments", label: "Other Documents", fieldType: "MultiUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 22 },
-    { fieldKey: "otherDocuments2", label: "Other Documents 2", fieldType: "MultiUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 23 },
+    { fieldKey: "divisionId", label: "Division", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 1, optionsSource: "masters:divisions" },
+    { fieldKey: "purchaseDate", label: "Purchase Date", dataType: "date", isMandatory: true, isEditable: true, isSystem: true, sortOrder: 2 },
+    { fieldKey: "branchId", label: "Branch", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 3, optionsSource: "branches" },
+    { fieldKey: "buyerId", label: "Buyer", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 4, optionsSource: "companies" },
+    { fieldKey: "supplierId", label: "Supplier", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 5, optionsSource: "suppliers" },
+    {
+      fieldKey: "pricingType",
+      label: "Pricing Type",
+      dataType: "select",
+      isMandatory: true,
+      isEditable: true,
+      isSystem: false,
+      sortOrder: 6,
+      optionsSource: {
+        type: "enum",
+        staticOptions: [
+          { label: "LME Purchase", value: "lme" },
+          { label: "Fixed Price Purchase", value: "fixed" },
+        ],
+      },
+    },
+    { fieldKey: "supplierInvoiceNo", label: "Supplier Invoice No.", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 7 },
+    { fieldKey: "supplierReferenceNo", label: "Supplier Reference No.", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 8 },
+    { fieldKey: "brokerId", label: "Broker", dataType: "select", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 9, optionsSource: "brokers" },
+    { fieldKey: "brokerCommission", label: "Broker Commission", fieldType: "Currency", dataType: "decimal", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 10 },
+    { fieldKey: "lotNumber", label: "Shipment Lot Number", dataType: "text", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 11 },
+    {
+      fieldKey: "containerId",
+      label: "Container Number",
+      fieldType: "Lookup",
+      dataType: "select",
+      isMandatory: true,
+      isEditable: true,
+      isSystem: false,
+      sortOrder: 12,
+      optionsSource: "masters:containers",
+      allowCreate: true,
+    },
+    { fieldKey: "blNo", label: "Bill of Lading No.", dataType: "text", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 13 },
+    { fieldKey: "loadingDate", label: "Loading Date", dataType: "date", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 14 },
+    { fieldKey: "transportModeId", label: "Through", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 15, optionsSource: "masters:transport-modes" },
+    { fieldKey: "vesselId", label: "Vessel Name", dataType: "select", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 16, optionsSource: "masters:vessels" },
+    { fieldKey: "voyageNumber", label: "Voyage Number", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 17 },
+    { fieldKey: "portOfLoadingId", label: "Port of Loading", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 18, optionsSource: "masters:ports" },
+    { fieldKey: "portOfDischargeId", label: "Port of Discharge", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 19, optionsSource: "masters:ports" },
+    { fieldKey: "warehouseId", label: "Warehouse", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 20, optionsSource: "masters:warehouses" },
+    { fieldKey: "incotermId", label: "Incoterm", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 21, optionsSource: "masters:incoterms" },
+    { fieldKey: "invoice", label: "Invoice", fieldType: "FileUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 22 },
+    { fieldKey: "billOfLading", label: "Bill of Lading", fieldType: "FileUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 23 },
+    { fieldKey: "packingList", label: "Packing List", fieldType: "FileUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 24 },
+    { fieldKey: "certificateOfOrigin", label: "Certificate of Origin", fieldType: "FileUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 25 },
+    { fieldKey: "otherDocuments", label: "Other Documents", fieldType: "MultiUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 26 },
+    { fieldKey: "otherDocuments2", label: "Other Documents 2", fieldType: "MultiUpload", dataType: "text", isMandatory: false, isEditable: true, isSystem: false, sortOrder: 27 },
   ],
 });
 
@@ -91,9 +121,26 @@ const LME_RECORD_FIELDS = fieldDefinitionsResponseSchema.parse({
   fields: [
     { fieldKey: "lmeExchangeId", label: "LME Exchange", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 0, optionsSource: "masters:lme-exchanges" },
     { fieldKey: "metal", label: "Metal", dataType: "text", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 1 },
-    { fieldKey: "lmePriceUsd", label: "LME Purchase Price (USD)", fieldType: "Currency", dataType: "decimal", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 2 },
-    { fieldKey: "fixingDate", label: "LME Fixing Date", dataType: "date", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 3 },
-    { fieldKey: "agreedPremiumPct", label: "Agreed Premium (%)", fieldType: "Percentage", dataType: "decimal", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 4 },
+    {
+      fieldKey: "lmeType",
+      label: "LME Type",
+      dataType: "select",
+      isMandatory: true,
+      isEditable: true,
+      isSystem: false,
+      sortOrder: 2,
+      optionsSource: {
+        type: "enum",
+        staticOptions: [
+          { label: "Open", value: "open" },
+          { label: "Close", value: "close" },
+          { label: "Cash", value: "cash" },
+        ],
+      },
+    },
+    { fieldKey: "lmePriceUsd", label: "LME Purchase Price (USD)", fieldType: "Currency", dataType: "decimal", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 3 },
+    { fieldKey: "fixingDate", label: "LME Fixing Date", dataType: "date", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 4 },
+    { fieldKey: "agreedPremiumPct", label: "Agreed Premium (%)", fieldType: "Percentage", dataType: "decimal", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 5 },
   ],
 });
 
@@ -301,7 +348,15 @@ export const purchaseHandlers = [
     }
     const body = (await request.json()) as Record<string, unknown>;
     const quantity = asNumericString(body.quantity, "0");
-    const rate = asNumericString(body.purchaseRateUsd, "0");
+    // Mirrors purchase-items.service.ts's resolveItemRate: under
+    // pricing_type "lme" the rate comes from the most recent LME record's
+    // final rate, never the client - purchaseRateUsd isn't even accepted
+    // in the request in that case (PurchaseDetailScreen hides the field).
+    const latestLmeRecord = purchase.lmeRecords[purchase.lmeRecords.length - 1];
+    const rate =
+      purchase.pricingType === "lme"
+        ? asNumericString(latestLmeRecord?.finalPurchaseRateUsd, "0")
+        : asNumericString(body.purchaseRateUsd, "0");
     const exchangeRate = asNumericString(body.exchangeRate, "0");
     const purchaseAmountUsd = multiplyDecimalStrings(quantity, rate, 2);
     const purchaseAmountAed = multiplyDecimalStrings(purchaseAmountUsd, exchangeRate, 2);

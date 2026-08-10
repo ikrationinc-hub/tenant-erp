@@ -72,15 +72,26 @@ async function selectOption(user: ReturnType<typeof userEvent.setup>, comboboxNa
   await user.click(option);
 }
 
+/** Prompt 21 item 5: containerId is a Lookup field with allowCreate - typing a number nothing matches offers a "+ Add" option that POSTs to /masters/containers, then selects the newly-created row. */
+async function createContainerInline(user: ReturnType<typeof userEvent.setup>, containerNumber: string): Promise<void> {
+  const combobox = await screen.findByRole("combobox", { name: "Container Number" }, ASYNC);
+  await user.click(combobox);
+  await user.type(combobox, containerNumber);
+  await user.click(await screen.findByText(`+ Add "${containerNumber}"`, {}, ASYNC));
+}
+
 async function fillHeaderAndShipment(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.type(await screen.findByLabelText("Purchase Date", {}, ASYNC), "2026-08-01{Enter}");
 
+  await selectOption(user, "Division", "Divisions 1");
   await selectOption(user, "Branch", "Dubai HQ");
-  await selectOption(user, "Buyer", "Demo Admin");
+  // Buyer names a tenant company, not a user (client correction).
+  await selectOption(user, "Buyer", "Ikration Metals Trading");
   await selectOption(user, "Supplier", "Metal Traders LLC");
+  await selectOption(user, "Pricing Type", "Fixed Price Purchase");
 
   await user.type(screen.getByLabelText("Shipment Lot Number"), "LOT-1");
-  await user.type(screen.getByLabelText("Container Number"), "CONT-1");
+  await createContainerInline(user, "CONT-1");
   await user.type(screen.getByLabelText("Bill of Lading No."), "BL-1");
   await user.type(screen.getByLabelText("Loading Date"), "2026-08-01{Enter}");
 
@@ -347,7 +358,8 @@ describe("Purchase - list view", () => {
                 purchaseDate: "2026-08-01",
                 status: "approved",
                 branchId: "33333333-3333-4333-8333-333333333333",
-                buyerId: "11111111-1111-4111-8111-111111111111",
+                // Buyer names a tenant company, not a user (client correction).
+                buyerId: "22222222-2222-4222-8222-222222222222",
                 supplierId: "sup-1",
                 supplierInvoiceNo: "INV-1",
               },
@@ -362,7 +374,7 @@ describe("Purchase - list view", () => {
       renderApp({ routes: testRoutes, initialEntries: [PURCHASE_LIST_PATH] });
 
       expect(await screen.findByText("Dubai HQ", {}, ASYNC)).toBeInTheDocument();
-      expect(await screen.findByText("Demo Admin", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Ikration Metals Trading", {}, ASYNC)).toBeInTheDocument();
       expect(await screen.findByText("Metal Traders LLC", {}, ASYNC)).toBeInTheDocument();
       expect(screen.getByText("Approved")).toBeInTheDocument();
       expect(screen.queryByText("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
@@ -379,8 +391,10 @@ describe("Purchase - metadata-driven sections", () => {
     async () => {
       signIn();
       server.use(
+        // LME Records only renders under pricing_type "lme" (Prompt 21 item
+        // 2) - this test wants every section visible, section E included.
         http.get(`${API_BASE}${endpoints.purchases}/purchase-sections`, () =>
-          HttpResponse.json(draftFixture("purchase-sections")),
+          HttpResponse.json({ ...draftFixture("purchase-sections"), pricingType: "lme" }),
         ),
       );
 
@@ -389,7 +403,7 @@ describe("Purchase - metadata-driven sections", () => {
       // A Header / B Supplier Details / C Shipment - one combined SchemaForm.
       expect(await screen.findByLabelText("Purchase Date", {}, ASYNC)).toBeInTheDocument();
       expect(screen.getByRole("combobox", { name: "Supplier" })).toBeInTheDocument();
-      expect(screen.getByLabelText("Container Number")).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: "Container Number" })).toBeInTheDocument();
       // H Attachments - folded into the same header entity.
       expect(screen.getByLabelText("Invoice")).toBeInTheDocument();
       expect(screen.getByLabelText("Other Documents")).toBeInTheDocument();
@@ -453,6 +467,86 @@ describe("Purchase - sub-panel tables resolve master ids to names", () => {
       expect(screen.queryByText("uom-1")).not.toBeInTheDocument();
       expect(screen.queryByText("customers-1")).not.toBeInTheDocument();
       expect(screen.queryByText("hedge-platforms-1")).not.toBeInTheDocument();
+    },
+    30000,
+  );
+});
+
+describe("Purchase - pricing type gates the LME section and item rate (Prompt 21 item 2)", () => {
+  it(
+    "under pricing_type 'lme', LME Records shows and the item form hides Purchase Rate (USD) with a note",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      server.use(
+        http.get(`${API_BASE}${endpoints.purchases}/purchase-lme-pricing`, () =>
+          HttpResponse.json({ ...draftFixture("purchase-lme-pricing"), pricingType: "lme" }),
+        ),
+      );
+
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-lme-pricing`] });
+
+      expect(await screen.findByText("LME Records", {}, ASYNC)).toBeInTheDocument();
+
+      await user.click(await screen.findByRole("button", { name: "Add Item" }, ASYNC));
+      const itemDrawer = within(screen.getByRole("dialog"));
+      await itemDrawer.findByLabelText("Quantity", {}, ASYNC);
+
+      expect(itemDrawer.queryByLabelText("Purchase Rate (USD)")).not.toBeInTheDocument();
+      expect(
+        itemDrawer.getByText(/derived from the LME record's final rate/i),
+      ).toBeInTheDocument();
+    },
+    30000,
+  );
+
+  it(
+    "under pricing_type 'fixed', LME Records is hidden and the item form still shows a manual Purchase Rate (USD)",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      server.use(
+        http.get(`${API_BASE}${endpoints.purchases}/purchase-fixed-pricing`, () =>
+          HttpResponse.json({ ...draftFixture("purchase-fixed-pricing"), pricingType: "fixed" }),
+        ),
+      );
+
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-fixed-pricing`] });
+
+      await screen.findByText("Purchase Items & Pricing", {}, ASYNC);
+      expect(screen.queryByText("LME Records")).not.toBeInTheDocument();
+
+      await user.click(await screen.findByRole("button", { name: "Add Item" }, ASYNC));
+      const itemDrawer = within(screen.getByRole("dialog"));
+
+      expect(await itemDrawer.findByLabelText("Purchase Rate (USD)", {}, ASYNC)).toBeInTheDocument();
+    },
+    30000,
+  );
+});
+
+describe("Purchase - customer allocation is a soft reservation, never blocked (Prompt 21 item 6)", () => {
+  it(
+    "shows a non-blocking running total even when allocations sum past 100%",
+    async () => {
+      signIn();
+      server.use(
+        http.get(`${API_BASE}${endpoints.purchases}/purchase-over-allocated`, () =>
+          HttpResponse.json({
+            ...draftFixture("purchase-over-allocated"),
+            allocations: [
+              { id: "alloc-a", reservedCustomerId: "customers-1", allocationPct: "70.000000" },
+              { id: "alloc-b", reservedCustomerId: "customers-2", allocationPct: "60.000000" },
+            ],
+          }),
+        ),
+      );
+
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-over-allocated`] });
+
+      expect(await screen.findByText(/Allocated: 130%/, {}, ASYNC)).toBeInTheDocument();
+      // Purely informational - Add stays enabled, nothing in the UI blocks it.
+      expect(screen.getByRole("button", { name: "Add" })).toBeEnabled();
     },
     30000,
   );

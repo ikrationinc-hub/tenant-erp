@@ -14,6 +14,8 @@ export const addLmeRecordSchema = z
   .object({
     lmeExchangeId: z.string().uuid(),
     metal: z.string().min(1),
+    /** Prompt 21 item 3: a categorization field only - no calculation depends on it. Required on every new record (existing records, with no sensible value to backfill to, were left null - schema.ts's doc comment). */
+    lmeType: z.enum(["open", "close", "cash"]),
     lmePriceUsd: decimalStringSchema,
     fixingDate: dateStringSchema,
     agreedPremiumPct: decimalStringSchema,

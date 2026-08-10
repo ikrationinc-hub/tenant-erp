@@ -17,6 +17,7 @@ export const endpoints = {
 
   // --- FE-5.5: tenant-admin surface -----------------------------------------
   companies: "/companies",
+  companyOptions: "/companies/options",
   branches: "/branches",
   users: "/users",
   suspendUser: (id: string) => `/users/${id}/suspend`,
@@ -41,6 +42,10 @@ export const endpoints = {
   supplierOptions: "/suppliers/options",
   activateSupplier: (id: string) => `/suppliers/${id}/activate`,
   deactivateSupplier: (id: string) => `/suppliers/${id}/deactivate`,
+  brokers: "/brokers",
+  brokerOptions: "/brokers/options",
+  activateBroker: (id: string) => `/brokers/${id}/activate`,
+  deactivateBroker: (id: string) => `/brokers/${id}/deactivate`,
   purchases: "/purchases",
   approvePurchase: (id: string) => `/purchases/${id}/approve`,
   postPurchase: (id: string) => `/purchases/${id}/post`,

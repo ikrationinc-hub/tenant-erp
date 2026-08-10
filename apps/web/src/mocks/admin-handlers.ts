@@ -410,6 +410,15 @@ export const adminHandlers = [
   http.get(`${API_BASE}${endpoints.companies}`, listHandler(companies)),
   http.post(`${API_BASE}${endpoints.companies}`, createHandler(companies, "company")),
   http.patch(`${API_BASE}${endpoints.companies}/:id`, updateHandler(companies)),
+  // Purchase's buyerId sources from here (client correction: "Buyer" names
+  // a tenant company, not a user).
+  http.get(`${API_BASE}${endpoints.companyOptions}`, () =>
+    HttpResponse.json(
+      masterOptionsResponseSchema.parse({
+        options: companies.map((company) => ({ value: String(company.id), label: String(company.name) })),
+      }),
+    ),
+  ),
 
   http.get(`${API_BASE}${endpoints.branches}`, listHandler(branches)),
   http.post(`${API_BASE}${endpoints.branches}`, createHandler(branches, "branch")),
