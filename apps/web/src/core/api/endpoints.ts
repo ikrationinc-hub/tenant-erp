@@ -56,6 +56,9 @@ export const endpoints = {
   purchaseLmeRecords: (purchaseId: string) => `/purchases/${purchaseId}/lme-records`,
   purchaseHedges: (purchaseId: string) => `/purchases/${purchaseId}/hedges`,
   purchaseHedge: (purchaseId: string, hedgeId: string) => `/purchases/${purchaseId}/hedges/${hedgeId}`,
+  purchaseInvoices: (purchaseId: string) => `/purchases/${purchaseId}/invoices`,
+  purchaseInvoice: (purchaseId: string, invoiceId: string) => `/purchases/${purchaseId}/invoices/${invoiceId}`,
+  approvePurchaseInvoice: (purchaseId: string, invoiceId: string) => `/purchases/${purchaseId}/invoices/${invoiceId}/approve`,
   uploadAttachment: (entity: string, entityId: string, fieldKey: string) =>
     `/attachments/${entity}/${entityId}/${fieldKey}`,
   attachmentDownloadUrl: (id: string) => `/attachments/${id}/download-url`,

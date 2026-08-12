@@ -124,8 +124,13 @@ describe("SchemaForm - all 13 field types", () => {
     expect(payload.finalPurchaseRateUsd).toBe("8632.19");
     expect(payload.through).toBe("sea");
     expect(payload.vesselName).toBe("MV Test Vessel");
-    expect(payload.invoice).toMatchObject({ name: "invoice.pdf" });
-    expect(payload.otherDocuments).toHaveLength(2);
+    // Attachments go through their own API (/attachments/:entity/:entityId/
+    // :fieldKey), never this form's own create/update body - no backend
+    // .strict() schema ever declares a FileUpload/MultiUpload key, so
+    // SchemaForm must strip them before onSubmit fires or every save with
+    // a file selected (or even just an untouched null) 422s outright.
+    expect(payload).not.toHaveProperty("invoice");
+    expect(payload).not.toHaveProperty("otherDocuments");
 
     // The money assertion that matters: never a float, always a string.
     expect(typeof payload.quantity).toBe("string");

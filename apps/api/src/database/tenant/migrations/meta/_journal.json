@@ -190,6 +190,20 @@
       "when": 1786357562634,
       "tag": "0026_buyer_references_companies",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1786424732580,
+      "tag": "0027_prompt22_stock_timing_rework",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1786507699074,
+      "tag": "0028_prompt22_amount_mandatory",
+      "breakpoints": true
     }
   ]
 }

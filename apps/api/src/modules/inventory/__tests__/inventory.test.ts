@@ -149,7 +149,8 @@ async function seedTenant(label: string, permissionKeys: string[]): Promise<Seed
   return { schemaName: tenant.schemaName, companyId, userId, accessToken: token, purchaseRefs, itemRefs };
 }
 
-async function createApprovedPurchase(
+/** Prompt 22: stock now moves on supplier INVOICE approval, not purchase approval - approving the purchase here is still needed (an invoice can't be approved against a still-draft purchase), but it's the invoice create+approve that actually writes the movements this test suite reads back. */
+async function createPurchaseWithApprovedInvoice(
   app: ReturnType<typeof createApp>,
   authHeader: string,
   tenant: SeededTenant,
@@ -190,10 +191,30 @@ async function createApprovedPurchase(
   const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/approve`).set("Authorization", authHeader);
   expect(approveRes.status).toBe(200);
 
+  const invoiceRes = await request(app)
+    .post(`/api/v1/purchases/${purchaseId}/invoices`)
+    .set("Authorization", authHeader)
+    .send({ invoiceDate: "2024-06-20", invoiceAmountUsd: "50000" });
+  expect(invoiceRes.status).toBe(201);
+  const invoiceId = (invoiceRes.body as { id: string }).id;
+
+  const invoiceApproveRes = await request(app)
+    .patch(`/api/v1/purchases/${purchaseId}/invoices/${invoiceId}/approve`)
+    .set("Authorization", authHeader);
+  expect(invoiceApproveRes.status).toBe(200);
+
   return { purchaseId, itemId };
 }
 
-const ALL_PURCHASE_PERMISSIONS = ["purchase.po.create", "purchase.po.read", "purchase.po.update", "purchase.po.approve", "purchase.po.post"];
+const ALL_PURCHASE_PERMISSIONS = [
+  "purchase.po.create",
+  "purchase.po.read",
+  "purchase.po.update",
+  "purchase.po.approve",
+  "purchase.po.post",
+  "purchase.invoice.create",
+  "purchase.invoice.approve",
+];
 
 describe("modules/inventory - Stock Ledger (FR-108 read surface)", () => {
   afterAll(async () => {
@@ -209,8 +230,8 @@ describe("modules/inventory - Stock Ledger (FR-108 read surface)", () => {
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
 
-      await createApprovedPurchase(app, authHeader, tenant, "100");
-      await createApprovedPurchase(app, authHeader, tenant, "50");
+      await createPurchaseWithApprovedInvoice(app, authHeader, tenant, "100");
+      await createPurchaseWithApprovedInvoice(app, authHeader, tenant, "50");
 
       const res = await request(app).get("/api/v1/inventory/balances").set("Authorization", authHeader);
       expect(res.status).toBe(200);
@@ -230,8 +251,8 @@ describe("modules/inventory - Stock Ledger (FR-108 read surface)", () => {
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
 
-      const first = await createApprovedPurchase(app, authHeader, tenant, "10");
-      const second = await createApprovedPurchase(app, authHeader, tenant, "20");
+      const first = await createPurchaseWithApprovedInvoice(app, authHeader, tenant, "10");
+      const second = await createPurchaseWithApprovedInvoice(app, authHeader, tenant, "20");
 
       const listRes = await request(app).get("/api/v1/inventory/movements").set("Authorization", authHeader);
       expect(listRes.status).toBe(200);

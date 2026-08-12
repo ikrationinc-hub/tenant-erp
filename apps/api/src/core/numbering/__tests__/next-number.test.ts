@@ -114,6 +114,63 @@ describe("core/numbering: nextNumber", () => {
   );
 
   it(
+    // Prompt 22: the supplier invoice is its own fiscal document, its own
+    // series ("SUPPLIER_INVOICE") - same SELECT...FOR UPDATE mechanism as
+    // "PO" above (docType-agnostic), proven independently per rule 7's
+    // own "gapless" requirement rather than assumed from the PO case.
+    "100 concurrent transactions issue 100 unique, sequential, gapless SUPPLIER_INVOICE numbers",
+    async () => {
+      const { tenant, companyId } = await seedCompany("invoice-numbering-concurrency");
+      await seedSeries(tenant, companyId, {
+        docType: "SUPPLIER_INVOICE",
+        fiscalYear: 2024,
+        prefixPattern: "SINV-{FY}-{0000}",
+        padding: 4,
+      });
+
+      const date = new Date("2024-06-15T00:00:00Z");
+      const CONCURRENCY = 100;
+
+      const results = await Promise.all(
+        Array.from({ length: CONCURRENCY }, () =>
+          withTenantSchema(tenant.schemaName, (tx) =>
+            nextNumber(tx, { companyId, docType: "SUPPLIER_INVOICE", date }),
+          ),
+        ),
+      );
+
+      expect(new Set(results).size).toBe(CONCURRENCY);
+
+      const sequenceNumbers = results
+        .map((docNumber) => {
+          const match = /SINV-2024-(\d{4})/.exec(docNumber);
+          if (!match?.[1]) {
+            throw new Error(`unexpected document number shape: ${docNumber}`);
+          }
+          return Number(match[1]);
+        })
+        .sort((a, b) => a - b);
+
+      expect(sequenceNumbers).toEqual(Array.from({ length: CONCURRENCY }, (_, i) => i + 1));
+
+      const [series] = await withTenantSchema(tenant.schemaName, (tx) =>
+        tx
+          .select()
+          .from(numberSeries)
+          .where(
+            and(
+              eq(numberSeries.companyId, companyId),
+              eq(numberSeries.docType, "SUPPLIER_INVOICE"),
+              eq(numberSeries.fiscalYear, 2024),
+            ),
+          ),
+      );
+      expect(series?.currentValue).toBe(CONCURRENCY);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a rolled-back transaction does not consume a number",
     async () => {
       const { tenant, companyId } = await seedCompany("numbering-rollback");

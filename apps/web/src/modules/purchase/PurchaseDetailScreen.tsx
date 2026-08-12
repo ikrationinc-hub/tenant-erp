@@ -6,6 +6,7 @@ import { App as AntApp, Alert, Button, Card, Drawer, Space, Spin, Table, Tag, To
 import { listAttachmentsResponseSchema, masterOptionsResponseSchema, type AttachmentRow } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints, withQuery } from "../../core/api/endpoints";
+import { openAttachmentDownload } from "../../core/attachments/download-attachment";
 import { SchemaForm } from "../../core/schema-form/SchemaForm";
 import { Can } from "../../core/permissions/Can";
 import { useHasPermission } from "../../core/permissions/use-permissions";
@@ -182,7 +183,9 @@ export function PurchaseDetailScreen({
 
   async function handleApprove(): Promise<void> {
     await apiFetch(endpoints.approvePurchase(purchaseId ?? ""), { method: "PATCH" });
-    void message.success("Purchase approved - stock updated");
+    // Prompt 22: approving the PO no longer moves stock - it's intent
+    // only. Stock moves when a supplier invoice against it is approved.
+    void message.success("Purchase approved");
     refresh();
   }
 
@@ -263,7 +266,7 @@ export function PurchaseDetailScreen({
         <Alert
           type="info"
           showIcon
-          message="This purchase is approved. Header, items, costs, and customer allocation are now locked; LME pricing and hedging can still be recorded until it's posted."
+          message="This purchase is approved. Header, costs, and customer allocation are now locked. Items can still be edited - a change here sends any approved supplier invoice back to Draft, requiring re-approval to move stock again. LME pricing and hedging can still be recorded until it's posted."
         />
       )}
       {posted && (
@@ -295,12 +298,19 @@ export function PurchaseDetailScreen({
               message="This is an LME purchase. Add an LME record below before adding items - the item rate is derived from it."
             />
           )}
+          {/* Prompt 22 Part 4: items stay editable through Approved (assertItemsEditable server-side blocks only Posted) - a stock-relevant edit here (add, or a real quantity change) sends any approved invoice back to Draft. */}
           <PurchaseItemsPanel
             purchaseId={purchaseId}
-            readOnly={!draft}
+            readOnly={posted}
             onAdded={refresh}
             items={rowsOf(purchase.items)}
             isLmePricing={isLmePricing}
+          />
+          <PurchaseInvoicesPanel
+            purchaseId={purchaseId}
+            purchaseDraft={draft}
+            onChanged={refresh}
+            invoices={rowsOf(purchase.invoices)}
           />
           <PurchaseSubResourceList
             title="Customer Allocation"
@@ -339,7 +349,7 @@ export function PurchaseDetailScreen({
                 { title: "LME Type", dataIndex: "lmeType" },
                 { title: "LME Price (USD)", dataIndex: "lmePriceUsd" },
                 { title: "Fixing Date", dataIndex: "fixingDate" },
-                { title: "Premium %", dataIndex: "agreedPremiumPct" },
+                { title: "Agreed %", dataIndex: "agreedPremiumPct" },
                 { title: "Final Rate (USD)", dataIndex: "finalPurchaseRateUsd" },
               ]}
             />
@@ -470,6 +480,218 @@ function PurchaseItemsPanel({
           onSubmit={handleSubmit}
           {...(isLmePricing ? { hiddenFields: ["purchaseRateUsd"] } : {})}
         />
+      </Drawer>
+    </Card>
+  );
+}
+
+const INVOICE_STATUS_COLOR: Record<string, string> = { draft: "default", approved: "green", reversed: "red" };
+
+function InvoiceStatusTag({ status }: { status: unknown }): ReactElement {
+  const value = asDisplayString(status);
+  return <Tag color={INVOICE_STATUS_COLOR[value] ?? "default"}>{value ? value.charAt(0).toUpperCase() + value.slice(1) : "—"}</Tag>;
+}
+
+/**
+ * Prompt 22 follow-up: purchase.service.ts's getById computes varianceUsd/
+ * variancePct server-side (rule 3 - the frontend never calculates money,
+ * so this only formats what it's given, never derives it). Informational
+ * only, same spirit as ADR 0014's allocation total - never blocks
+ * anything here.
+ */
+function InvoiceVarianceTag({ varianceUsd, variancePct }: { varianceUsd: unknown; variancePct: unknown }): ReactElement {
+  const usd = asDisplayString(varianceUsd);
+  if (!usd) {
+    return <span>—</span>;
+  }
+  if (/^-?0(\.0+)?$/.test(usd)) {
+    return <Tag color="default">Matches PO</Tag>;
+  }
+  const isNegative = usd.startsWith("-");
+  const pct = asDisplayString(variancePct);
+  const sign = isNegative ? "" : "+";
+  return (
+    <Tag color={isNegative ? "blue" : "orange"}>
+      {sign}
+      {usd}
+      {pct ? ` (${sign}${pct}%)` : ""}
+    </Tag>
+  );
+}
+
+/**
+ * Prompt 22: THE document that actually moves stock (Part 3) - approving
+ * a purchase order no longer does. `purchaseDraft` gates the Approve
+ * action: purchase-invoices.service.ts's own guard rejects approving an
+ * invoice while its purchase is still Draft, so the button is disabled
+ * (with an explanatory tooltip) rather than round-tripping a 409 the
+ * user can't act on differently anyway.
+ */
+function PurchaseInvoicesPanel({
+  purchaseId,
+  purchaseDraft,
+  onChanged,
+  invoices,
+}: {
+  purchaseId: string;
+  purchaseDraft: boolean;
+  onChanged: () => void;
+  invoices: Record<string, unknown>[];
+}): ReactElement {
+  const [drawer, setDrawer] = useState<{ mode: "create" } | { mode: "edit"; invoice: Record<string, unknown> } | null>(null);
+  const { message } = AntApp.useApp();
+  const queryClient = useQueryClient();
+  const canCreateInvoice = useHasPermission("purchase.invoice.create");
+  const canApproveInvoice = useHasPermission("purchase.invoice.approve");
+  const hasDraftInvoice = invoices.some((invoice) => invoice.status === "draft");
+
+  // Single-invoice-by-default (ALLOW_PARTIAL_INVOICING is off server-side,
+  // Prompt 22): there's at most one row today, so one attachments query
+  // covers both the table's own "Document" column AND the edit drawer's
+  // initialValues - same attachmentInitialValues() grouping the header
+  // form already relies on to show a previously-uploaded file after a
+  // reload (FileUpload/MultiUpload fields only round-trip what their own
+  // onChange has set locally; without re-fetching GET /attachments, a
+  // freshly reopened form has no way to know a file was ever uploaded).
+  const invoiceId = invoices[0]?.id;
+  const invoiceIdString = typeof invoiceId === "string" ? invoiceId : "";
+  const invoiceAttachmentsQuery = useQuery({
+    queryKey: ["attachments", "purchase_invoice", invoiceIdString],
+    queryFn: () =>
+      apiFetch(withQuery(endpoints.attachments, { entity: "purchase_invoice", entityId: invoiceIdString }), {}, {
+        schema: listAttachmentsResponseSchema,
+      }),
+    enabled: Boolean(invoiceIdString),
+  });
+  const invoiceFileAttachment = invoiceAttachmentsQuery.data?.items.find((item) => item.fieldKey === "invoiceFile");
+
+  async function handleCreate(values: Record<string, unknown>): Promise<void> {
+    await apiFetch(endpoints.purchaseInvoices(purchaseId), { method: "POST", body: values });
+    void message.success("Supplier invoice created");
+    setDrawer(null);
+    onChanged();
+  }
+
+  async function handleEdit(invoiceId: string, values: Record<string, unknown>): Promise<void> {
+    await apiFetch(endpoints.purchaseInvoice(purchaseId, invoiceId), { method: "PATCH", body: values });
+    void message.success("Supplier invoice updated");
+    setDrawer(null);
+    // A file selected during this edit already uploaded live (FileUploadField's
+    // own customRequest, independent of this PATCH) - refetch so the table's
+    // Document column and the drawer's own initial values pick it up without
+    // requiring a full page reload.
+    void queryClient.invalidateQueries({ queryKey: ["attachments", "purchase_invoice", invoiceId] });
+    onChanged();
+  }
+
+  async function handleApprove(invoiceId: string): Promise<void> {
+    await apiFetch(endpoints.approvePurchaseInvoice(purchaseId, invoiceId), { method: "PATCH" });
+    void message.success("Supplier invoice approved - stock updated");
+    onChanged();
+  }
+
+  return (
+    <Card
+      title="Supplier Invoices"
+      size="small"
+      extra={
+        <Can permission="purchase.invoice.create">
+          <Button onClick={() => setDrawer({ mode: "create" })}>Add Invoice</Button>
+        </Can>
+      }
+    >
+      {invoices.length === 0 && canCreateInvoice && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="Add a supplier invoice below to move this purchase's stock into inventory - the purchase order alone never does."
+        />
+      )}
+      {invoices.length > 0 && hasDraftInvoice && canApproveInvoice && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="A supplier invoice has been added - approve it below to move its items into inventory."
+        />
+      )}
+      <Table
+        dataSource={invoices}
+        rowKey="id"
+        pagination={false}
+        size="small"
+        locale={{ emptyText: "No supplier invoices yet - a purchase order is intent only until one is received, uploaded, and approved." }}
+        columns={[
+          { title: "Invoice #", dataIndex: "invoiceNumber" },
+          { title: "Supplier Ref", dataIndex: "supplierInvoiceNo" },
+          { title: "Invoice Date", dataIndex: "invoiceDate" },
+          { title: "Amount (USD)", dataIndex: "invoiceAmountUsd", render: (value: unknown) => asDisplayString(value) || "—" },
+          {
+            title: "vs PO Total",
+            key: "variance",
+            render: (_value, row): ReactNode => <InvoiceVarianceTag varianceUsd={row.varianceUsd} variancePct={row.variancePct} />,
+          },
+          { title: "Status", dataIndex: "status", render: (value: unknown) => <InvoiceStatusTag status={value} /> },
+          {
+            title: "Document",
+            key: "document",
+            render: (): ReactNode =>
+              invoiceFileAttachment ? (
+                <Typography.Link onClick={() => void openAttachmentDownload(invoiceFileAttachment.id)}>
+                  {invoiceFileAttachment.filename}
+                </Typography.Link>
+              ) : (
+                <Typography.Text type="secondary">No file</Typography.Text>
+              ),
+          },
+          {
+            title: "",
+            key: "actions",
+            render: (_value, row): ReactNode =>
+              row.status === "draft" ? (
+                <Space>
+                  <Can permission="purchase.invoice.update">
+                    <Button size="small" onClick={() => setDrawer({ mode: "edit", invoice: row })}>
+                      Edit
+                    </Button>
+                  </Can>
+                  <Can permission="purchase.invoice.approve">
+                    <Tooltip title={purchaseDraft ? "Approve the purchase order first" : undefined}>
+                      <Button size="small" type="primary" disabled={purchaseDraft} onClick={() => void handleApprove(String(row.id))}>
+                        Approve
+                      </Button>
+                    </Tooltip>
+                  </Can>
+                </Space>
+              ) : null,
+          },
+        ]}
+      />
+      <Drawer
+        title={drawer?.mode === "edit" ? "Edit Supplier Invoice" : "Add Supplier Invoice"}
+        open={drawer !== null}
+        onClose={() => setDrawer(null)}
+        width={420}
+        destroyOnHidden
+      >
+        {drawer?.mode === "create" && (
+          // invoiceFile hidden here: uploadContext needs a real invoice id,
+          // which doesn't exist until this create actually completes -
+          // same reasoning as the purchase header's own attachment fields
+          // needing purchaseId first. Upload the file from Edit instead.
+          <SchemaForm module="purchase" entity="invoice" mode="create" onSubmit={handleCreate} hiddenFields={["invoiceFile"]} />
+        )}
+        {drawer?.mode === "edit" && (
+          <SchemaForm
+            module="purchase"
+            entity="invoice"
+            mode="edit"
+            initialValues={{ ...drawer.invoice, ...attachmentInitialValues(invoiceAttachmentsQuery.data?.items ?? []) }}
+            onSubmit={(values) => handleEdit(String(drawer.invoice.id), values)}
+            uploadContext={{ entity: "purchase_invoice", entityId: String(drawer.invoice.id) }}
+          />
+        )}
       </Drawer>
     </Card>
   );

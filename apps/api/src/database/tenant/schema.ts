@@ -1179,7 +1179,7 @@ export const purchaseShipments = pgTable(
   (table) => [uniqueIndex("purchase_shipments_purchase_id_key").on(table.purchaseId)],
 );
 
-export const purchasesRelations = relations(purchases, ({ one }) => ({
+export const purchasesRelations = relations(purchases, ({ one, many }) => ({
   company: one(companies, {
     fields: [purchases.companyId],
     references: [companies.id],
@@ -1208,6 +1208,7 @@ export const purchasesRelations = relations(purchases, ({ one }) => ({
     fields: [purchases.id],
     references: [purchaseShipments.purchaseId],
   }),
+  invoices: many(purchaseInvoices),
 }));
 
 export const purchaseShipmentsRelations = relations(purchaseShipments, ({ one }) => ({
@@ -1475,9 +1476,12 @@ export const marketPrices = pgTable("market_prices", {
  * market_prices row was recorded first. `final_purchase_rate_usd` is
  * FR-203's calculated field (never accepted from a client), computed and
  * rounded exactly once at insert time (ADR 0012), from the same
- * full-precision chain as `lme_price_usd` x
- * `(1 + agreed_premium_pct / 100)` - never recomputed later, since this
- * row is never updated.
+ * full-precision chain as `lme_price_usd` x `(agreed_premium_pct / 100)`
+ * - a DIRECT multiplier, not a markup added on top (client-confirmed
+ * correction: LME 100 x agreed 98% = 98, not 104 - "agreed_premium_pct"
+ * is a misnomer left in place because renaming the column isn't worth
+ * the migration; it is never additive, see agreedPremiumPct below) -
+ * never recomputed later, since this row is never updated.
  */
 export const lmeTypeEnum = pgEnum("lme_type", ["open", "close", "cash"]);
 
@@ -1504,6 +1508,7 @@ export const lmeRecords = pgTable(
     lmeType: lmeTypeEnum("lme_type"),
     lmePriceUsd: numeric("lme_price_usd", { precision: 18, scale: 6 }).notNull(),
     fixingDate: date("fixing_date").notNull(),
+    /** Misnamed column (kept as-is - not worth a migration): despite "premium", this is the AGREED PERCENTAGE OF the LME price, a direct multiplier - 98 means the final rate is 98% of LME, not LME+98%. See finalPurchaseRateUsd below and purchase-lme.service.ts's addLmeRecord. */
     agreedPremiumPct: numeric("agreed_premium_pct", { precision: 18, scale: 6 }).notNull(),
     finalPurchaseRateUsd: numeric("final_purchase_rate_usd", { precision: 18, scale: 6 }).notNull(),
     ...auditColumns(),
@@ -1573,6 +1578,65 @@ export const hedgesRelations = relations(hedges, ({ one }) => ({
   }),
 }));
 
+// --- Prompt 22: Supplier Invoice (stock timing rework) ---------------------
+// Client-confirmed model: a purchase order is intent - it never moves
+// stock. Stock enters inventory only when the SUPPLIER INVOICE (this new
+// document) is received, uploaded, and approved. One-to-many with
+// `purchases` (a purchase HAS invoices - the general shape partial
+// shipments need), but modules/purchase/purchase-invoices.service.ts
+// enforces "exactly one" by default via its own ALLOW_PARTIAL_INVOICING
+// flag - confirmed with the user rather than guessed.
+export const purchaseInvoiceStatusEnum = pgEnum("purchase_invoice_status", ["draft", "approved", "reversed"]);
+
+/**
+ * `reversed` exists in the enum for a future whole-invoice cancellation
+ * flow (not built by this prompt - Parts 2-5 only ever move an invoice
+ * between draft and approved) - added now so that feature doesn't need a
+ * migration later, same "add the column/value now, wire it up later"
+ * precedent as Prompt 21's broker_commission_type.
+ */
+export const purchaseInvoices = pgTable(
+  "purchase_invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    purchaseId: uuid("purchase_id")
+      .notNull()
+      .references(() => purchases.id, { onDelete: "restrict" }),
+    /** Own gapless series (docType "SUPPLIER_INVOICE", rule 7) - an invoice is its own fiscal document, numbered independently of the purchase it's linked to. */
+    invoiceNumber: text("invoice_number").notNull(),
+    /** The supplier's own invoice reference - free text, distinct from invoiceNumber (this system's own gapless number). */
+    supplierInvoiceNo: text("supplier_invoice_no"),
+    invoiceDate: date("invoice_date").notNull(),
+    status: purchaseInvoiceStatusEnum("status").notNull().default("draft"),
+    /** What the supplier's invoice states as its total - mandatory (it's the whole point of the document), reference/reconciliation only, never fed into any calculation of its own (rule 1: numeric, decimal.js at the repository boundary) - though purchase.service.ts's getById DOES compute a variance FROM it, for display only, never a block. */
+    invoiceAmountUsd: numeric("invoice_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "restrict" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("purchase_invoices_company_id_invoice_number_key")
+      .on(table.companyId, table.invoiceNumber)
+      .where(sql`${table.deletedAt} is null`),
+    index("purchase_invoices_purchase_id_idx").on(table.purchaseId),
+  ],
+);
+
+export const purchaseInvoicesRelations = relations(purchaseInvoices, ({ one }) => ({
+  purchase: one(purchases, {
+    fields: [purchaseInvoices.purchaseId],
+    references: [purchases.id],
+  }),
+  branch: one(branches, {
+    fields: [purchaseInvoices.branchId],
+    references: [branches.id],
+  }),
+}));
+
 // --- Workflow + stock (FR-107/108, session (e) - the last piece of "the
 // big one") ----------------------------------------------------------------
 // Resolved open question #10: stock moves at Approved, not Posted - FR-108
@@ -1583,7 +1647,15 @@ export const hedgesRelations = relations(hedges, ({ one }) => ({
 // never imported by modules/purchase - "modules must not call each other
 // directly") writes these rows in the SAME transaction as the approval,
 // so the two can never diverge (a failure in either rolls back both).
-export const stockMovementTypeEnum = pgEnum("stock_movement_type", ["purchase_receipt"]);
+// Prompt 22 Part 5: "purchase_reversal" - the offsetting NEGATIVE row a
+// re-approval writes to undo a purchase_invoice's previously-moved
+// quantity, before writing a fresh purchase_receipt for the corrected
+// one. Never a third "purchase_adjustment" type - the reverse-then-
+// reissue mechanism (inventory-subscriber.ts's handleInvoiceApproved)
+// only ever needs these two, and reusing purchase_receipt for the
+// reissued row keeps every genuine receipt (first approval or Nth)
+// reporting identically.
+export const stockMovementTypeEnum = pgEnum("stock_movement_type", ["purchase_receipt", "purchase_reversal"]);
 
 /**
  * Append-only ledger, NOT a mutable running-quantity column (this task's
@@ -1620,11 +1692,32 @@ export const stockMovements = pgTable(
     movementDate: date("movement_date").notNull(),
     referenceType: text("reference_type").notNull(),
     referenceId: uuid("reference_id").notNull(),
+    /** Prompt 22 Part 3: "the stock movement references BOTH the purchase and the invoice" - referenceType/referenceId already resolves back to the purchase (via purchase_item -> purchases, listStockMovements' own join), this is the direct pointer to the invoice that brought the goods in. Nullable - a movement type this prompt doesn't introduce (a future sale/adjustment) has no invoice at all. */
+    purchaseInvoiceId: uuid("purchase_invoice_id").references(() => purchaseInvoices.id, { onDelete: "restrict" }),
+    /** Prompt 22 Part 4: set ONLY on a purchase_reversal row, pointing at the purchase_receipt it offsets - append-only-safe (a NEW row referencing an OLD one, never a mutation of the old one) way to know which receipts are still "active" vs already reconciled, without a mutable flag on the original row. */
+    reversalOfMovementId: uuid("reversal_of_movement_id").references((): AnyPgColumn => stockMovements.id, { onDelete: "restrict" }),
     ...auditColumns(),
   },
   (table) => [
     index("stock_movements_company_item_warehouse_idx").on(table.companyId, table.itemId, table.warehouseId),
     index("stock_movements_reference_idx").on(table.referenceType, table.referenceId),
+    index("stock_movements_purchase_invoice_id_idx").on(table.purchaseInvoiceId),
+    // Prompt 22 Part 5: the flagged gap - quantity sign was convention-only
+    // ("Positive = inbound", see the doc comment above). Enforced at the DB
+    // level, not just an application-level insert helper, so no future
+    // write path (this codebase's or a later one's) can silently corrupt a
+    // balance by getting the sign backwards - a receipt must be positive,
+    // a reversal must be negative, full stop. Compares movement_type CAST
+    // TO TEXT, not the bare enum column, on purpose: this constraint is
+    // added in the SAME migration that extends stock_movement_type with
+    // 'purchase_reversal', and Postgres forbids using a value added by
+    // ALTER TYPE ... ADD VALUE within the transaction that added it
+    // ("unsafe use of new value") - that restriction is about the ENUM
+    // type's cache, and never triggers for a plain text comparison.
+    check(
+      "stock_movements_sign_matches_type",
+      sql`(${table.movementType}::text = 'purchase_receipt' AND ${table.quantity} > 0) OR (${table.movementType}::text = 'purchase_reversal' AND ${table.quantity} < 0)`,
+    ),
   ],
 );
 
@@ -1644,5 +1737,9 @@ export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
   uom: one(uom, {
     fields: [stockMovements.uomId],
     references: [uom.id],
+  }),
+  purchaseInvoice: one(purchaseInvoices, {
+    fields: [stockMovements.purchaseInvoiceId],
+    references: [purchaseInvoices.id],
   }),
 }));

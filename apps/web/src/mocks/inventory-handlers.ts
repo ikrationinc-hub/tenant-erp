@@ -21,11 +21,20 @@ interface MockMovement {
   sourcePurchaseNumber: string;
 }
 
-/** FR-108, mock world: one movement per item on every approved/posted purchase - "posting" (rule 8's accounting lock) never removes a movement, same as production. Newest first, matching the real repository's ordering. */
+/**
+ * Prompt 22, mock world: one movement per item, but only for a purchase
+ * with at least one APPROVED invoice - a purchase's own status (even
+ * "posted") never moves stock by itself anymore. This mock simplifies
+ * the real reverse-then-reissue reconciliation (Part 4) to "current items
+ * of every purchase with an approved invoice" - good enough to prove the
+ * UI wiring (approving an invoice makes stock appear); it does not
+ * replicate the real backend's exact reconciliation trail.
+ */
 function computeMovements(): MockMovement[] {
   const movements: MockMovement[] = [];
   for (const purchase of purchases) {
-    if (purchase.status !== "approved" && purchase.status !== "posted") {
+    const hasApprovedInvoice = purchase.invoices.some((invoice) => invoice.status === "approved");
+    if (!hasApprovedInvoice) {
       continue;
     }
     const warehouseId = typeof purchase.shipment.warehouseId === "string" ? purchase.shipment.warehouseId : "";

@@ -1,0 +1,1 @@
+ALTER TABLE "purchase_invoices" ALTER COLUMN "invoice_amount_usd" SET NOT NULL;

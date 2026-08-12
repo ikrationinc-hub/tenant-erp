@@ -80,7 +80,12 @@ async function createContainerInline(user: ReturnType<typeof userEvent.setup>, c
   await user.click(await screen.findByText(`+ Add "${containerNumber}"`, {}, ASYNC));
 }
 
-async function fillHeaderAndShipment(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+// containerNumber must be unique per call: the mock containers list is
+// module-scoped and persists across tests within this file (only MSW
+// handler overrides get reset between tests, not the underlying mock
+// data), so a second call reusing an already-created number wouldn't see
+// a "+ Add" prompt and the field would stay unset.
+async function fillHeaderAndShipment(user: ReturnType<typeof userEvent.setup>, containerNumber = "CONT-1"): Promise<void> {
   await user.type(await screen.findByLabelText("Purchase Date", {}, ASYNC), "2026-08-01{Enter}");
 
   await selectOption(user, "Division", "Divisions 1");
@@ -91,7 +96,7 @@ async function fillHeaderAndShipment(user: ReturnType<typeof userEvent.setup>): 
   await selectOption(user, "Pricing Type", "Fixed Price Purchase");
 
   await user.type(screen.getByLabelText("Shipment Lot Number"), "LOT-1");
-  await createContainerInline(user, "CONT-1");
+  await createContainerInline(user, containerNumber);
   await user.type(screen.getByLabelText("Bill of Lading No."), "BL-1");
   await user.type(screen.getByLabelText("Loading Date"), "2026-08-01{Enter}");
 
@@ -148,6 +153,62 @@ describe("Purchase - create, items, and workflow", () => {
       ).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Add Item" })).not.toBeInTheDocument();
+    },
+    60000,
+  );
+});
+
+describe("Purchase - supplier invoice moves stock, not PO approval (Prompt 22)", () => {
+  it(
+    "approving the PO shows no invoice yet; creating and approving a supplier invoice flips its own status independently",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      const { router } = renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/new`] });
+
+      await fillHeaderAndShipment(user, "CONT-P22");
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(router.state.location.pathname).not.toBe(`${PURCHASE_LIST_PATH}/new`), ASYNC);
+
+      await user.click(await screen.findByRole("button", { name: "Add Item" }, ASYNC));
+      const itemDrawer = within(screen.getByRole("dialog"));
+      await user.click(itemDrawer.getByRole("combobox", { name: "Item" }));
+      await user.click((await screen.findAllByText("Items 1", {}, ASYNC)).at(-1) ?? screen.getByText("Items 1"));
+      await user.type(itemDrawer.getByLabelText("Quantity"), "500");
+      await user.click(itemDrawer.getByRole("combobox", { name: "Unit of Measure" }));
+      await user.click((await screen.findAllByText("Units of Measure 1", {}, ASYNC)).at(-1) ?? screen.getByText("Units of Measure 1"));
+      await user.type(itemDrawer.getByLabelText("Purchase Rate (USD)"), "100");
+      await user.type(itemDrawer.getByLabelText("Exchange Rate"), "3.6725");
+      await user.click(itemDrawer.getByRole("button", { name: "Save" }));
+      await screen.findByText("Purchase Items & Pricing", {}, ASYNC);
+
+      // Section always visible, empty until a supplier invoice actually exists.
+      expect(await screen.findByText("Supplier Invoices", {}, ASYNC)).toBeInTheDocument();
+      expect(screen.getByText(/a purchase order is intent only/i)).toBeInTheDocument();
+
+      await user.click(await screen.findByRole("button", { name: "Approve" }, ASYNC));
+      expect(await screen.findByText("Approved", {}, ASYNC)).toBeInTheDocument();
+      // Approving the PO alone never creates or touches an invoice.
+      expect(screen.getByText(/a purchase order is intent only/i)).toBeInTheDocument();
+
+      await user.click(await screen.findByRole("button", { name: /Add Invoice/ }, ASYNC));
+      const invoiceDrawer = within(screen.getByRole("dialog"));
+      // No {Enter} here: unlike the header/shipment form, Invoice Date is
+      // the ONLY mandatory field on this form, so an Enter-triggered
+      // native submit would actually pass validation and fire early,
+      // closing the drawer before the explicit Save click below runs.
+      await user.type(invoiceDrawer.getByLabelText("Invoice Date"), "2026-08-05");
+      await user.type(invoiceDrawer.getByLabelText("Invoice Amount (USD)"), "50000");
+      await user.click(invoiceDrawer.getByText("Add Supplier Invoice"));
+      await user.click(invoiceDrawer.getByRole("button", { name: "Save" }));
+
+      expect(await screen.findByText("Draft", {}, ASYNC)).toBeInTheDocument();
+      expect(screen.getByText(/^SINV-2024-/)).toBeInTheDocument();
+
+      await user.click(await screen.findByRole("button", { name: "Approve" }, ASYNC));
+
+      // Two "Approved" tags now: the PO's own status tag, and the invoice row's.
+      await waitFor(() => expect(screen.getAllByText("Approved").length).toBeGreaterThanOrEqual(2), ASYNC);
     },
     60000,
   );
@@ -315,7 +376,11 @@ describe("Purchase - permission-gated workflow transitions", () => {
   );
 
   it(
-    "hides Header/Costs/Add Item Save buttons on an approved purchase even WITH purchase.po.update - assertDraft locks these server-side at Approved, not just Posted (purchase.service.ts)",
+    // Prompt 22 Part 4: items are the deliberate exception now - they stay
+    // editable through Approved (a stock-relevant edit sends any approved
+    // invoice back to Draft for re-approval), unlike Header/Costs, which
+    // still lock at Approved exactly as before.
+    "hides Header/Costs Save buttons on an approved purchase even WITH purchase.po.update, but Add Item stays available",
     async () => {
       signIn();
       server.use(
@@ -331,13 +396,13 @@ describe("Purchase - permission-gated workflow transitions", () => {
 
       expect(await screen.findByText("Approved", {}, ASYNC)).toBeInTheDocument();
       expect(
-        await screen.findByText(/Header, items, costs, and customer allocation are now locked/i, {}, ASYNC),
+        await screen.findByText(/Header, costs, and customer allocation are now locked/i, {}, ASYNC),
       ).toBeInTheDocument();
 
       await screen.findByText("Purchase Date", {}, ASYNC);
       await screen.findByText("Other Charges", {}, ASYNC);
       expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Add Item" })).not.toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Add Item" }, ASYNC)).toBeInTheDocument();
     },
     30000,
   );

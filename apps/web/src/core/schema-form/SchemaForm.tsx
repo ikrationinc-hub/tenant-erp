@@ -46,6 +46,34 @@ function stripServerOwnedFields(
 }
 
 /**
+ * FileUpload/MultiUpload fields track a value locally (or via a real
+ * upload to `/attachments/:entity/:entityId/:fieldKey`, FileUploadField's
+ * own `uploadContext` path) purely so the widget has something to render -
+ * that value was never meant to travel through THIS form's own
+ * create/update body. Every `.strict()` backend schema (createPurchaseSchema,
+ * createPurchaseInvoiceSchema, ...) deliberately never declares these
+ * keys - attachments go through their own API, always - so an untouched
+ * field (`null`/`[]`, not caught by stripEmptyOptionalFields's `=== ""`
+ * check) OR a genuinely-selected one would otherwise 422 the whole
+ * submission on an "Unrecognized key" error.
+ */
+function stripUploadFields(
+  schema: FieldDefinitionsResponse,
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const uploadKeys = new Set<string>();
+  for (const section of resolveFieldSections(schema)) {
+    for (const field of section.fields) {
+      const fieldType = resolveFieldType(field);
+      if (fieldType === "FileUpload" || fieldType === "MultiUpload") {
+        uploadKeys.add(field.fieldKey);
+      }
+    }
+  }
+  return Object.fromEntries(Object.entries(values).filter(([key]) => !uploadKeys.has(key)));
+}
+
+/**
  * An untouched optional field defaults to "" (default-values.ts's
  * EMPTY_VALUE_BY_TYPE) so every input stays controlled from first render -
  * but "" is not the same as "not provided" to a `.optional()` Zod schema
@@ -191,7 +219,7 @@ function SchemaFormBody({
   const submit = handleSubmit(async (values) => {
     setSubmitError(null);
     try {
-      await onSubmit(stripEmptyOptionalFields(schema, stripServerOwnedFields(schema, values)));
+      await onSubmit(stripEmptyOptionalFields(schema, stripServerOwnedFields(schema, stripUploadFields(schema, values))));
     } catch (error) {
       // A plain async handler, not a useMutation - `void submit()` below
       // would otherwise discard the rejection outright and a thrown

@@ -5,6 +5,7 @@ import { scopeResolverMiddleware } from "../../common/middleware/scope-resolver.
 import * as purchaseAllocationsController from "./purchase-allocations.controller.js";
 import * as purchaseCostsController from "./purchase-costs.controller.js";
 import * as purchaseHedgesController from "./purchase-hedges.controller.js";
+import * as purchaseInvoicesController from "./purchase-invoices.controller.js";
 import * as purchaseItemsController from "./purchase-items.controller.js";
 import * as purchaseLmeController from "./purchase-lme.controller.js";
 import * as purchaseController from "./purchase.controller.js";
@@ -17,6 +18,9 @@ const createPermission = requirePermission("purchase.po.create");
 const updatePermission = requirePermission("purchase.po.update");
 const approvePermission = requirePermission("purchase.po.approve");
 const postPermission = requirePermission("purchase.po.post");
+const invoiceCreatePermission = requirePermission("purchase.invoice.create");
+const invoiceUpdatePermission = requirePermission("purchase.invoice.update");
+const invoiceApprovePermission = requirePermission("purchase.invoice.approve");
 
 purchaseRouter.get("/", scopeResolverMiddleware, requirePurchaseModule, readPermission, purchaseController.list);
 purchaseRouter.get("/:id", scopeResolverMiddleware, requirePurchaseModule, readPermission, purchaseController.getById);
@@ -98,4 +102,30 @@ purchaseRouter.patch(
   requirePurchaseModule,
   updatePermission,
   purchaseHedgesController.updateStatus,
+);
+
+// Prompt 22: the supplier invoice - its own lifecycle, own permissions
+// (create/update/approve, not the purchase's po.* ones). No GET list/byId
+// of its own, same convention as items/allocations/lme-records/hedges -
+// the full set comes back via GET /:id (purchase.service.ts's getById).
+purchaseRouter.post(
+  "/:id/invoices",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  invoiceCreatePermission,
+  purchaseInvoicesController.create,
+);
+purchaseRouter.patch(
+  "/:id/invoices/:invoiceId",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  invoiceUpdatePermission,
+  purchaseInvoicesController.update,
+);
+purchaseRouter.patch(
+  "/:id/invoices/:invoiceId/approve",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  invoiceApprovePermission,
+  purchaseInvoicesController.approve,
 );

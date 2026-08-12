@@ -13,6 +13,7 @@ import { listAllocationsForPurchase, type PurchaseAllocationRow } from "./purcha
 import { findCostsByPurchaseId, type PurchaseAdditionalCostsRow } from "./purchase-costs.repository.js";
 import { listHedgesForPurchase, type HedgeRow } from "./purchase-hedges.repository.js";
 import { listItemsWithPricingForPurchase, type PurchaseItemWithPricing } from "./purchase-items.repository.js";
+import { listInvoicesForPurchase, type PurchaseInvoiceRow } from "./purchase-invoices.repository.js";
 import { listLmeRecordsForPurchase, type LmeRecordRow } from "./purchase-lme.repository.js";
 import {
   findPurchaseById,
@@ -93,6 +94,36 @@ export interface PurchaseWithShipment extends PurchaseRow {
   /** Session (d): same convention as `items`/`allocations` - populated on getById only. */
   lmeRecords?: LmeRecordRow[];
   hedges?: HedgeRow[];
+  /** Prompt 22: same convention as `items`/`allocations`/`lmeRecords`/`hedges` - populated on getById only. */
+  invoices?: PurchaseInvoiceWithVariance[];
+}
+
+/**
+ * Prompt 22 follow-up (client-confirmed): the supplier's invoice amount
+ * is manually entered - it's an external document's own total, not
+ * something this system computes. What the system CAN do is show the
+ * user how far it lands from the purchase's own computed total, so a
+ * mistyped or genuinely-different supplier figure is visible at a
+ * glance. Informational only, same spirit as ADR 0014's allocation
+ * total: never blocks create/update/approve, never persisted - computed
+ * fresh on every getById from the purchase's current items and the
+ * invoice's own stored amount.
+ */
+export interface PurchaseInvoiceWithVariance extends PurchaseInvoiceRow {
+  purchaseItemsAmountUsd: string;
+  varianceUsd: string;
+  variancePct: string | null;
+}
+
+function attachInvoiceVariance(items: PurchaseItemWithPricing[], invoices: PurchaseInvoiceRow[]): PurchaseInvoiceWithVariance[] {
+  const purchaseItemsAmount = items.reduce((sum, item) => sum.plus(parseMoney(item.pricing.purchaseAmountUsd)), parseMoney("0"));
+  const purchaseItemsAmountUsd = roundAmount(purchaseItemsAmount);
+
+  return invoices.map((invoice) => {
+    const varianceUsd = roundAmount(parseMoney(invoice.invoiceAmountUsd).minus(purchaseItemsAmount));
+    const variancePct = purchaseItemsAmount.isZero() ? null : roundAmount(parseMoney(varianceUsd).dividedBy(purchaseItemsAmount).times(100));
+    return { ...invoice, purchaseItemsAmountUsd, varianceUsd, variancePct };
+  });
 }
 
 function requireTenantScope(ctx: RequestContext) {
@@ -112,6 +143,22 @@ function deriveShipmentYear(loadingDate: string): number {
 export function assertDraft(purchase: PurchaseRow): void {
   if (purchase.status !== "draft") {
     throw new ConflictError(`Purchase ${purchase.purchaseNumber} is ${purchase.status} and can no longer be edited`);
+  }
+}
+
+/**
+ * Prompt 22 Part 4: items specifically stay editable past Draft, through
+ * Approved - unlike the header/costs/allocation lock `assertDraft` above
+ * enforces. Once a supplier invoice exists, the whole point is that the
+ * purchase's items CAN change after approval (a correction, a quantity
+ * update) and the resulting invoice re-approval reconciles stock to
+ * match - that can only happen if the item endpoints don't hard-block at
+ * Approved the way every other sub-resource does. Still blocks Posted
+ * (rule 8: posted is immutable, corrections are reversal + re-entry).
+ */
+export function assertItemsEditable(purchase: PurchaseRow): void {
+  if (purchase.status === "posted") {
+    throw new ConflictError(`Purchase ${purchase.purchaseNumber} is posted and can no longer be edited`);
   }
 }
 
@@ -136,7 +183,8 @@ export async function getById(ctx: RequestContext, id: string): Promise<Purchase
     const additionalCosts = await findCostsByPurchaseId(tx, scope.companyId, id);
     const lmeRecords = await listLmeRecordsForPurchase(tx, scope.companyId, id);
     const hedges = await listHedgesForPurchase(tx, scope.companyId, id);
-    return { ...purchase, shipment, items, allocations, additionalCosts, lmeRecords, hedges };
+    const invoices = await listInvoicesForPurchase(tx, scope.companyId, id);
+    return { ...purchase, shipment, items, allocations, additionalCosts, lmeRecords, hedges, invoices: attachInvoiceVariance(items, invoices) };
   });
 }
 

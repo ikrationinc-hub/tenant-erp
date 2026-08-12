@@ -50,8 +50,12 @@ export async function addLmeRecord(ctx: RequestContext, purchaseId: string, inpu
       createdBy: scope.userId,
     });
 
-    // FR-203, full precision (ADR 0012): lmePrice x (1 + premiumPct / 100).
-    const finalRate = lmePrice.mul(premiumPct.div(100).plus(1));
+    // FR-203, full precision (ADR 0012): lmePrice x (premiumPct / 100) -
+    // client-confirmed correction: agreedPremiumPct is a DIRECT multiplier
+    // of the LME price, not a markup added on top. LME 100, agreed 98% ->
+    // 98 (not 104). A value below 100 is valid and normal - it means the
+    // final rate lands BELOW the LME price, not an error.
+    const finalRate = lmePrice.mul(premiumPct.div(100));
 
     const row = await insertLmeRecord(tx, {
       purchaseId,

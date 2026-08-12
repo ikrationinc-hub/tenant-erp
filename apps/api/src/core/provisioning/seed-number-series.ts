@@ -25,6 +25,10 @@ const DEFAULT_SERIES: DefaultSeries[] = [
   { docType: "SUPPLIER", prefixPattern: "SUP-{0000}", padding: 4 },
   // Prompt 21 item 4: broker code, same reasoning as SUPPLIER above.
   { docType: "BROKER", prefixPattern: "BRK-{0000}", padding: 4 },
+  // Prompt 22: a supplier invoice is its own fiscal document (rule 7),
+  // numbered independently of the purchase it's linked to - same {FY}
+  // pattern as PO, not SUPPLIER/BROKER's company-wide one.
+  { docType: "SUPPLIER_INVOICE", prefixPattern: "SINV-{FY}-{0000}", padding: 4 },
 ];
 
 /** Idempotent: number_series' own (company, branch, doc_type, fiscal_year) unique constraint (nullsNotDistinct) makes a second insert for the same series a no-op via onConflictDoNothing - re-running provisioning never resets an in-flight counter. */

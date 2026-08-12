@@ -42,6 +42,8 @@ const REAL_MIGRATION_VERSIONS = [
   "0024_prompt21_add_shipment_container_id",
   "0025_prompt21_finalize_shipment_container",
   "0026_buyer_references_companies",
+  "0027_prompt22_stock_timing_rework",
+  "0028_prompt22_amount_mandatory",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

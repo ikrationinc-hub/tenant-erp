@@ -248,6 +248,12 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       permissionEntry("purchase", "po", "approve", "Approve a purchase order"),
       permissionEntry("purchase", "po", "post", "Post an approved purchase order"),
       permissionEntry("purchase", "po", "delete", "Delete a draft purchase order"),
+      // Prompt 22: the supplier invoice's own lifecycle - not po.* (a
+      // separate document, separate permission surface, even though it
+      // lives in the same "purchase" module).
+      permissionEntry("purchase", "invoice", "create", "Create a supplier invoice against a purchase"),
+      permissionEntry("purchase", "invoice", "update", "Edit a draft supplier invoice"),
+      permissionEntry("purchase", "invoice", "approve", "Approve a supplier invoice - this is what moves stock"),
     ],
     dependsOn: ["auth", "roles", "masters", "suppliers", "storage"],
     migrations: [

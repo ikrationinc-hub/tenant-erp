@@ -238,22 +238,32 @@ describe("modules/purchase - Platform Hedging / LME Records, session (d): LME pr
   );
 
   it(
-    "FR-203: Final Purchase Rate = LME Price x (1 + Agreed Premium% / 100), exact",
+    "FR-203: Final Purchase Rate = LME Price x (Agreed% / 100), a DIRECT multiplier - not a markup added on top",
     async () => {
       const tenant = await seedTenant("fr203");
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
-      const purchaseId = await createDraftPurchase(app, authHeader, tenant);
 
-      const record = asLmeRecord(
-        await request(app)
-          .post(`/api/v1/purchases/${purchaseId}/lme-records`)
-          .set("Authorization", authHeader)
-          .send({ lmeExchangeId: tenant.lmeExchangeId, metal: "Copper", lmeType: "close", lmePriceUsd: "8432.75", fixingDate: "2024-06-12", agreedPremiumPct: "2.35" }),
-      );
+      async function recordFinalRate(lmePriceUsd: string, agreedPremiumPct: string): Promise<string> {
+        const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+        const record = asLmeRecord(
+          await request(app)
+            .post(`/api/v1/purchases/${purchaseId}/lme-records`)
+            .set("Authorization", authHeader)
+            .send({ lmeExchangeId: tenant.lmeExchangeId, metal: "Copper", lmeType: "close", lmePriceUsd, fixingDate: "2024-06-12", agreedPremiumPct }),
+        );
+        return record.finalPurchaseRateUsd;
+      }
 
-      // 8432.75 x 1.0235 = 8630.919625 (fits numeric(18,6) exactly).
-      expect(record.finalPurchaseRateUsd).toBe("8630.919625");
+      // The client's own examples: agreed% below 100 lands BELOW the LME
+      // price (not an error), agreed% above 100 lands above it - neither
+      // is a markup calculation.
+      expect(await recordFinalRate("100", "98")).toBe("98.000000");
+      expect(await recordFinalRate("100", "104")).toBe("104.000000");
+
+      // A realistic figure, full precision, no float drift:
+      // 8432.75 x (98.5 / 100) = 8306.25875 (fits numeric(18,6) exactly).
+      expect(await recordFinalRate("8432.75", "98.5")).toBe("8306.258750");
     },
     TEST_TIMEOUT_MS,
   );

@@ -15,7 +15,8 @@ import {
 } from "./purchase-items.repository.js";
 import type { AddPurchaseItemInput, UpdatePurchaseItemInput } from "./purchase-items.validator.js";
 import { findLatestLmeRecordForPurchase } from "./purchase-lme.repository.js";
-import { assertDraft } from "./purchase.service.js";
+import { flipApprovedInvoicesToDraft } from "./purchase-invoices.repository.js";
+import { assertItemsEditable } from "./purchase.service.js";
 import { findPurchaseById, type PurchaseRow } from "./purchase.repository.js";
 
 function requireTenantScope(ctx: RequestContext) {
@@ -73,7 +74,31 @@ async function resolveItemRate(tx: TenantTx, companyId: string, purchase: Purcha
   return parseMoney(purchaseRateUsdInput);
 }
 
-/** FR-104: user can add one or multiple purchase items. Draft only (rule 8). */
+/**
+ * Prompt 22 Part 4: a stock-relevant item add/quantity-change on a
+ * purchase that already has an APPROVED invoice invalidates whatever
+ * that invoice already moved - flip it back to draft so a human has to
+ * explicitly re-approve (which is where core/inventory's subscriber
+ * reconciles stock, never here). A no-op (zero rows) when the purchase
+ * has no approved invoice at all - draft-status purchases and purchases
+ * whose invoice is already draft never call this for nothing.
+ */
+async function triggerInvoiceReapprovalIfNeeded(tx: TenantTx, companyId: string, purchaseId: string, updatedBy: string): Promise<void> {
+  const flipped = await flipApprovedInvoicesToDraft(tx, companyId, purchaseId, updatedBy);
+  for (const invoice of flipped) {
+    await insertAuditLog(tx, {
+      companyId,
+      changedBy: updatedBy,
+      entity: "purchase_invoice",
+      entityId: invoice.id,
+      action: "purchase_invoice.reapproval_required",
+      before: { status: "approved" },
+      after: { status: "draft" },
+    });
+  }
+}
+
+/** FR-104: user can add one or multiple purchase items. Draft or Approved (rule 8 blocks only Posted) - see assertItemsEditable. */
 export async function addItem(ctx: RequestContext, purchaseId: string, input: AddPurchaseItemInput): Promise<PurchaseItemWithPricing> {
   const scope = requireTenantScope(ctx);
 
@@ -82,7 +107,7 @@ export async function addItem(ctx: RequestContext, purchaseId: string, input: Ad
     if (!purchase) {
       throw new NotFoundError("Purchase not found");
     }
-    assertDraft(purchase);
+    assertItemsEditable(purchase);
 
     const quantity = parseMoney(input.quantity);
     const rateUsd = await resolveItemRate(tx, scope.companyId, purchase, input.purchaseRateUsd);
@@ -121,11 +146,14 @@ export async function addItem(ctx: RequestContext, purchaseId: string, input: Ad
       after: { ...input, purchaseAmountUsd: pricing.purchaseAmountUsd, purchaseAmountAed: pricing.purchaseAmountAed },
     });
 
+    // A new item is always stock-relevant - there's no "unchanged" case for an add.
+    await triggerInvoiceReapprovalIfNeeded(tx, scope.companyId, purchaseId, scope.userId);
+
     return { ...item, pricing };
   });
 }
 
-/** FR-103's edit reach extended to line items - Draft only (rule 8). Recomputes FR-105/FR-106 whenever quantity/rate/exchangeRate changes. */
+/** FR-103's edit reach extended to line items - Draft or Approved (rule 8 blocks only Posted) - see assertItemsEditable. Recomputes FR-105/FR-106 whenever quantity/rate/exchangeRate changes. */
 export async function updatePurchaseItem(
   ctx: RequestContext,
   purchaseId: string,
@@ -140,7 +168,7 @@ export async function updatePurchaseItem(
     if (!purchase) {
       throw new NotFoundError("Purchase not found");
     }
-    assertDraft(purchase);
+    assertItemsEditable(purchase);
 
     const existingItem = await findItemById(tx, scope.companyId, purchaseId, itemId);
     if (!existingItem) {
@@ -153,6 +181,11 @@ export async function updatePurchaseItem(
 
     let item = existingItem;
     const quantity = quantityInput !== undefined ? parseMoney(quantityInput) : parseMoney(existingItem.quantity);
+    // Prompt 21 item 6 / Prompt 22 Part 4: a genuine numeric change, not
+    // just the field being present in the payload - a form that always
+    // resubmits the current quantity shouldn't force an unnecessary
+    // re-approval cycle.
+    const quantityChanged = quantityInput !== undefined && !quantity.equals(parseMoney(existingItem.quantity));
     if (quantityInput !== undefined) {
       requirePositive(quantity, "quantity");
     }
@@ -206,6 +239,10 @@ export async function updatePurchaseItem(
       before: { quantity: existingItem.quantity, ...existingPricing },
       after: { quantity: item.quantity, ...pricing },
     });
+
+    if (quantityChanged) {
+      await triggerInvoiceReapprovalIfNeeded(tx, scope.companyId, purchaseId, scope.userId);
+    }
 
     return { ...item, pricing };
   });
