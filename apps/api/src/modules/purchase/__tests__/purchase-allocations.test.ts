@@ -305,4 +305,91 @@ describe("modules/purchase - Record Purchase, session (c): customer allocation (
     },
     TEST_TIMEOUT_MS,
   );
+
+  describe("Prompt 23: edit/remove - Draft only, same guard as add", () => {
+    it(
+      "a draft purchase's allocation can be edited (partial PATCH) and removed",
+      async () => {
+        const tenant = await seedTenant("edit-remove-draft");
+        const app = createApp();
+        const authHeader = `Bearer ${tenant.accessToken}`;
+        const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+        const allocation = asAllocation(
+          await request(app)
+            .post(`/api/v1/purchases/${purchaseId}/allocations`)
+            .set("Authorization", authHeader)
+            .send({ reservedCustomerId: tenant.customerAId, allocationPct: "60" }),
+        );
+
+        const editRes = await request(app)
+          .patch(`/api/v1/purchases/${purchaseId}/allocations/${allocation.id}`)
+          .set("Authorization", authHeader)
+          .send({ allocationPct: "75" });
+        expect(editRes.status).toBe(200);
+        const edited = asAllocation(editRes);
+        expect(edited.allocationPct).toBe("75.000000");
+        // Only the sent field changed - reservedCustomerId untouched.
+        expect(edited.reservedCustomerId).toBe(tenant.customerAId);
+
+        const deleteRes = await request(app).delete(`/api/v1/purchases/${purchaseId}/allocations/${allocation.id}`).set("Authorization", authHeader);
+        expect(deleteRes.status).toBe(204);
+
+        const getRes = await request(app).get(`/api/v1/purchases/${purchaseId}`).set("Authorization", authHeader);
+        const allocations = (getRes.body as { allocations: unknown[] }).allocations;
+        expect(allocations).toHaveLength(0);
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "an edited allocation still can't exceed 100% or be zero/negative on its own",
+      async () => {
+        const tenant = await seedTenant("edit-bound");
+        const app = createApp();
+        const authHeader = `Bearer ${tenant.accessToken}`;
+        const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+        const allocation = asAllocation(
+          await request(app)
+            .post(`/api/v1/purchases/${purchaseId}/allocations`)
+            .set("Authorization", authHeader)
+            .send({ reservedCustomerId: tenant.customerAId, allocationPct: "60" }),
+        );
+
+        const res = await request(app)
+          .patch(`/api/v1/purchases/${purchaseId}/allocations/${allocation.id}`)
+          .set("Authorization", authHeader)
+          .send({ allocationPct: "150" });
+        expect(res.status).toBe(422);
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "a non-draft purchase rejects editing or removing an existing allocation",
+      async () => {
+        const tenant = await seedTenant("edit-remove-immutable");
+        const app = createApp();
+        const authHeader = `Bearer ${tenant.accessToken}`;
+        const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+        const allocation = asAllocation(
+          await request(app)
+            .post(`/api/v1/purchases/${purchaseId}/allocations`)
+            .set("Authorization", authHeader)
+            .send({ reservedCustomerId: tenant.customerAId, allocationPct: "60" }),
+        );
+
+        await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "approved" }).where(eq(purchases.id, purchaseId)));
+
+        const editRes = await request(app)
+          .patch(`/api/v1/purchases/${purchaseId}/allocations/${allocation.id}`)
+          .set("Authorization", authHeader)
+          .send({ allocationPct: "70" });
+        expect(editRes.status).toBe(409);
+
+        const deleteRes = await request(app).delete(`/api/v1/purchases/${purchaseId}/allocations/${allocation.id}`).set("Authorization", authHeader);
+        expect(deleteRes.status).toBe(409);
+      },
+      TEST_TIMEOUT_MS,
+    );
+  });
 });

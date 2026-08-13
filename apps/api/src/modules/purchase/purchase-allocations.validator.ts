@@ -10,3 +10,17 @@ export const addAllocationSchema = z
   })
   .strict();
 export type AddAllocationInput = z.infer<typeof addAllocationSchema>;
+
+/** Prompt 23: a PATCH touches only what it sends. */
+export const updateAllocationSchema = z
+  .object({
+    reservedCustomerId: z.string().uuid().optional(),
+    allocationPct: percentStringSchema.optional(),
+  })
+  .strict();
+export type UpdateAllocationInput = z.infer<typeof updateAllocationSchema>;
+
+export const allocationIdParamsSchema = z.object({
+  id: z.string().uuid(),
+  allocationId: z.string().uuid(),
+});

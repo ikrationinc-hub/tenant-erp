@@ -64,6 +64,22 @@ purchaseRouter.post(
   createPermission,
   purchaseAllocationsController.addAllocation,
 );
+// Prompt 23: edit/remove, same po.update permission as everything else on
+// this sub-resource - gated Draft-only by assertDraft, same as add.
+purchaseRouter.patch(
+  "/:id/allocations/:allocationId",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  updatePermission,
+  purchaseAllocationsController.updateAllocation,
+);
+purchaseRouter.delete(
+  "/:id/allocations/:allocationId",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  updatePermission,
+  purchaseAllocationsController.removeAllocation,
+);
 
 // Sub Tab 2, table G - resolved open question #4: one flat row per
 // purchase, so a single upsert-style PATCH rather than an "add" endpoint.
@@ -85,6 +101,23 @@ purchaseRouter.post(
   requirePurchaseModule,
   createPermission,
   purchaseLmeController.addLmeRecord,
+);
+// Prompt 23: edit/remove - purchase-lme.service.ts locks a record once any
+// item has snapshotted its rate (isLmeRecordUsedByAnyItem), regardless of
+// the purchase's own status - same non-gating as add above.
+purchaseRouter.patch(
+  "/:id/lme-records/:lmeRecordId",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  updatePermission,
+  purchaseLmeController.updateLmeRecord,
+);
+purchaseRouter.delete(
+  "/:id/lme-records/:lmeRecordId",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  updatePermission,
+  purchaseLmeController.removeLmeRecord,
 );
 
 // Sub Tab 3, table B - resolved open question #8: many hedges per

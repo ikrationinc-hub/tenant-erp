@@ -72,6 +72,26 @@ async function selectOption(user: ReturnType<typeof userEvent.setup>, comboboxNa
   await user.click(option);
 }
 
+/** A closed AntD Drawer with destroyOnHidden can still be mid-closing-animation (role="dialog" still in the DOM) when the NEXT drawer opens - getByRole("dialog") then finds two. The most-recently-opened one is always last in DOM order (portals append). Returns the raw element - wrap with within(...) at the call site, same as every other drawer lookup in this file, so its bound-queries type is inferred locally rather than through a custom wrapper's own return-type annotation. */
+function latestDialogElement(): HTMLElement {
+  const dialogs = screen.getAllByRole("dialog");
+  const dialog = dialogs.at(-1);
+  if (!dialog) {
+    throw new Error("expected at least one open dialog");
+  }
+  return dialog;
+}
+
+/** Customer Allocation and LME Records both render a Card with a plain "Add" button (PurchaseSubResourceList) - scoping to the Card containing this title is what disambiguates the two when both are on the page at once (pricing_type "lme"). Async: the card itself may not have mounted yet (still loading the parent purchase). Returns the raw element, same reasoning as latestDialogElement above. */
+async function findCardElement(title: string): Promise<HTMLElement> {
+  const heading = await screen.findByText(title, {}, ASYNC);
+  const card = heading.closest(".ant-card");
+  if (!card) {
+    throw new Error(`expected a ".ant-card" ancestor of "${title}"`);
+  }
+  return card as HTMLElement;
+}
+
 /** Prompt 21 item 5: containerId is a Lookup field with allowCreate - typing a number nothing matches offers a "+ Add" option that POSTs to /masters/containers, then selects the newly-created row. */
 async function createContainerInline(user: ReturnType<typeof userEvent.setup>, containerNumber: string): Promise<void> {
   const combobox = await screen.findByRole("combobox", { name: "Container Number" }, ASYNC);
@@ -85,7 +105,11 @@ async function createContainerInline(user: ReturnType<typeof userEvent.setup>, c
 // handler overrides get reset between tests, not the underlying mock
 // data), so a second call reusing an already-created number wouldn't see
 // a "+ Add" prompt and the field would stay unset.
-async function fillHeaderAndShipment(user: ReturnType<typeof userEvent.setup>, containerNumber = "CONT-1"): Promise<void> {
+async function fillHeaderAndShipment(
+  user: ReturnType<typeof userEvent.setup>,
+  containerNumber = "CONT-1",
+  pricingType: "Fixed Price Purchase" | "LME Purchase" = "Fixed Price Purchase",
+): Promise<void> {
   await user.type(await screen.findByLabelText("Purchase Date", {}, ASYNC), "2026-08-01{Enter}");
 
   await selectOption(user, "Division", "Divisions 1");
@@ -93,7 +117,7 @@ async function fillHeaderAndShipment(user: ReturnType<typeof userEvent.setup>, c
   // Buyer names a tenant company, not a user (client correction).
   await selectOption(user, "Buyer", "Ikration Metals Trading");
   await selectOption(user, "Supplier", "Metal Traders LLC");
-  await selectOption(user, "Pricing Type", "Fixed Price Purchase");
+  await selectOption(user, "Pricing Type", pricingType);
 
   await user.type(screen.getByLabelText("Shipment Lot Number"), "LOT-1");
   await createContainerInline(user, containerNumber);
@@ -707,5 +731,105 @@ describe("Purchase - attachment upload wiring", () => {
       expect(await screen.findByText("extra-doc-2.pdf", {}, ASYNC)).toBeInTheDocument();
     },
     30000,
+  );
+});
+
+describe("Purchase - LME Records and Customer Allocation edit/remove (Prompt 23)", () => {
+  it(
+    "an LME record locks once an item has used it; an unused record and an allocation stay fully editable",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      const { router } = renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/new`] });
+
+      await fillHeaderAndShipment(user, "CONT-P23", "LME Purchase");
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(router.state.location.pathname).not.toBe(`${PURCHASE_LIST_PATH}/new`), ASYNC);
+
+      // First LME record.
+      await user.click(await within(await findCardElement("LME Records")).findByRole("button", { name: "Add" }, ASYNC));
+      let drawer = within(latestDialogElement());
+      await selectOption(user, "LME Exchange", "LME Exchanges 1");
+      await user.type(drawer.getByLabelText("Metal"), "Copper");
+      await selectOption(user, "LME Type", "Open");
+      await user.type(drawer.getByLabelText("LME Purchase Price (USD)"), "100");
+      await user.type(drawer.getByLabelText("LME Fixing Date"), "2026-08-01{Enter}");
+      await user.type(drawer.getByLabelText("Agreed %"), "98");
+      await user.click(drawer.getByRole("button", { name: "Save" }));
+
+      // 100 x (98/100) = 98, the client's own example.
+      expect(await screen.findByText("98.000000", {}, ASYNC)).toBeInTheDocument();
+      expect(await within(await findCardElement("LME Records")).findByRole("button", { name: "Edit" }, ASYNC)).toBeEnabled();
+
+      // Add an item - it snapshots this (only) LME record's final rate.
+      await user.click(await screen.findByRole("button", { name: "Add Item" }, ASYNC));
+      const itemDrawer = within(latestDialogElement());
+      await user.click(itemDrawer.getByRole("combobox", { name: "Item" }));
+      await user.click((await screen.findAllByText("Items 1", {}, ASYNC)).at(-1) ?? screen.getByText("Items 1"));
+      await user.type(itemDrawer.getByLabelText("Quantity"), "10");
+      await user.click(itemDrawer.getByRole("combobox", { name: "Unit of Measure" }));
+      await user.click((await screen.findAllByText("Units of Measure 1", {}, ASYNC)).at(-1) ?? screen.getByText("Units of Measure 1"));
+      await user.type(itemDrawer.getByLabelText("Exchange Rate"), "3.6725");
+      await user.click(itemDrawer.getByRole("button", { name: "Save" }));
+      await screen.findByText("Purchase Items & Pricing", {}, ASYNC);
+
+      // Now used - the first record's Edit/Remove lock.
+      await waitFor(async () => expect(within(await findCardElement("LME Records")).getAllByRole("button", { name: "Edit" }).at(0)).toBeDisabled(), ASYNC);
+      expect(within(await findCardElement("LME Records")).getAllByRole("button", { name: "Remove" }).at(0)).toBeDisabled();
+
+      // A second, still-unused record stays fully editable.
+      await user.click(within(await findCardElement("LME Records")).getByRole("button", { name: "Add" }));
+      drawer = within(latestDialogElement());
+      await selectOption(user, "LME Exchange", "LME Exchanges 1");
+      await user.type(drawer.getByLabelText("Metal"), "Copper");
+      await selectOption(user, "LME Type", "Close");
+      await user.type(drawer.getByLabelText("LME Purchase Price (USD)"), "200");
+      await user.type(drawer.getByLabelText("LME Fixing Date"), "2026-08-02{Enter}");
+      await user.type(drawer.getByLabelText("Agreed %"), "104");
+      await user.click(drawer.getByRole("button", { name: "Save" }));
+
+      const editButtons = await within(await findCardElement("LME Records")).findAllByRole("button", { name: "Edit" }, ASYNC);
+      expect(editButtons.at(-1)).toBeEnabled();
+      await user.click(editButtons.at(-1) as HTMLElement);
+      await screen.findByText("Edit LME Records", {}, ASYNC);
+      const editDrawer = within(latestDialogElement());
+      await user.clear(editDrawer.getByLabelText("Agreed %"));
+      await user.type(editDrawer.getByLabelText("Agreed %"), "110");
+      await user.click(editDrawer.getByRole("button", { name: "Save" }));
+
+      // 200 x (110/100) = 220, exactly.
+      expect(await screen.findByText("220.000000", {}, ASYNC)).toBeInTheDocument();
+
+      // Customer Allocation: add, edit, then remove.
+      await user.click(await within(await findCardElement("Customer Allocation")).findByRole("button", { name: "Add" }, ASYNC));
+      const allocationDrawer = within(latestDialogElement());
+      await user.click(allocationDrawer.getByRole("combobox", { name: "Reserved Customer" }));
+      await user.click((await screen.findAllByText("Customers 1", {}, ASYNC)).at(-1) ?? screen.getByText("Customers 1"));
+      await user.type(allocationDrawer.getByLabelText("Allocation %"), "60");
+      await user.click(allocationDrawer.getByRole("button", { name: "Save" }));
+
+      // The mock's create/update handlers for allocations echo back the raw
+      // typed string (no server-side rounding, unlike the real backend's
+      // roundRate) - "60", not "60.000000".
+      expect(await within(await findCardElement("Customer Allocation")).findByText("60", {}, ASYNC)).toBeInTheDocument();
+
+      await user.click(within(await findCardElement("Customer Allocation")).getByRole("button", { name: "Edit" }));
+      // The just-submitted "Add" drawer can still be mid-closing-animation
+      // (role="dialog" still in the DOM) at this exact instant - wait for
+      // this specific drawer's own title before grabbing it, rather than
+      // racing latestDialogElement() against that close.
+      await screen.findByText("Edit Customer Allocation", {}, ASYNC);
+      const allocationEditDrawer = within(latestDialogElement());
+      await user.clear(allocationEditDrawer.getByLabelText("Allocation %"));
+      await user.type(allocationEditDrawer.getByLabelText("Allocation %"), "75");
+      await user.click(allocationEditDrawer.getByRole("button", { name: "Save" }));
+      expect(await within(await findCardElement("Customer Allocation")).findByText("75", {}, ASYNC)).toBeInTheDocument();
+
+      await user.click(within(await findCardElement("Customer Allocation")).getByRole("button", { name: "Remove" }));
+      // AntD Popconfirm's default confirm button text is "OK", not "Yes".
+      await user.click(await screen.findByRole("button", { name: "OK" }, ASYNC));
+      await waitFor(async () => expect(within(await findCardElement("Customer Allocation")).getByText(/none added yet/i)).toBeInTheDocument(), ASYNC);
+    },
+    120000,
   );
 });

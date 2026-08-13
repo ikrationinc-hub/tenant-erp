@@ -22,3 +22,20 @@ export const addLmeRecordSchema = z
   })
   .strict();
 export type AddLmeRecordInput = z.infer<typeof addLmeRecordSchema>;
+
+/**
+ * Prompt 23: same full shape as create, not a partial PATCH - an edit
+ * re-records a fresh market_prices row the same way create does (never
+ * mutating a raw number straight onto lme_records without passing
+ * through that ledger first), so every field feeds the recompute
+ * regardless of which ones actually changed. Only reachable while
+ * purchase-lme.service.ts's isLmeRecordUsedByAnyItem is false for this
+ * record.
+ */
+export const updateLmeRecordSchema = addLmeRecordSchema;
+export type UpdateLmeRecordInput = AddLmeRecordInput;
+
+export const lmeRecordIdParamsSchema = z.object({
+  id: z.string().uuid(),
+  lmeRecordId: z.string().uuid(),
+});

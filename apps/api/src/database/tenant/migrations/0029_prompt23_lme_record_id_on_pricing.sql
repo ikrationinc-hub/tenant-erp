@@ -1,0 +1,2 @@
+ALTER TABLE "purchase_pricing" ADD COLUMN "lme_record_id" uuid;--> statement-breakpoint
+ALTER TABLE "purchase_pricing" ADD CONSTRAINT "purchase_pricing_lme_record_id_lme_records_id_fk" FOREIGN KEY ("lme_record_id") REFERENCES "lme_records"("id") ON DELETE restrict ON UPDATE no action;

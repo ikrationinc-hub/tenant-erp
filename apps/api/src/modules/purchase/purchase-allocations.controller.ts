@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { getRequestContext } from "../../common/context/request-context.js";
 import { UnauthorizedError } from "../../common/errors/index.js";
-import { addAllocationSchema } from "./purchase-allocations.validator.js";
+import { addAllocationSchema, allocationIdParamsSchema, updateAllocationSchema } from "./purchase-allocations.validator.js";
 import * as purchaseAllocationsService from "./purchase-allocations.service.js";
 import { purchaseIdParamsSchema } from "./purchase.validator.js";
 
@@ -20,6 +20,29 @@ export async function addAllocation(req: Request, res: Response, next: NextFunct
     const input = addAllocationSchema.parse(req.body);
     const row = await purchaseAllocationsService.addAllocation(ctx, id, input);
     res.status(201).json(row);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateAllocation(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const { id, allocationId } = allocationIdParamsSchema.parse(req.params);
+    const input = updateAllocationSchema.parse(req.body);
+    const row = await purchaseAllocationsService.updateAllocationEntry(ctx, id, allocationId, input);
+    res.status(200).json(row);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function removeAllocation(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const { id, allocationId } = allocationIdParamsSchema.parse(req.params);
+    await purchaseAllocationsService.removeAllocationEntry(ctx, id, allocationId);
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { App as AntApp, Alert, Button, Card, Drawer, Space, Spin, Table, Tag, Tooltip, Typography } from "antd";
+import { App as AntApp, Alert, Button, Card, Drawer, Popconfirm, Space, Spin, Table, Tag, Tooltip, Typography } from "antd";
 import { listAttachmentsResponseSchema, masterOptionsResponseSchema, type AttachmentRow } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints, withQuery } from "../../core/api/endpoints";
@@ -316,10 +316,14 @@ export function PurchaseDetailScreen({
             title="Customer Allocation"
             entity="allocation"
             endpoint={endpoints.purchaseAllocations(purchaseId)}
+            rowEndpoint={(allocationId) => endpoints.purchaseAllocation(purchaseId, allocationId)}
             addPermission="purchase.po.update"
+            editPermission="purchase.po.update"
+            deletePermission="purchase.po.update"
             readOnly={!draft}
             rows={rowsOf(purchase.allocations)}
             onAdded={refresh}
+            onChanged={refresh}
             columns={[
               {
                 title: "Reserved Customer",
@@ -340,10 +344,19 @@ export function PurchaseDetailScreen({
               title="LME Records"
               entity="lme_record"
               endpoint={endpoints.purchaseLmeRecords(purchaseId)}
+              rowEndpoint={(lmeRecordId) => endpoints.purchaseLmeRecord(purchaseId, lmeRecordId)}
               addPermission="purchase.po.create"
+              editPermission="purchase.po.update"
+              deletePermission="purchase.po.update"
               readOnly={posted}
+              // Not gated by the purchase's own status (purchase-lme.service.ts's
+              // deliberate design - a price can get fixed even after Approved/
+              // Posted); only a per-row "already used by an item" lock applies.
+              editDeleteReadOnly={false}
+              rowLocked={(row) => (row.isUsed ? "Already used to price an item - add a new, corrected record instead" : undefined)}
               rows={rowsOf(purchase.lmeRecords)}
               onAdded={refresh}
+              onChanged={refresh}
               columns={[
                 { title: "Metal", dataIndex: "metal" },
                 { title: "LME Type", dataIndex: "lmeType" },
@@ -798,32 +811,107 @@ function PurchaseSubResourceList({
   title,
   entity,
   endpoint,
+  rowEndpoint,
   addPermission,
+  editPermission,
+  deletePermission,
   readOnly,
+  editDeleteReadOnly,
+  rowLocked,
   rows,
   onAdded,
+  onChanged,
   columns,
   footer,
 }: {
   title: string;
   entity: string;
   endpoint: string;
+  /** Required together with onEdit/onDelete opting in below - the PATCH/DELETE target for a specific row. */
+  rowEndpoint?: (rowId: string) => string;
   addPermission: string;
+  /** Omit to leave this sub-resource add-only (no Edit button rendered). */
+  editPermission?: string;
+  /** Omit to leave this sub-resource add-only (no Delete button rendered). */
+  deletePermission?: string;
   readOnly: boolean;
+  /** Gates Edit/Delete separately from Add - defaults to `readOnly` (Allocation's own gating, draft-only, applies to both). LME passes `false` here: its own edit/delete lock is per-row (rowLocked), not tied to the purchase's status at all - matching purchase-lme.service.ts's own "not gated by draft/approved/posted" design. */
+  editDeleteReadOnly?: boolean;
+  /** Per-row lock reason (shown as a disabled-button tooltip) independent of editDeleteReadOnly - e.g. an LME record already consumed by an item. */
+  rowLocked?: (row: Record<string, unknown>) => string | undefined;
   rows: Record<string, unknown>[];
   onAdded: () => void;
+  /** Called after a successful edit or delete - defaults to onAdded if omitted (both just mean "refetch the parent purchase"). */
+  onChanged?: () => void;
   columns: SubResourceColumn[];
   footer?: ReactNode;
 }): ReactElement {
-  const [open, setOpen] = useState(false);
+  const [drawer, setDrawer] = useState<{ mode: "create" } | { mode: "edit"; row: Record<string, unknown> } | null>(null);
   const { message } = AntApp.useApp();
+  const refetch = onChanged ?? onAdded;
+  const rowsLocked = editDeleteReadOnly ?? readOnly;
 
-  async function handleSubmit(values: Record<string, unknown>): Promise<void> {
+  async function handleCreate(values: Record<string, unknown>): Promise<void> {
     await apiFetch(endpoint, { method: "POST", body: values });
     void message.success(`${title} added`);
-    setOpen(false);
+    setDrawer(null);
     onAdded();
   }
+
+  async function handleEdit(rowId: string, values: Record<string, unknown>): Promise<void> {
+    if (!rowEndpoint) return;
+    await apiFetch(rowEndpoint(rowId), { method: "PATCH", body: values });
+    void message.success(`${title} updated`);
+    setDrawer(null);
+    refetch();
+  }
+
+  async function handleDelete(rowId: string): Promise<void> {
+    if (!rowEndpoint) return;
+    await apiFetch(rowEndpoint(rowId), { method: "DELETE" });
+    void message.success(`${title} removed`);
+    refetch();
+  }
+
+  const actionColumn: SubResourceColumn | null =
+    editPermission || deletePermission
+      ? {
+          title: "",
+          dataIndex: "__actions",
+          render: (_value, row): ReactNode => {
+            const lockReason = rowLocked?.(row);
+            const disabled = rowsLocked || Boolean(lockReason);
+            return (
+              <Space>
+                {editPermission && (
+                  <Can permission={editPermission}>
+                    <Tooltip title={lockReason}>
+                      <Button size="small" disabled={disabled} onClick={() => setDrawer({ mode: "edit", row })}>
+                        Edit
+                      </Button>
+                    </Tooltip>
+                  </Can>
+                )}
+                {deletePermission && (
+                  <Can permission={deletePermission}>
+                    <Tooltip title={lockReason}>
+                      <Popconfirm
+                        title={`Remove this ${title.toLowerCase()}?`}
+                        onConfirm={() => void handleDelete(String(row.id))}
+                        disabled={disabled}
+                      >
+                        <Button size="small" danger disabled={disabled}>
+                          Remove
+                        </Button>
+                      </Popconfirm>
+                    </Tooltip>
+                  </Can>
+                )}
+              </Space>
+            );
+          },
+        }
+      : null;
 
   return (
     <Card
@@ -832,7 +920,7 @@ function PurchaseSubResourceList({
       extra={
         !readOnly && (
           <Can permission={addPermission}>
-            <Button onClick={() => setOpen(true)}>Add</Button>
+            <Button onClick={() => setDrawer({ mode: "create" })}>Add</Button>
           </Can>
         )
       }
@@ -843,15 +931,33 @@ function PurchaseSubResourceList({
         pagination={false}
         size="small"
         locale={{ emptyText: "None added yet" }}
-        columns={columns.map((column) => ({
-          title: column.title,
-          dataIndex: column.dataIndex,
-          ...(column.render ? { render: column.render } : {}),
-        }))}
+        columns={[
+          ...columns.map((column) => ({
+            title: column.title,
+            dataIndex: column.dataIndex,
+            ...(column.render ? { render: column.render } : {}),
+          })),
+          ...(actionColumn ? [actionColumn] : []),
+        ]}
       />
       {footer}
-      <Drawer title={`Add ${title}`} open={open} onClose={() => setOpen(false)} width={420} destroyOnHidden>
-        <SchemaForm module="purchase" entity={entity} mode="create" onSubmit={handleSubmit} />
+      <Drawer
+        title={drawer?.mode === "edit" ? `Edit ${title}` : `Add ${title}`}
+        open={drawer !== null}
+        onClose={() => setDrawer(null)}
+        width={420}
+        destroyOnHidden
+      >
+        {drawer?.mode === "create" && <SchemaForm module="purchase" entity={entity} mode="create" onSubmit={handleCreate} />}
+        {drawer?.mode === "edit" && (
+          <SchemaForm
+            module="purchase"
+            entity={entity}
+            mode="edit"
+            initialValues={drawer.row}
+            onSubmit={(values) => handleEdit(String(drawer.row.id), values)}
+          />
+        )}
       </Drawer>
     </Card>
   );

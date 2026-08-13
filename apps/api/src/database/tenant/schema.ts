@@ -1305,6 +1305,17 @@ export const purchasePricing = pgTable(
     purchaseAmountUsd: numeric("purchase_amount_usd", { precision: 18, scale: 2 }).notNull(),
     exchangeRate: numeric("exchange_rate", { precision: 18, scale: 6 }).notNull(),
     purchaseAmountAed: numeric("purchase_amount_aed", { precision: 18, scale: 2 }).notNull(),
+    /**
+     * Which lme_record (if any) this item's rate was derived from -
+     * stamped once at item-creation time under pricing_type='lme', never
+     * updated afterward (purchase-items.service.ts's updatePurchaseItem
+     * never re-derives the rate from a possibly-different "latest"
+     * record - it keeps whatever rate the item already had). Null under
+     * pricing_type='fixed'. This is what lets purchase-lme.service.ts
+     * tell an lme_record is "used" and must lock (rule 8's spirit:
+     * corrections are reversal + re-entry, never editing consumed data).
+     */
+    lmeRecordId: uuid("lme_record_id").references(() => lmeRecords.id, { onDelete: "restrict" }),
     ...auditColumns(),
   },
   (table) => [uniqueIndex("purchase_pricing_purchase_item_id_key").on(table.purchaseItemId)],
@@ -1337,6 +1348,10 @@ export const purchasePricingRelations = relations(purchasePricing, ({ one }) => 
   purchaseItem: one(purchaseItems, {
     fields: [purchasePricing.purchaseItemId],
     references: [purchaseItems.id],
+  }),
+  lmeRecord: one(lmeRecords, {
+    fields: [purchasePricing.lmeRecordId],
+    references: [lmeRecords.id],
   }),
 }));
 

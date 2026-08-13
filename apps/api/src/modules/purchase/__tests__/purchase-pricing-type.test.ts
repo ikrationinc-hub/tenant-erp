@@ -24,6 +24,7 @@ import {
   paymentTerms,
   permissions,
   ports,
+  purchasePricing,
   suppliers,
   supplierTypes,
   transportModes,
@@ -286,6 +287,11 @@ describe("modules/purchase - Prompt 21 item 2: pricing_type drives item rate (lm
       // Directly remove the LME record the item was derived from, to
       // isolate the approve-time guard from the item-creation-time guard -
       // proves the two are independently enforced, not the same check.
+      // purchase_pricing.lme_record_id (Prompt 23) FK-restricts a hard
+      // delete of a referenced lme_records row - null it out first, same
+      // as the app itself never hard-deletes an lme_record but this test
+      // deliberately does, to reach a state the app can't otherwise produce.
+      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchasePricing).set({ lmeRecordId: null }).where(eq(purchasePricing.companyId, tenant.companyId)));
       await withTenantSchema(tenant.schemaName, (tx) => tx.delete(lmeRecords).where(eq(lmeRecords.purchaseId, purchaseId)));
 
       const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/approve`).set("Authorization", authHeader);

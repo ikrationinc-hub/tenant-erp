@@ -44,6 +44,7 @@ const REAL_MIGRATION_VERSIONS = [
   "0026_buyer_references_companies",
   "0027_prompt22_stock_timing_rework",
   "0028_prompt22_amount_mandatory",
+  "0029_prompt23_lme_record_id_on_pricing",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

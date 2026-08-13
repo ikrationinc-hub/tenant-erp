@@ -57,7 +57,12 @@ function calculateAmounts(quantity: Decimal, rateUsd: Decimal, exchangeRate: Dec
  * schema.ts), the manual rate this codebase has always required stays
  * required.
  */
-async function resolveItemRate(tx: TenantTx, companyId: string, purchase: PurchaseRow, purchaseRateUsdInput: string | undefined) {
+async function resolveItemRate(
+  tx: TenantTx,
+  companyId: string,
+  purchase: PurchaseRow,
+  purchaseRateUsdInput: string | undefined,
+): Promise<{ rate: Decimal; lmeRecordId: string | undefined }> {
   if (purchase.pricingType === "lme") {
     if (purchaseRateUsdInput !== undefined) {
       throw new ValidationError("purchaseRateUsd is derived from the LME final rate under LME pricing - do not send it");
@@ -66,12 +71,12 @@ async function resolveItemRate(tx: TenantTx, companyId: string, purchase: Purcha
     if (!latestLmeRecord) {
       throw new ValidationError("Add an LME record before adding items under LME pricing");
     }
-    return parseMoney(latestLmeRecord.finalPurchaseRateUsd);
+    return { rate: parseMoney(latestLmeRecord.finalPurchaseRateUsd), lmeRecordId: latestLmeRecord.id };
   }
   if (purchaseRateUsdInput === undefined) {
     throw new ValidationError("purchaseRateUsd is required");
   }
-  return parseMoney(purchaseRateUsdInput);
+  return { rate: parseMoney(purchaseRateUsdInput), lmeRecordId: undefined };
 }
 
 /**
@@ -110,7 +115,7 @@ export async function addItem(ctx: RequestContext, purchaseId: string, input: Ad
     assertItemsEditable(purchase);
 
     const quantity = parseMoney(input.quantity);
-    const rateUsd = await resolveItemRate(tx, scope.companyId, purchase, input.purchaseRateUsd);
+    const { rate: rateUsd, lmeRecordId } = await resolveItemRate(tx, scope.companyId, purchase, input.purchaseRateUsd);
     const exchangeRate = parseMoney(input.exchangeRate);
     requirePositive(quantity, "quantity");
     requirePositive(rateUsd, "purchaseRateUsd");
@@ -134,6 +139,7 @@ export async function addItem(ctx: RequestContext, purchaseId: string, input: Ad
       purchaseAmountUsd: roundAmount(amountUsd),
       exchangeRate: roundRate(exchangeRate),
       purchaseAmountAed: roundAmount(amountAed),
+      ...(lmeRecordId ? { lmeRecordId } : {}),
       createdBy: scope.userId,
     });
 

@@ -19,6 +19,7 @@ import {
   currencies,
   divisions,
   incoterms,
+  items,
   lmeExchanges,
   marketPrices,
   paymentTerms,
@@ -28,6 +29,7 @@ import {
   suppliers,
   supplierTypes,
   transportModes,
+  uom,
   users,
   warehouses,
 } from "../../../database/tenant/schema.js";
@@ -77,6 +79,7 @@ interface SeededTenant {
     containerId: string;
   };
   lmeExchangeId: string;
+  itemRefs: { itemId: string; uomId: string };
 }
 
 const ALL_PURCHASE_PERMISSIONS = ["purchase.po.create", "purchase.po.read", "purchase.po.update"];
@@ -85,7 +88,7 @@ async function seedTenant(label: string): Promise<SeededTenant> {
   const unique = randomUUID().slice(0, 8);
   const tenant = await createTenantSchema({ name: `${label} Co`, slug: `${label}-${unique}` });
 
-  const { companyId, userId, purchaseRefs, lmeExchangeId } = await withTenantSchema(tenant.schemaName, async (tx) => {
+  const { companyId, userId, purchaseRefs, lmeExchangeId, itemRefs } = await withTenantSchema(tenant.schemaName, async (tx) => {
     const [company] = await tx
       .insert(companies)
       .values({ name: `${label} Co`, fiscalYearStartMonth: 1, timezone: "America/New_York", createdBy: randomUUID() })
@@ -131,8 +134,10 @@ async function seedTenant(label: string): Promise<SeededTenant> {
     const [lmeExchange] = await tx.insert(lmeExchanges).values({ companyId: company.id, code: "LME", name: "London Metal Exchange", createdBy: user.id }).returning();
     const [division] = await tx.insert(divisions).values({ companyId: company.id, code: "CONTAINER", name: "Container", createdBy: user.id }).returning();
     const [container] = await tx.insert(containers).values({ companyId: company.id, code: "CONT-1", name: "CONT-1", createdBy: user.id }).returning();
+    const [item] = await tx.insert(items).values({ companyId: company.id, code: "CU-CATH", name: "Copper Cathode", itemType: "metals", createdBy: user.id }).returning();
+    const [unit] = await tx.insert(uom).values({ companyId: company.id, code: "MT", name: "Metric Ton", createdBy: user.id }).returning();
 
-    if (!supplier || !transportMode || !portA || !portB || !warehouse || !incoterm || !lmeExchange || !division || !container) {
+    if (!supplier || !transportMode || !portA || !portB || !warehouse || !incoterm || !lmeExchange || !division || !container || !item || !unit) {
       throw new Error("failed to insert prerequisite masters");
     }
 
@@ -152,6 +157,7 @@ async function seedTenant(label: string): Promise<SeededTenant> {
         containerId: container.id,
       },
       lmeExchangeId: lmeExchange.id,
+      itemRefs: { itemId: item.id, uomId: unit.id },
     };
   });
 
@@ -166,7 +172,7 @@ async function seedTenant(label: string): Promise<SeededTenant> {
 
   const { token } = await signAccessToken({ sub: userId, tenant: tenant.id, company_id: companyId, roles: [], scope: "full" });
 
-  return { schemaName: tenant.schemaName, companyId, userId, accessToken: token, purchaseRefs, lmeExchangeId };
+  return { schemaName: tenant.schemaName, companyId, userId, accessToken: token, purchaseRefs, lmeExchangeId, itemRefs };
 }
 
 async function createDraftPurchase(app: ReturnType<typeof createApp>, authHeader: string, tenant: SeededTenant): Promise<string> {
@@ -192,6 +198,39 @@ async function createDraftPurchase(app: ReturnType<typeof createApp>, authHeader
         incotermId: tenant.purchaseRefs.incotermId,
       },
     });
+  expect(res.status).toBe(201);
+  return (res.body as { id: string }).id;
+}
+
+async function addLmeRecord(
+  app: ReturnType<typeof createApp>,
+  authHeader: string,
+  purchaseId: string,
+  tenant: SeededTenant,
+  overrides: Partial<{ lmePriceUsd: string; agreedPremiumPct: string }> = {},
+) {
+  const res = await request(app)
+    .post(`/api/v1/purchases/${purchaseId}/lme-records`)
+    .set("Authorization", authHeader)
+    .send({
+      lmeExchangeId: tenant.lmeExchangeId,
+      metal: "Copper",
+      lmeType: "close",
+      lmePriceUsd: "8400",
+      fixingDate: "2024-06-01",
+      agreedPremiumPct: "2",
+      ...overrides,
+    });
+  expect(res.status).toBe(201);
+  return asLmeRecord(res);
+}
+
+/** pricing_type is always "lme" on this file's purchases (createDraftPurchase) - purchaseRateUsd is never sent, same as resolveItemRate requires. */
+async function addItem(app: ReturnType<typeof createApp>, authHeader: string, purchaseId: string, tenant: SeededTenant, quantity: string): Promise<string> {
+  const res = await request(app)
+    .post(`/api/v1/purchases/${purchaseId}/items`)
+    .set("Authorization", authHeader)
+    .send({ itemId: tenant.itemRefs.itemId, quantity, uomId: tenant.itemRefs.uomId, exchangeRate: "3.6725" });
   expect(res.status).toBe(201);
   return (res.body as { id: string }).id;
 }
@@ -310,4 +349,130 @@ describe("modules/purchase - Platform Hedging / LME Records, session (d): LME pr
     },
     TEST_TIMEOUT_MS,
   );
+
+  describe("Prompt 23: edit/remove - locked once used by an item, otherwise free (not gated by the purchase's own status)", () => {
+    it(
+      "GET /purchases/:id reports isUsed: false for an unused record",
+      async () => {
+        const tenant = await seedTenant("lme-unused-flag");
+        const app = createApp();
+        const authHeader = `Bearer ${tenant.accessToken}`;
+        const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+        await addLmeRecord(app, authHeader, purchaseId, tenant);
+
+        const res = await request(app).get(`/api/v1/purchases/${purchaseId}`).set("Authorization", authHeader);
+        const records = (res.body as { lmeRecords: Array<{ isUsed: boolean }> }).lmeRecords;
+        expect(records[0]?.isUsed).toBe(false);
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "editing an unused record re-records into market_prices and recomputes the final rate",
+      async () => {
+        const tenant = await seedTenant("lme-edit-unused");
+        const app = createApp();
+        const authHeader = `Bearer ${tenant.accessToken}`;
+        const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+        const record = await addLmeRecord(app, authHeader, purchaseId, tenant, { lmePriceUsd: "8400", agreedPremiumPct: "2" });
+
+        const res = await request(app)
+          .patch(`/api/v1/purchases/${purchaseId}/lme-records/${record.id}`)
+          .set("Authorization", authHeader)
+          .send({
+            lmeExchangeId: tenant.lmeExchangeId,
+            metal: "Copper",
+            lmeType: "close",
+            lmePriceUsd: "100",
+            fixingDate: "2024-06-05",
+            agreedPremiumPct: "98",
+          });
+        expect(res.status).toBe(200);
+        const updated = asLmeRecord(res);
+        // The client's own example - 100 x (98/100) = 98, exactly.
+        expect(updated.finalPurchaseRateUsd).toBe("98.000000");
+        expect(updated.fixingDate).toBe("2024-06-05");
+        // A fresh market_prices row, not the original one mutated.
+        expect(updated.marketPriceId).not.toBe(record.marketPriceId);
+        const [marketPrice] = await withTenantSchema(tenant.schemaName, (tx) =>
+          tx.select().from(marketPrices).where(and(eq(marketPrices.id, updated.marketPriceId), eq(marketPrices.companyId, tenant.companyId))),
+        );
+        expect(marketPrice?.price).toBe("100.000000");
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "removing an unused record soft-deletes it - it disappears from GET /purchases/:id",
+      async () => {
+        const tenant = await seedTenant("lme-remove-unused");
+        const app = createApp();
+        const authHeader = `Bearer ${tenant.accessToken}`;
+        const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+        const record = await addLmeRecord(app, authHeader, purchaseId, tenant);
+
+        const deleteRes = await request(app).delete(`/api/v1/purchases/${purchaseId}/lme-records/${record.id}`).set("Authorization", authHeader);
+        expect(deleteRes.status).toBe(204);
+
+        const getRes = await request(app).get(`/api/v1/purchases/${purchaseId}`).set("Authorization", authHeader);
+        const records = (getRes.body as { lmeRecords: Array<{ id: string }> }).lmeRecords;
+        expect(records.some((r) => r.id === record.id)).toBe(false);
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "once an item has snapshotted a record's rate, editing or removing that record is rejected - and GET reports isUsed: true",
+      async () => {
+        const tenant = await seedTenant("lme-locked-once-used");
+        const app = createApp();
+        const authHeader = `Bearer ${tenant.accessToken}`;
+        const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+        const record = await addLmeRecord(app, authHeader, purchaseId, tenant);
+        await addItem(app, authHeader, purchaseId, tenant, "10");
+
+        const getRes = await request(app).get(`/api/v1/purchases/${purchaseId}`).set("Authorization", authHeader);
+        const records = (getRes.body as { lmeRecords: Array<{ id: string; isUsed: boolean }> }).lmeRecords;
+        expect(records.find((r) => r.id === record.id)?.isUsed).toBe(true);
+
+        const editRes = await request(app)
+          .patch(`/api/v1/purchases/${purchaseId}/lme-records/${record.id}`)
+          .set("Authorization", authHeader)
+          .send({ lmeExchangeId: tenant.lmeExchangeId, metal: "Copper", lmeType: "close", lmePriceUsd: "9000", fixingDate: "2024-06-10", agreedPremiumPct: "3" });
+        expect(editRes.status).toBe(409);
+
+        const deleteRes = await request(app).delete(`/api/v1/purchases/${purchaseId}/lme-records/${record.id}`).set("Authorization", authHeader);
+        expect(deleteRes.status).toBe(409);
+
+        // The lock is per-record, not per-purchase - a SECOND, still-unused record on the same purchase is untouched.
+        const secondRecord = await addLmeRecord(app, authHeader, purchaseId, tenant, { lmePriceUsd: "8600", agreedPremiumPct: "3" });
+        const secondEditRes = await request(app)
+          .patch(`/api/v1/purchases/${purchaseId}/lme-records/${secondRecord.id}`)
+          .set("Authorization", authHeader)
+          .send({ lmeExchangeId: tenant.lmeExchangeId, metal: "Copper", lmeType: "close", lmePriceUsd: "8700", fixingDate: "2024-06-11", agreedPremiumPct: "3" });
+        expect(secondEditRes.status).toBe(200);
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "editing/removing an unused record is allowed even on an Approved purchase (not gated by the purchase's own status)",
+      async () => {
+        const tenant = await seedTenant("lme-edit-post-approval");
+        const app = createApp();
+        const authHeader = `Bearer ${tenant.accessToken}`;
+        const purchaseId = await createDraftPurchase(app, authHeader, tenant);
+        const record = await addLmeRecord(app, authHeader, purchaseId, tenant);
+
+        await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "approved" }).where(eq(purchases.id, purchaseId)));
+
+        const editRes = await request(app)
+          .patch(`/api/v1/purchases/${purchaseId}/lme-records/${record.id}`)
+          .set("Authorization", authHeader)
+          .send({ lmeExchangeId: tenant.lmeExchangeId, metal: "Copper", lmeType: "close", lmePriceUsd: "8600", fixingDate: "2024-06-15", agreedPremiumPct: "3" });
+        expect(editRes.status).toBe(200);
+      },
+      TEST_TIMEOUT_MS,
+    );
+  });
 });

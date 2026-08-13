@@ -251,8 +251,13 @@ function multiplyDecimalStrings(a: string, b: string, decimals: number): string 
   return product.toFixed(decimals);
 }
 
-/** Mirrors purchase.service.ts's getById variance calc (Prompt 22 follow-up) so the mock UI has the same purchaseItemsAmountUsd/varianceUsd/variancePct fields to render - demo-only arithmetic, same caveat as multiplyDecimalStrings above. */
-function withInvoiceVariance(purchase: MockPurchase): MockPurchase {
+/**
+ * Mirrors purchase.service.ts's getById: invoice variance (Prompt 22
+ * follow-up) AND lme_record isUsed (Prompt 23) are both computed fresh
+ * from the purchase's current items at response time, never stored -
+ * demo-only arithmetic, same caveat as multiplyDecimalStrings above.
+ */
+function withComputedFields(purchase: MockPurchase): MockPurchase {
   const purchaseItemsAmount = purchase.items.reduce((sum, item) => {
     const pricing = item.pricing as Record<string, unknown> | undefined;
     const amount = typeof pricing?.purchaseAmountUsd === "string" ? pricing.purchaseAmountUsd : "0";
@@ -267,7 +272,18 @@ function withInvoiceVariance(purchase: MockPurchase): MockPurchase {
     return { ...invoice, purchaseItemsAmountUsd, varianceUsd, variancePct };
   });
 
-  return { ...purchase, invoices };
+  const usedLmeRecordIds = new Set(
+    purchase.items
+      .map((item) => (item.pricing as Record<string, unknown> | undefined)?.lmeRecordId)
+      .filter((id): id is string => typeof id === "string"),
+  );
+  const lmeRecords = purchase.lmeRecords.map((record) => ({ ...record, isUsed: usedLmeRecordIds.has(String(record.id)) }));
+
+  return { ...purchase, invoices, lmeRecords };
+}
+
+function isLmeRecordUsed(purchase: MockPurchase, lmeRecordId: string): boolean {
+  return purchase.items.some((item) => (item.pricing as Record<string, unknown> | undefined)?.lmeRecordId === lmeRecordId);
 }
 
 function findPurchase(id: string | readonly string[] | undefined): MockPurchase | undefined {
@@ -321,7 +337,7 @@ export const purchaseHandlers = [
 
   http.get(`${API_BASE}${endpoints.purchases}/:id`, ({ params }) => {
     const purchase = findPurchase(params.id);
-    return purchase ? HttpResponse.json(withInvoiceVariance(purchase)) : new HttpResponse(null, { status: 404 });
+    return purchase ? HttpResponse.json(withComputedFields(purchase)) : new HttpResponse(null, { status: 404 });
   }),
 
   http.post(`${API_BASE}${endpoints.purchases}`, async ({ request }) => {
@@ -342,7 +358,7 @@ export const purchaseHandlers = [
     };
     nextPurchaseSequence += 1;
     purchases.push(purchase);
-    return HttpResponse.json(withInvoiceVariance(purchase), { status: 201 });
+    return HttpResponse.json(withComputedFields(purchase), { status: 201 });
   }),
 
   http.patch(`${API_BASE}${endpoints.purchases}/:id`, async ({ params, request }) => {
@@ -356,7 +372,7 @@ export const purchaseHandlers = [
     if (shipment) {
       Object.assign(purchase.shipment, shipment);
     }
-    return HttpResponse.json(withInvoiceVariance(purchase));
+    return HttpResponse.json(withComputedFields(purchase));
   }),
 
   http.patch(`${API_BASE}${endpoints.approvePurchase(":id")}`, ({ params }) => {
@@ -365,7 +381,7 @@ export const purchaseHandlers = [
       return new HttpResponse(null, { status: 404 });
     }
     purchase.status = "approved";
-    return HttpResponse.json(withInvoiceVariance(purchase));
+    return HttpResponse.json(withComputedFields(purchase));
   }),
 
   http.patch(`${API_BASE}${endpoints.postPurchase(":id")}`, ({ params }) => {
@@ -374,7 +390,7 @@ export const purchaseHandlers = [
       return new HttpResponse(null, { status: 404 });
     }
     purchase.status = "posted";
-    return HttpResponse.json(withInvoiceVariance(purchase));
+    return HttpResponse.json(withComputedFields(purchase));
   }),
 
   http.post(`${API_BASE}${endpoints.purchaseItems(":id")}`, async ({ params, request }) => {
@@ -403,7 +419,16 @@ export const purchaseHandlers = [
       gradeId: body.gradeId,
       quantity,
       uomId: body.uomId,
-      pricing: { purchaseRateUsd: rate, purchaseAmountUsd, exchangeRate, purchaseAmountAed },
+      pricing: {
+        purchaseRateUsd: rate,
+        purchaseAmountUsd,
+        exchangeRate,
+        purchaseAmountAed,
+        // Mirrors purchase_pricing.lme_record_id (Prompt 23): which LME
+        // record this item's rate came from, so an LME record's Edit/Remove
+        // can lock once it's been used, same as the real backend.
+        ...(purchase.pricingType === "lme" && latestLmeRecord ? { lmeRecordId: latestLmeRecord.id } : {}),
+      },
     };
     purchase.items.push(item);
     return HttpResponse.json(item, { status: 201 });
@@ -432,6 +457,32 @@ export const purchaseHandlers = [
     return HttpResponse.json(allocation, { status: 201 });
   }),
 
+  // Prompt 23: edit/remove - mirrors purchase-allocations.service.ts's own Draft-only gate (rule 8).
+  http.patch(`${API_BASE}${endpoints.purchaseAllocation(":id", ":allocationId")}`, async ({ params, request }) => {
+    const purchase = findPurchase(params.id);
+    const allocation = purchase?.allocations.find((row) => row.id === params.allocationId);
+    if (!purchase || !allocation) {
+      return new HttpResponse(null, { status: 404 });
+    }
+    if (purchase.status !== "draft") {
+      return HttpResponse.json({ error: { code: "CONFLICT", message: "Purchase is not draft and can no longer be edited" } }, { status: 409 });
+    }
+    const body = (await request.json()) as Record<string, unknown>;
+    Object.assign(allocation, body);
+    return HttpResponse.json(allocation);
+  }),
+  http.delete(`${API_BASE}${endpoints.purchaseAllocation(":id", ":allocationId")}`, ({ params }) => {
+    const purchase = findPurchase(params.id);
+    if (!purchase) {
+      return new HttpResponse(null, { status: 404 });
+    }
+    if (purchase.status !== "draft") {
+      return HttpResponse.json({ error: { code: "CONFLICT", message: "Purchase is not draft and can no longer be edited" } }, { status: 409 });
+    }
+    purchase.allocations = purchase.allocations.filter((row) => row.id !== params.allocationId);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   http.patch(`${API_BASE}${endpoints.purchaseCosts(":id")}`, async ({ params, request }) => {
     const purchase = findPurchase(params.id);
     if (!purchase) {
@@ -457,6 +508,41 @@ export const purchaseHandlers = [
     const record = { id: `lme-${nextChildId}`, ...body, lmePriceUsd, agreedPremiumPct, finalPurchaseRateUsd };
     purchase.lmeRecords.push(record);
     return HttpResponse.json(record, { status: 201 });
+  }),
+
+  // Prompt 23: edit/remove - mirrors purchase-lme.service.ts's own "locked once used by an item" gate, not the purchase's own status.
+  http.patch(`${API_BASE}${endpoints.purchaseLmeRecord(":id", ":lmeRecordId")}`, async ({ params, request }) => {
+    const purchase = findPurchase(params.id);
+    const record = purchase?.lmeRecords.find((row) => row.id === params.lmeRecordId);
+    if (!purchase || !record) {
+      return new HttpResponse(null, { status: 404 });
+    }
+    if (isLmeRecordUsed(purchase, String(record.id))) {
+      return HttpResponse.json(
+        { error: { code: "CONFLICT", message: "This LME record has already been used to price an item and can no longer be edited or removed" } },
+        { status: 409 },
+      );
+    }
+    const body = (await request.json()) as Record<string, unknown>;
+    const lmePriceUsd = asNumericString(body.lmePriceUsd, "0");
+    const agreedPremiumPct = asNumericString(body.agreedPremiumPct, "0");
+    const finalPurchaseRateUsd = (Number(lmePriceUsd) * (Number(agreedPremiumPct) / 100)).toFixed(6);
+    Object.assign(record, body, { lmePriceUsd, agreedPremiumPct, finalPurchaseRateUsd });
+    return HttpResponse.json(record);
+  }),
+  http.delete(`${API_BASE}${endpoints.purchaseLmeRecord(":id", ":lmeRecordId")}`, ({ params }) => {
+    const purchase = findPurchase(params.id);
+    if (!purchase) {
+      return new HttpResponse(null, { status: 404 });
+    }
+    if (isLmeRecordUsed(purchase, String(params.lmeRecordId))) {
+      return HttpResponse.json(
+        { error: { code: "CONFLICT", message: "This LME record has already been used to price an item and can no longer be edited or removed" } },
+        { status: 409 },
+      );
+    }
+    purchase.lmeRecords = purchase.lmeRecords.filter((row) => row.id !== params.lmeRecordId);
+    return new HttpResponse(null, { status: 204 });
   }),
 
   http.post(`${API_BASE}${endpoints.purchaseHedges(":id")}`, async ({ params, request }) => {

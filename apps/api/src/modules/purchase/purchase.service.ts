@@ -92,7 +92,7 @@ export interface PurchaseWithShipment extends PurchaseRow {
   /** Session (c): undefined until the first PATCH .../costs (no row exists yet), not just an empty/zeroed object. */
   additionalCosts?: PurchaseAdditionalCostsRow | undefined;
   /** Session (d): same convention as `items`/`allocations` - populated on getById only. */
-  lmeRecords?: LmeRecordRow[];
+  lmeRecords?: LmeRecordWithUsage[];
   hedges?: HedgeRow[];
   /** Prompt 22: same convention as `items`/`allocations`/`lmeRecords`/`hedges` - populated on getById only. */
   invoices?: PurchaseInvoiceWithVariance[];
@@ -124,6 +124,23 @@ function attachInvoiceVariance(items: PurchaseItemWithPricing[], invoices: Purch
     const variancePct = purchaseItemsAmount.isZero() ? null : roundAmount(parseMoney(varianceUsd).dividedBy(purchaseItemsAmount).times(100));
     return { ...invoice, purchaseItemsAmountUsd, varianceUsd, variancePct };
   });
+}
+
+/**
+ * Prompt 23: whether any item has snapshotted this record's rate
+ * (purchase_pricing.lme_record_id) - purchase-lme.service.ts's own
+ * update/remove enforce the actual lock server-side; this is purely so
+ * the UI can greyed-out/disable the Edit/Delete buttons with an
+ * explanation instead of letting the user hit a 409 blind. Computed from
+ * the SAME items list getById already fetched - no extra query.
+ */
+export interface LmeRecordWithUsage extends LmeRecordRow {
+  isUsed: boolean;
+}
+
+function attachLmeRecordUsage(items: PurchaseItemWithPricing[], lmeRecords: LmeRecordRow[]): LmeRecordWithUsage[] {
+  const usedIds = new Set(items.map((item) => item.pricing.lmeRecordId).filter((id): id is string => id !== null));
+  return lmeRecords.map((record) => ({ ...record, isUsed: usedIds.has(record.id) }));
 }
 
 function requireTenantScope(ctx: RequestContext) {
@@ -184,7 +201,16 @@ export async function getById(ctx: RequestContext, id: string): Promise<Purchase
     const lmeRecords = await listLmeRecordsForPurchase(tx, scope.companyId, id);
     const hedges = await listHedgesForPurchase(tx, scope.companyId, id);
     const invoices = await listInvoicesForPurchase(tx, scope.companyId, id);
-    return { ...purchase, shipment, items, allocations, additionalCosts, lmeRecords, hedges, invoices: attachInvoiceVariance(items, invoices) };
+    return {
+      ...purchase,
+      shipment,
+      items,
+      allocations,
+      additionalCosts,
+      lmeRecords: attachLmeRecordUsage(items, lmeRecords),
+      hedges,
+      invoices: attachInvoiceVariance(items, invoices),
+    };
   });
 }
 
