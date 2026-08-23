@@ -12,6 +12,8 @@ export interface SchemaTableColumnOverride {
   render?: (value: unknown, row: EntityRow) => ReactNode;
   /** Drop this field-definitions-derived column from the list entirely - for an entity with far more form fields than make sense as list columns (e.g. Purchase's list reuses the "header" entity, which also carries every shipment/attachment field). */
   hidden?: boolean;
+  /** Force the monospaced tabular-figure treatment on/off, overriding the default (on for number/decimal/date/datetime fields). For a text-dataType column that still reads as a document number, e.g. purchaseNumber ("PO-2025-0001"). */
+  monospace?: boolean;
 }
 
 /** A column with no field-definitions field behind it at all (e.g. Purchase's system-controlled `status`, never part of the create/edit form). Spliced into the field-definitions-derived columns immediately after `after`'s column. */

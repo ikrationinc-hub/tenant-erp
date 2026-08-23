@@ -12,6 +12,7 @@ import { useEntityList } from "./use-entity-list";
 import { useMasterLabels } from "./use-master-labels";
 import { FilterBar } from "./FilterBar";
 import type { EntityRow, SchemaTableAction, SchemaTableExtraColumn, SchemaTableProps } from "./types";
+import { slate, surface } from "../../theme/palette";
 
 const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -184,7 +185,16 @@ export function SchemaTable({
 
   return (
     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-      <FilterBar filters={filters} state={state} onSearch={setSearch} onFilterChange={setFilter} />
+      <div
+        style={{
+          background: surface,
+          border: `1px solid ${slate[200]}`,
+          borderRadius: 6,
+          padding: 12,
+        }}
+      >
+        <FilterBar filters={filters} state={state} onSearch={setSearch} onFilterChange={setFilter} />
+      </div>
       <Table<EntityRow>
         rowKey="id"
         size="small"

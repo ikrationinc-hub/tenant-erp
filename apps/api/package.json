@@ -11,12 +11,12 @@
     "lint": "eslint . && node scripts/check-search-path-boundary.mjs && node scripts/check-rbac-boundary.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:tenant:generate": "drizzle-kit generate --config=drizzle.tenant.config.ts",
+    "db:generate": "node --env-file=../../.env node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node --env-file=../../.env node_modules/drizzle-kit/bin.cjs migrate",
+    "db:tenant:generate": "node --env-file=../../.env node_modules/drizzle-kit/bin.cjs generate --config=drizzle.tenant.config.ts",
     "check:tenant-boundary": "node scripts/check-search-path-boundary.mjs",
-    "migrate:tenants": "tsx scripts/migrate-tenants.ts",
-    "seed:platform-admin": "tsx scripts/seed-platform-admin.ts",
+    "migrate:tenants": "tsx --env-file=../../.env scripts/migrate-tenants.ts",
+    "seed:platform-admin": "tsx --env-file=../../.env scripts/seed-platform-admin.ts",
     "seed:dev": "tsx --env-file=../../.env scripts/seed-dev.ts"
   },
   "dependencies": {

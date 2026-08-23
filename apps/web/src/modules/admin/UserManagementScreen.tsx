@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { App as AntApp, Button, Space, Tag, Typography } from "antd";
+import { App as AntApp, Button, Space, Typography } from "antd";
 import { PlusOutlined, UserAddOutlined } from "@ant-design/icons";
 import { masterOptionsResponseSchema, resendInvitationResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
@@ -10,18 +10,13 @@ import { SchemaTable } from "../../core/schema-table/SchemaTable";
 import type { EntityRow } from "../../core/schema-table/types";
 import { Can } from "../../core/permissions/Can";
 import { useAppStore } from "../../core/store/app-store";
+import { StatusTag } from "../../core/status-tag/StatusTag";
+import { USER_STATUS_COLORS } from "../../core/status-tag/status-colors";
 import { InviteUserDrawer } from "./InviteUserDrawer";
 import { ProvisionUserDrawer } from "./ProvisionUserDrawer";
 import { EditUserRolesModal } from "./EditUserRolesModal";
 
-const STATUS_COLOR: Record<string, string> = {
-  invited: "gold",
-  active: "green",
-  suspended: "red",
-};
-
-function statusLabel(row: EntityRow): string {
-  const status = typeof row.status === "string" ? row.status : "";
+function statusLabel(status: string): string {
   if (status === "invited") {
     return "Invited (pending)";
   }
@@ -33,7 +28,7 @@ function StatusCell({ row }: { row: EntityRow }): ReactElement {
   const expiresAt = typeof row.invitationExpiresAt === "string" ? row.invitationExpiresAt : undefined;
   return (
     <Space direction="vertical" size={0}>
-      <Tag color={STATUS_COLOR[status] ?? "default"}>{statusLabel(row)}</Tag>
+      <StatusTag value={status} colorMap={USER_STATUS_COLORS} labelFormatter={statusLabel} />
       {status === "invited" && expiresAt && (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           Expires {new Date(expiresAt).toLocaleDateString()}

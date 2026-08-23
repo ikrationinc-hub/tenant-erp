@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Space, Tag, Typography } from "antd";
+import { Button, Space, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { masterOptionsResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
@@ -10,6 +10,8 @@ import { SchemaTable } from "../../core/schema-table/SchemaTable";
 import { Can } from "../../core/permissions/Can";
 import { endpoints } from "../../core/api/endpoints";
 import type { EntityRow } from "../../core/schema-table/types";
+import { StatusTag } from "../../core/status-tag/StatusTag";
+import { PURCHASE_STATUS_COLORS } from "../../core/status-tag/status-colors";
 
 function useMasterOptions(endpoint: string) {
   const query = useQuery({
@@ -28,13 +30,6 @@ function rowId(row: EntityRow): string {
 
 function asDisplayString(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
-}
-
-const STATUS_COLOR: Record<string, string> = { draft: "default", approved: "blue", posted: "green" };
-
-function StatusTag({ row }: { row: EntityRow }): ReactElement {
-  const status = asDisplayString(row.status);
-  return <Tag color={STATUS_COLOR[status] ?? "default"}>{status ? status.charAt(0).toUpperCase() + status.slice(1) : "—"}</Tag>;
 }
 
 /** FE-6 §10: filter by status, date range, supplier, branch - all server-side (backend rule 10). Row click opens the detail screen (header/shipment/items/... - session (e)'s workflow lives there too). */
@@ -80,6 +75,7 @@ export function PurchaseListScreen(): ReactElement {
         // at all (it's system-controlled, never part of the create/edit
         // form) - see extraColumns below.
         columns={[
+          { fieldKey: "purchaseNumber", monospace: true },
           { fieldKey: "divisionId", title: "Division", render: (value) => resolvedLabel(divisionLabels, value) },
           { fieldKey: "branchId", render: (value) => resolvedLabel(branchLabels, value) },
           { fieldKey: "buyerId", render: (value) => resolvedLabel(buyerLabels, value) },
@@ -107,7 +103,13 @@ export function PurchaseListScreen(): ReactElement {
           { fieldKey: "otherDocuments2", hidden: true },
         ]}
         extraColumns={[
-          { key: "status", title: "Status", after: "purchaseNumber", width: 110, render: (row) => <StatusTag row={row} /> },
+          {
+            key: "status",
+            title: "Status",
+            after: "purchaseNumber",
+            width: 110,
+            render: (row) => <StatusTag value={asDisplayString(row.status)} colorMap={PURCHASE_STATUS_COLORS} />,
+          },
         ]}
         filters={[
           {

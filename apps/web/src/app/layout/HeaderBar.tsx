@@ -5,6 +5,7 @@ import { UserOutlined } from "@ant-design/icons";
 import { useLogoutMutation } from "../../modules/auth/api";
 import { queryClient } from "../../core/api/query-client";
 import { useAppStore } from "../../core/store/app-store";
+import { steelCobalt } from "../../theme/palette";
 import { CompanyBranchSwitcher } from "./CompanyBranchSwitcher";
 
 export function HeaderBar(): ReactElement {
@@ -33,7 +34,7 @@ export function HeaderBar(): ReactElement {
         placement="bottomRight"
       >
         <Space style={{ cursor: "pointer" }} data-testid="user-menu-trigger">
-          <Avatar size="small" icon={<UserOutlined />} />
+          <Avatar size="small" icon={<UserOutlined />} style={{ backgroundColor: steelCobalt.base }} />
           <Typography.Text>{user?.name}</Typography.Text>
         </Space>
       </Dropdown>

@@ -43,6 +43,7 @@ export function NavigationMenu(): ReactElement {
 
   return (
     <Menu
+      className="nav-menu"
       mode="inline"
       items={items}
       selectedKeys={[location.pathname]}

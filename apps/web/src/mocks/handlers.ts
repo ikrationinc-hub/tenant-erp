@@ -160,8 +160,8 @@ const mockFieldDefinitionModules = fieldDefinitionModulesResponseSchema.parse({
 const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
   menus: [
     { id: "m-dashboard", key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard", sortOrder: 1, children: [] },
-    { id: "m-companies", key: "companies", label: "Companies", path: "/companies", icon: "database", sortOrder: 2, children: [] },
-    { id: "m-branches", key: "branches", label: "Branches", path: "/branches", icon: "database", sortOrder: 3, children: [] },
+    { id: "m-companies", key: "companies", label: "Companies", path: "/companies", icon: "bank", sortOrder: 2, children: [] },
+    { id: "m-branches", key: "branches", label: "Branches", path: "/branches", icon: "apartment", sortOrder: 3, children: [] },
     { id: "m-users", key: "users", label: "Users", path: "/users", icon: "users", sortOrder: 4, children: [] },
     { id: "m-roles", key: "roles", label: "Roles", path: "/roles", icon: "shield", sortOrder: 5, children: [] },
     {
@@ -169,12 +169,12 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       key: "field-definitions",
       label: "Field Definitions",
       path: "/admin/field-definitions",
-      icon: "database",
+      icon: "form",
       sortOrder: 6,
       children: [],
     },
     { id: "m-suppliers", key: "suppliers", label: "Suppliers", path: "/suppliers", icon: "shop", sortOrder: 7, children: [] },
-    { id: "m-brokers", key: "brokers", label: "Brokers", path: "/brokers", icon: "shop", sortOrder: 8, children: [] },
+    { id: "m-brokers", key: "brokers", label: "Brokers", path: "/brokers", icon: "contacts", sortOrder: 8, children: [] },
     {
       id: "m-masters",
       key: "masters",
@@ -216,7 +216,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
         },
       ],
     },
-    { id: "m-inventory", key: "inventory", label: "Inventory", path: "/inventory", icon: "database", sortOrder: 11, children: [] },
+    { id: "m-inventory", key: "inventory", label: "Inventory", path: "/inventory", icon: "inbox", sortOrder: 11, children: [] },
   ],
 });
 

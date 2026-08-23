@@ -1,8 +1,13 @@
 import type { ComponentType } from "react";
 import {
+  ApartmentOutlined,
   AppstoreOutlined,
+  BankOutlined,
+  ContactsOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  FormOutlined,
+  InboxOutlined,
   SafetyOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
@@ -17,6 +22,11 @@ const ICONS: Record<string, ComponentType> = {
   database: DatabaseOutlined,
   "shopping-cart": ShoppingCartOutlined,
   shop: ShopOutlined,
+  bank: BankOutlined,
+  apartment: ApartmentOutlined,
+  form: FormOutlined,
+  contacts: ContactsOutlined,
+  inbox: InboxOutlined,
 };
 
 export function resolveMenuIcon(iconKey: string | null): ComponentType {

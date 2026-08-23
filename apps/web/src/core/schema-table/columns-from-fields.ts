@@ -7,6 +7,9 @@ function asDisplayString(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 
+/** Trading-terminal convention: numbers and dates render in a monospaced, tabular-figure font so digits line up down a column. Purely presentational - carries no semantic meaning and is never read by validation or the API. */
+const NUMERIC_DATA_TYPES = new Set(["number", "decimal", "date", "datetime"]);
+
 /**
  * Column definitions from field-definitions metadata (FE-4) - a flat grid
  * doesn't care about SchemaForm's section grouping, only about which
@@ -43,6 +46,7 @@ export function columnsFromFieldDefinitions(
         dataIndex: field.fieldKey,
         title: override?.title ?? field.label,
         sorter: override?.sortable ?? true,
+        ...((override?.monospace ?? NUMERIC_DATA_TYPES.has(field.dataType)) ? { className: "num" } : {}),
         ...(override?.width !== undefined ? { width: override.width } : {}),
         ...(override?.render ? { render: override.render } : defaultRender ? { render: defaultRender } : {}),
       };

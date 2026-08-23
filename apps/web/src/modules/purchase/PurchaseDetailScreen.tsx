@@ -10,6 +10,8 @@ import { openAttachmentDownload } from "../../core/attachments/download-attachme
 import { SchemaForm } from "../../core/schema-form/SchemaForm";
 import { Can } from "../../core/permissions/Can";
 import { useHasPermission } from "../../core/permissions/use-permissions";
+import { StatusTag } from "../../core/status-tag/StatusTag";
+import { INVOICE_STATUS_COLORS, PURCHASE_STATUS_COLORS } from "../../core/status-tag/status-colors";
 import { PURCHASE_LIST_PATH } from "./PurchaseListScreen";
 
 const MULTI_UPLOAD_ATTACHMENT_KEYS = new Set(["otherDocuments", "otherDocuments2"]);
@@ -237,7 +239,7 @@ export function PurchaseDetailScreen({
           <Typography.Title level={4} style={{ margin: 0 }}>
             {mode === "create" ? "New Purchase" : `Purchase ${asDisplayString(purchase?.purchaseNumber)}`}
           </Typography.Title>
-          {status && <StatusTag status={status} />}
+          {status && <StatusTag value={status} colorMap={PURCHASE_STATUS_COLORS} />}
         </Space>
         {mode === "edit" && purchaseId && (
           <Space>
@@ -374,11 +376,6 @@ export function PurchaseDetailScreen({
   );
 }
 
-function StatusTag({ status }: { status: string }): ReactElement {
-  const color = status === "posted" ? "green" : status === "approved" ? "blue" : "default";
-  return <Tag color={color}>{status.charAt(0).toUpperCase() + status.slice(1)}</Tag>;
-}
-
 function PurchaseCostsPanel({
   purchaseId,
   readOnly,
@@ -496,13 +493,6 @@ function PurchaseItemsPanel({
       </Drawer>
     </Card>
   );
-}
-
-const INVOICE_STATUS_COLOR: Record<string, string> = { draft: "default", approved: "green", reversed: "red" };
-
-function InvoiceStatusTag({ status }: { status: unknown }): ReactElement {
-  const value = asDisplayString(status);
-  return <Tag color={INVOICE_STATUS_COLOR[value] ?? "default"}>{value ? value.charAt(0).toUpperCase() + value.slice(1) : "—"}</Tag>;
 }
 
 /**
@@ -645,7 +635,11 @@ function PurchaseInvoicesPanel({
             key: "variance",
             render: (_value, row): ReactNode => <InvoiceVarianceTag varianceUsd={row.varianceUsd} variancePct={row.variancePct} />,
           },
-          { title: "Status", dataIndex: "status", render: (value: unknown) => <InvoiceStatusTag status={value} /> },
+          {
+            title: "Status",
+            dataIndex: "status",
+            render: (value: unknown) => <StatusTag value={asDisplayString(value)} colorMap={INVOICE_STATUS_COLORS} />,
+          },
           {
             title: "Document",
             key: "document",

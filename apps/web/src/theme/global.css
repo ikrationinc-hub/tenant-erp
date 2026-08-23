@@ -1,0 +1,70 @@
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+
+/* Mirrors theme/palette.ts's `sider.rail` and `slate.bg` - kept as CSS
+   vars here because this file styles raw DOM (html/body reset, AntD
+   internals) that ConfigProvider's token system has no hook for. */
+:root {
+  --color-rail: #1b4b91;
+  --color-page-bg: #f8f9fb;
+}
+
+/* Browser default `body` margin otherwise leaves an unstyled strip around
+   the app where AntD's Layout background never reaches - visible as a
+   stray band at the top/edges of the viewport, especially under a dark
+   OS/browser theme where the unstyled area auto-darkens. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+body {
+  background: var(--color-page-bg);
+}
+#root {
+  min-height: 100vh;
+}
+
+/* Tabular/numeric content (rates, quantities, amounts, document numbers,
+   dates in tables) - the trading-terminal convention of monospacing
+   numbers so digits align across rows. */
+.num {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sidebar active-item indicator rail (Session 2). AntD's Menu theme
+   tokens have no "indicator bar" concept, so this is a deliberate,
+   narrowly-scoped custom-CSS rule rather than a token. Hidden when the
+   Sider is collapsed to icon-only mode, where a rail with no adjacent
+   label reads as noise. */
+.nav-menu .ant-menu-item-selected {
+  position: relative;
+}
+.nav-menu .ant-menu-item-selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--color-rail);
+}
+.ant-layout-sider-collapsed .nav-menu .ant-menu-item-selected::before {
+  display: none;
+}
+
+/* Dense table headers (Session 4): small-caps-style tracked labels rather
+   than AntD's default sentence-case - AntD's Table component tokens have
+   no text-transform/letter-spacing concept, so this is CSS-only. Applies
+   to every AntD Table in the app (`.ant-table` is AntD's own wrapper
+   class), matching the "modernized standard components" goal rather than
+   scoping to one screen. */
+.ant-table-thead > tr > th {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

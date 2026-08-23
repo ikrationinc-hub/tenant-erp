@@ -45,7 +45,8 @@ export function CompanyBranchSwitcher(): ReactElement | null {
     <Space size="small">
       <Select
         size="small"
-        style={{ minWidth: 160 }}
+        variant="borderless"
+        style={{ width: "auto" }}
         value={activeCompanyId}
         onChange={handleCompanyChange}
         options={companies.map((company) => ({ label: company.name, value: company.id }))}
@@ -53,7 +54,8 @@ export function CompanyBranchSwitcher(): ReactElement | null {
       />
       <Select
         size="small"
-        style={{ minWidth: 140 }}
+        variant="borderless"
+        style={{ width: "auto" }}
         value={activeBranchId}
         onChange={handleBranchChange}
         options={branches.map((branch) => ({ label: branch.name, value: branch.id }))}
