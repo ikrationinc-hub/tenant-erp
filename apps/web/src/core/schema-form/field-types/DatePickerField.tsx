@@ -1,9 +1,10 @@
 import type { ReactElement } from "react";
 import { useController } from "react-hook-form";
-import { DatePicker, Typography } from "antd";
+import { DatePicker } from "antd";
 import dayjs from "dayjs";
 import type { FieldComponentProps } from "./types";
 import { FieldShell } from "./FieldShell";
+import { ReadOnlyValue } from "./ReadOnlyValue";
 import { asString } from "./field-value-utils";
 
 const DATE_FORMAT = "YYYY-MM-DD";
@@ -17,7 +18,7 @@ export function DatePickerField({ field, control, readOnly }: FieldComponentProp
   return (
     <FieldShell fieldKey={field.fieldKey} label={field.label} mandatory={field.isMandatory} error={fieldState.error?.message}>
       {readOnly ? (
-        <Typography.Text id={field.fieldKey}>{value || "—"}</Typography.Text>
+        <ReadOnlyValue id={field.fieldKey} value={value} />
       ) : (
         <DatePicker
           id={field.fieldKey}

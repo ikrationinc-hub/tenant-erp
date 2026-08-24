@@ -97,6 +97,8 @@ export interface FieldDefault {
   validationJson?: FieldValidationRules;
   sortOrder: number;
   isSystem: boolean;
+  /** Groups this field under a FieldSectionDefault's key (core/field-engine/group-sections.ts) - code-declared and never company-overridable, same as fieldType/allowCreate. Undefined for an entity that hasn't been split into sections yet (every field then stays in the flat `fields` response, as today). */
+  section?: string;
 }
 
 /**
@@ -125,4 +127,5 @@ export interface EffectiveField {
   validationJson: FieldValidationRules | undefined;
   sortOrder: number;
   isSystem: boolean;
+  section: string | undefined;
 }

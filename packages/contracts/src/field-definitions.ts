@@ -139,10 +139,12 @@ export const fieldDefinitionSchema = z.object({
 });
 export type FieldDefinition = z.infer<typeof fieldDefinitionSchema>;
 
-/** A form section, e.g. "Purchase Header", "Shipment Details" — rendered as an AntD Card/Collapse per FE-3. No backend equivalent yet (the real endpoint returns a flat `fields` array - see fieldDefinitionsResponseSchema); apps/web's resolve-sections.ts wraps a flat response into one implicit section. */
+/** A form section, e.g. "Purchase Information", "Shipment Details" — rendered as an AntD Card/Collapse per FE-3. Some entities (e.g. purchase/header) now get this for real from core/field-engine/group-sections.ts, code-declared per (module, entity) - every other entity still returns a flat `fields` array (see fieldDefinitionsResponseSchema) and apps/web's resolve-sections.ts wraps it into one implicit section. */
 export const fieldSectionSchema = z.object({
   key: z.string(),
   label: z.string(),
+  /** Short subtitle shown under the section heading, e.g. "Basic information about this purchase" - optional, most sections have none. */
+  description: z.string().optional(),
   sortOrder: z.number().int(),
   fields: z.array(fieldDefinitionSchema),
 });

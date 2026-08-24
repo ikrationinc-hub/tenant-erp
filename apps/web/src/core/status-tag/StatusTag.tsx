@@ -8,6 +8,8 @@ export interface StatusTagProps {
   fallbackColor?: string;
   /** Defaults to capitalizing the raw value. Override for a domain-specific label (e.g. "invited" -> "Invited (pending)"). */
   labelFormatter?: (value: string) => string;
+  /** For a caller whose label element points at this via htmlFor (e.g. FieldShell's ToggleField usage) - unused when StatusTag renders inside a table cell. */
+  id?: string;
 }
 
 function capitalize(value: string): string {
@@ -30,9 +32,13 @@ const barStyle = (color: string): CSSProperties => ({
  * already returned, never a hardcoded field label (frontend rule 1
  * concerns label/layout, not this).
  */
-export function StatusTag({ value, colorMap, fallbackColor = slate[400], labelFormatter = capitalize }: StatusTagProps): ReactElement {
+export function StatusTag({ value, colorMap, fallbackColor = slate[400], labelFormatter = capitalize, id }: StatusTagProps): ReactElement {
   if (!value) {
-    return <span>—</span>;
+    return <span id={id}>—</span>;
   }
-  return <span style={barStyle(colorMap[value] ?? fallbackColor)}>{labelFormatter(value)}</span>;
+  return (
+    <span id={id} style={barStyle(colorMap[value] ?? fallbackColor)}>
+      {labelFormatter(value)}
+    </span>
+  );
 }

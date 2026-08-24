@@ -1,9 +1,10 @@
 import type { ReactElement } from "react";
 import { useEffect, useRef } from "react";
 import { useController } from "react-hook-form";
-import { Select, Typography } from "antd";
+import { Select } from "antd";
 import type { FieldComponentProps } from "./types";
 import { FieldShell } from "./FieldShell";
+import { ReadOnlyValue } from "./ReadOnlyValue";
 import { asString, asStringArray } from "./field-value-utils";
 import { useFieldOptions } from "../use-field-options";
 
@@ -41,9 +42,10 @@ export function DropdownField({ field, control, readOnly }: FieldComponentProps)
     return (
       <FieldShell fieldKey={field.fieldKey} label={field.label} mandatory={field.isMandatory} error={fieldState.error?.message}>
         {readOnly ? (
-          <Typography.Text id={field.fieldKey}>
-            {currentValues.length > 0 ? currentValues.map((value) => labelFor(options, value)).join(", ") : "—"}
-          </Typography.Text>
+          <ReadOnlyValue
+            id={field.fieldKey}
+            value={currentValues.length > 0 ? currentValues.map((value) => labelFor(options, value)).join(", ") : ""}
+          />
         ) : (
           <Select
             id={field.fieldKey}
@@ -69,7 +71,7 @@ export function DropdownField({ field, control, readOnly }: FieldComponentProps)
   return (
     <FieldShell fieldKey={field.fieldKey} label={field.label} mandatory={field.isMandatory} error={fieldState.error?.message}>
       {readOnly ? (
-        <Typography.Text id={field.fieldKey}>{currentValue ? labelFor(options, currentValue) : "—"}</Typography.Text>
+        <ReadOnlyValue id={field.fieldKey} value={currentValue ? labelFor(options, currentValue) : ""} />
       ) : (
         <Select
           id={field.fieldKey}

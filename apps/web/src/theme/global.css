@@ -10,6 +10,8 @@
 :root {
   --color-rail: #1b4b91;
   --color-page-bg: #f8f9fb;
+  --color-surface: #ffffff;
+  --color-border: #e4e7ec;
 }
 
 /* Browser default `body` margin otherwise leaves an unstyled strip around
@@ -67,4 +69,76 @@ body {
 .ant-table-thead > tr > th {
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* Session 5: SchemaForm fields flow into a responsive grid instead of one
+   full-width column per field - a form with a dozen short fields (Division,
+   Purchase Date, Branch, ...) was taking 2-3x the vertical scroll a
+   multi-column layout needs. minmax(380px, 1fr) keeps a long value (a
+   supplier/company name in a Select) legible, caps a full-width page at
+   ~3 columns rather than packing in 4-5 (which read as a cramped "wall of
+   inputs"), and collapses to 1-2 in a narrower Drawer (Supplier/Broker/
+   Masters forms) - fluid, not a fixed column count, since SchemaForm
+   renders in both contexts. TextArea opts out via .field-grid-item--full
+   (FieldRenderer.tsx) - multi-line text needs real room, unlike an
+   upload's single button. */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  column-gap: 32px;
+  row-gap: 4px;
+}
+.field-grid-item--full {
+  grid-column: 1 / -1;
+}
+
+/* A section's short subtitle (schema.sections[].description, e.g.
+   "Basic information about this purchase") - sits between the Card
+   title and the field grid, so it needs its own top/bottom breathing
+   room rather than the Card title's tight default spacing. */
+.section-description {
+  display: block;
+  margin-top: -8px;
+  margin-bottom: 20px;
+}
+
+/* A labeled section's bordered Card (SchemaForm.tsx) - a soft, layered
+   shadow (not AntD's default flat drop-shadow) so a section reads as
+   lifted off the page background rather than merely outlined. Scoped to
+   this class, not every `.ant-card`, so PurchaseDetailScreen's own Cards
+   ("Additional Cost", "LME Records", ...) are untouched. */
+.schema-form-section {
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+/* Pins the form's Save button (and any caller `footer`) to the bottom of
+   the viewport once a long, multi-section form (e.g. Purchase's header)
+   scrolls past it - a short form never scrolls far enough for `sticky` to
+   visibly engage, so this is a no-op there. Matches the surface/border
+   tokens in theme/tokens.ts (steelCobalt palette) rather than introducing
+   a new color, same reasoning as this file's other CSS-only rules. */
+.schema-form-actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  padding: 12px 0;
+  margin-top: 4px;
+}
+
+/* Turns AntD's own Upload file-list item (FileUploadField/MultiUploadField -
+   both render a plain <Upload>, no custom itemRender) into a bordered tile
+   instead of its bare default row - restyling the existing item rather
+   than reimplementing progress/preview/remove, which AntD already handles
+   correctly. */
+.ant-upload-list-item-container {
+  margin-top: 8px;
+}
+.ant-upload-list-item {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  height: auto;
 }

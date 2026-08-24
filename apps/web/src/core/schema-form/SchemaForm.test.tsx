@@ -193,6 +193,74 @@ describe("SchemaForm - metadata-driven rendering", () => {
     expect(screen.queryByText("Omitted Field")).not.toBeInTheDocument();
   });
 
+  it("renders a section's description as secondary text under its title, when the schema provides one", async () => {
+    const module = "_dev";
+    const entity = "section-description-test";
+    const fixture: FieldDefinitionsResponse = {
+      module,
+      entity,
+      version: 1,
+      sections: [
+        {
+          key: "section",
+          label: "Purchase Information",
+          description: "Basic information about this purchase",
+          sortOrder: 1,
+          fields: [field({ fieldKey: "name", label: "Name", fieldType: "Textbox" })],
+        },
+      ],
+    };
+    mockFieldDefinitions(module, entity, fixture);
+
+    renderWithProviders(<SchemaForm module={module} entity={entity} mode="create" onSubmit={vi.fn()} />);
+
+    expect(await screen.findByText("Purchase Information")).toBeInTheDocument();
+    expect(await screen.findByText("Basic information about this purchase")).toBeInTheDocument();
+  });
+
+  it("renders no description text when the schema's section omits one", async () => {
+    const module = "_dev";
+    const entity = "section-no-description-test";
+    mockFieldDefinitions(module, entity, buildFixture(module, entity, 1, [field({ fieldKey: "name", label: "Name", fieldType: "Textbox" })]));
+
+    renderWithProviders(<SchemaForm module={module} entity={entity} mode="create" onSubmit={vi.fn()} />);
+
+    expect(await screen.findByLabelText("Name")).toBeInTheDocument();
+    expect(screen.queryByText("Basic information about this purchase")).not.toBeInTheDocument();
+  });
+
+  it("renders no Discard button when the caller passes no onDiscard", async () => {
+    const module = "_dev";
+    const entity = "no-discard-test";
+    mockFieldDefinitions(module, entity, buildFixture(module, entity, 1, [field({ fieldKey: "name", label: "Name", fieldType: "Textbox" })]));
+
+    renderWithProviders(<SchemaForm module={module} entity={entity} mode="create" onSubmit={vi.fn()} />);
+
+    expect(await screen.findByLabelText("Name")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Discard" })).not.toBeInTheDocument();
+  });
+
+  it("Discard asks for confirmation, then calls onDiscard only once confirmed", async () => {
+    const module = "_dev";
+    const entity = "discard-test";
+    mockFieldDefinitions(module, entity, buildFixture(module, entity, 1, [field({ fieldKey: "name", label: "Name", fieldType: "Textbox" })]));
+    const onDiscard = vi.fn();
+    const user = userEvent.setup();
+
+    renderWithProviders(<SchemaForm module={module} entity={entity} mode="create" onSubmit={vi.fn()} onDiscard={onDiscard} />);
+    await screen.findByLabelText("Name");
+
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(onDiscard).not.toHaveBeenCalled();
+
+    // The trigger button and the popover's own confirm button share the
+    // name "Discard" once the popover is open - the confirm button is the
+    // one appended later (Popconfirm portals into document.body).
+    const discardButtons = await screen.findAllByRole("button", { name: "Discard" });
+    await user.click(discardButtons[discardButtons.length - 1]!);
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+  });
+
   it("renders a non-editable field read-only and its value passes through unchanged on submit", async () => {
     const module = "_dev";
     const entity = "read-only-test";

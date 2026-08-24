@@ -29,6 +29,12 @@ export const themeTokens: ThemeConfig = {
       "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
     fontFamilyCode: "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
     controlHeight: 28,
+    // Tables/filters stay dense at controlHeight (28, componentSize
+    // "middle" in App.tsx). Forms opt into this via a nested
+    // ConfigProvider componentSize="large" (SchemaForm.tsx) - a form is
+    // read and typed into, not scanned row-by-row like a table, so it
+    // gets more breathing room than the app's default density.
+    controlHeightLG: 34,
     padding: 12,
     paddingSM: 8,
     marginSM: 8,
@@ -44,7 +50,7 @@ export const themeTokens: ThemeConfig = {
       rowSelectedHoverBg: slate[100],
     },
     Form: {
-      itemMarginBottom: 12,
+      itemMarginBottom: 16,
     },
     Layout: {
       headerHeight: 48,

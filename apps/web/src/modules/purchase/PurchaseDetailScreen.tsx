@@ -279,16 +279,21 @@ export function PurchaseDetailScreen({
         />
       )}
 
-      <Card title="Header, Supplier & Shipment" size="small">
-        <SchemaForm
-          module="purchase"
-          entity="header"
-          mode={(mode === "edit" && !draft) || !canEditHeader ? "view" : mode === "create" ? "create" : "edit"}
-          {...(headerInitialValues ? { initialValues: headerInitialValues } : {})}
-          onSubmit={handleHeaderSubmit}
-          {...(purchaseId ? { uploadContext: { entity: "purchase", entityId: purchaseId } } : {})}
-        />
-      </Card>
+      {/* No wrapping Card/title here (Prompt 23) - purchase/header's own
+          field-definitions response is grouped into real sections (Purchase
+          Information / Commercial Details / Shipment Details / Documents,
+          core/field-engine's SECTION_DEFAULTS) that SchemaForm already
+          renders as titled Cards. A hardcoded "Header, Supplier & Shipment"
+          title here would both duplicate that and violate frontend rule 1. */}
+      <SchemaForm
+        module="purchase"
+        entity="header"
+        mode={(mode === "edit" && !draft) || !canEditHeader ? "view" : mode === "create" ? "create" : "edit"}
+        {...(headerInitialValues ? { initialValues: headerInitialValues } : {})}
+        onSubmit={handleHeaderSubmit}
+        {...(purchaseId ? { uploadContext: { entity: "purchase", entityId: purchaseId } } : {})}
+        onDiscard={() => void navigate(PURCHASE_LIST_PATH)}
+      />
 
       {mode === "edit" && purchaseId && purchase && (
         <>

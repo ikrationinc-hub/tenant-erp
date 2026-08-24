@@ -1,8 +1,8 @@
 import type { ReactElement } from "react";
 import { useController } from "react-hook-form";
-import { Typography } from "antd";
 import type { FieldComponentProps } from "./types";
 import { FieldShell } from "./FieldShell";
+import { ReadOnlyValue } from "./ReadOnlyValue";
 import { NumericStringInput } from "./NumericStringInput";
 import { asString } from "./field-value-utils";
 
@@ -13,7 +13,7 @@ export function PercentageField({ field, control, readOnly }: FieldComponentProp
   return (
     <FieldShell fieldKey={field.fieldKey} label={field.label} mandatory={field.isMandatory} error={fieldState.error?.message}>
       {readOnly ? (
-        <Typography.Text id={field.fieldKey}>{value ? `${value}%` : "—"}</Typography.Text>
+        <ReadOnlyValue id={field.fieldKey} value={value ? `${value}%` : ""} />
       ) : (
         <NumericStringInput
           id={field.fieldKey}

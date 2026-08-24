@@ -1,8 +1,8 @@
 import type { ReactElement } from "react";
 import { useController } from "react-hook-form";
-import { Typography } from "antd";
 import type { FieldComponentProps } from "./types";
 import { FieldShell } from "./FieldShell";
+import { ReadOnlyValue } from "./ReadOnlyValue";
 import { NumericStringInput } from "./NumericStringInput";
 import { asString } from "./field-value-utils";
 
@@ -14,7 +14,7 @@ export function CurrencyField({ field, control, readOnly }: FieldComponentProps)
   return (
     <FieldShell fieldKey={field.fieldKey} label={field.label} mandatory={field.isMandatory} error={fieldState.error?.message}>
       {readOnly ? (
-        <Typography.Text id={field.fieldKey}>{value || "—"}</Typography.Text>
+        <ReadOnlyValue id={field.fieldKey} value={value} />
       ) : (
         <NumericStringInput
           id={field.fieldKey}

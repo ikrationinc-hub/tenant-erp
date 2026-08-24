@@ -82,7 +82,17 @@ export function AppShell(): ReactElement {
           <Typography.Text strong>Ikration ERP</Typography.Text>
           <HeaderBar />
         </Header>
-        <Content style={{ padding: 16 }}>
+        {/* height (not minHeight) + overflowY makes Content its own scroll
+            region, distinct from the page/document - a bounded scroll
+            container is what lets a descendant's `position: sticky` (e.g.
+            SchemaForm's Save bar) actually track the viewport while
+            scrolling a long form. Without this, the whole page (sidebar and
+            header included) scrolled as one document and sticky only ever
+            reached its final resting place at the very end of the content,
+            never appearing to "stick" along the way. themeTokens.components.
+            Layout.headerHeight (48) is the only other thing consuming
+            vertical space in this Layout. */}
+        <Content style={{ padding: 16, height: "calc(100vh - 48px)", overflowY: "auto" }}>
           <MenuBreadcrumbs />
           <Outlet />
         </Content>

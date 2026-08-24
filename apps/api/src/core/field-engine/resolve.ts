@@ -94,6 +94,7 @@ export async function resolveBaseFieldDefinitions(
         validationJson: fallback.validationJson,
         sortOrder: fallback.sortOrder,
         isSystem: fallback.isSystem,
+        section: fallback.section,
       };
       return mergeRow(rowsByFieldKey.get(fallback.fieldKey), base);
     })

@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Button, Card, Space, Spin, Form as AntForm } from "antd";
+import { Alert, Button, Card, ConfigProvider, Popconfirm, Space, Spin, Typography, Form as AntForm } from "antd";
 import { fieldDefinitionsResponseSchema, type FieldDefinitionsResponse } from "@ikration/contracts";
 import { apiFetch } from "../api/client";
 import { endpoints } from "../api/endpoints";
@@ -136,6 +136,15 @@ export interface SchemaFormProps {
    * only renders it.
    */
   footer?: ReactNode;
+  /**
+   * Renders a "Discard" button beside Save (behind a confirm, since it can
+   * throw away typed input) when provided - omitted entirely otherwise, so
+   * a caller with nothing sensible to discard to (no `onDiscard` at all)
+   * keeps today's Save-only bar. SchemaForm has no navigation/reset opinion
+   * of its own - the caller decides what "discard" means (e.g. Purchase
+   * navigates back to the list).
+   */
+  onDiscard?: () => void;
 }
 
 /**
@@ -155,6 +164,7 @@ export function SchemaForm({
   uploadContext,
   hiddenFields,
   footer,
+  onDiscard,
 }: SchemaFormProps): ReactElement {
   const schemaQuery = useQuery({
     queryKey: ["field-definitions", module, entity],
@@ -182,6 +192,7 @@ export function SchemaForm({
       onSubmit={onSubmit}
       uploadContext={uploadContext}
       footer={footer}
+      onDiscard={onDiscard}
     />
   );
 }
@@ -193,6 +204,7 @@ function SchemaFormBody({
   onSubmit,
   uploadContext,
   footer,
+  onDiscard,
 }: {
   schema: FieldDefinitionsResponse;
   mode: SchemaFormMode;
@@ -200,6 +212,7 @@ function SchemaFormBody({
   onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
   uploadContext: UploadContext | undefined;
   footer: ReactNode;
+  onDiscard: (() => void) | undefined;
 }): ReactElement {
   const validator = useMemo(() => compileValidator(schema), [schema]);
   const defaultValues = useMemo(
@@ -236,20 +249,66 @@ function SchemaFormBody({
 
   return (
     <AntForm layout="vertical" onFinish={() => void submit()}>
-      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Space direction="vertical" size="large" style={{ width: "100%" }}>
+        {/* Read/typed into, not scanned like a table - opts into the app's
+            larger control size (controlHeightLG) instead of the dense
+            default, scoped to just the field grid so `footer` (a caller's
+            own sub-tables, e.g. Supplier's contacts/banks) keeps the
+            app-wide density. ConfigProvider renders no DOM element of its
+            own (a Context wrapper only) - one per Card, not one around the
+            whole .map(), so each section stays its own item for Space's
+            gap to apply between when an entity has more than one section. */}
         {sections.map((section) => (
-          <Card key={section.key} title={section.label || undefined} size="small">
-            {section.fields.map((field) => (
-              <FieldRenderer key={field.fieldKey} field={field} control={control} mode={mode} uploadContext={uploadContext} />
-            ))}
-          </Card>
+          <ConfigProvider key={section.key} componentSize="large">
+            {/* Borderless (no visible surface) for the common case: a flat
+                response wrapped into one unlabeled implicit section
+                (resolve-sections.ts) - every screen that hasn't been split
+                into real sections yet (everything except purchase/header,
+                for now) keeps looking exactly as it did before. A labeled
+                section gets a real bordered surface with its own shadow
+                (.schema-form-section, theme/global.css) - scoped to this
+                class rather than every Card app-wide, since "Additional
+                Cost"/"LME Records" etc. (PurchaseDetailScreen's own Cards)
+                weren't part of this pass. */}
+            <Card
+              title={section.label || undefined}
+              size="small"
+              variant={section.label ? "outlined" : "borderless"}
+              className={section.label ? "schema-form-section" : undefined}
+              styles={section.label ? { body: { padding: "20px 24px" } } : undefined}
+            >
+              {section.description && (
+                <Typography.Text type="secondary" className="section-description">
+                  {section.description}
+                </Typography.Text>
+              )}
+              <div className="field-grid">
+                {section.fields.map((field) => (
+                  <FieldRenderer key={field.fieldKey} field={field} control={control} mode={mode} uploadContext={uploadContext} />
+                ))}
+              </div>
+            </Card>
+          </ConfigProvider>
         ))}
-        {footer}
-        {submitError && <Alert type="error" showIcon message={submitError} />}
-        {mode !== "view" && (
-          <Button type="primary" htmlType="submit">
-            Save
-          </Button>
+        {(footer || submitError || mode !== "view") && (
+          <div className="schema-form-actions">
+            <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+              {footer}
+              {submitError && <Alert type="error" showIcon message={submitError} />}
+              {mode !== "view" && (
+                <Space>
+                  {onDiscard && (
+                    <Popconfirm title="Discard unsaved changes?" onConfirm={onDiscard} okText="Discard" cancelText="Keep editing">
+                      <Button>Discard</Button>
+                    </Popconfirm>
+                  )}
+                  <Button type="primary" htmlType="submit">
+                    Save
+                  </Button>
+                </Space>
+              )}
+            </Space>
+          </div>
         )}
       </Space>
     </AntForm>

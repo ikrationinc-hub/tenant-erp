@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import { getRequestContext } from "../../common/context/request-context.js";
 import { UnauthorizedError } from "../../common/errors/index.js";
+import { getFieldSections } from "../../core/field-engine/defaults.js";
+import { groupFieldsIntoSections } from "../../core/field-engine/group-sections.js";
 import * as fieldDefinitionsService from "./field-definitions.service.js";
 import { getFieldDefinitionsParamsSchema, updateFieldDefinitionSchema } from "./field-definitions.validator.js";
 
@@ -24,7 +26,8 @@ export async function getFieldDefinitions(req: Request, res: Response, next: Nex
     const ctx = requireContext();
     const { module, entity } = getFieldDefinitionsParamsSchema.parse(req.params);
     const fields = await fieldDefinitionsService.getFieldDefinitions(ctx, module, entity);
-    res.status(200).json({ module, entity, fields });
+    const sections = groupFieldsIntoSections(getFieldSections(module, entity), fields);
+    res.status(200).json({ module, entity, fields, ...(sections ? { sections } : {}) });
   } catch (error) {
     next(error);
   }

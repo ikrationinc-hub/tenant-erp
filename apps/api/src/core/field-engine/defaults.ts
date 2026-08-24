@@ -1,4 +1,5 @@
 import { ALL_MASTER_FIELD_DEFAULTS } from "../masters/registry.js";
+import type { FieldSectionDefault } from "./group-sections.js";
 import type { FieldDefault } from "./types.js";
 
 /**
@@ -663,6 +664,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "purchaseNumber",
+    section: "purchaseInfo",
     label: "Purchase Number",
     dataType: "text",
     isVisible: true,
@@ -681,6 +683,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "divisionId",
+    section: "purchaseInfo",
     label: "Division",
     dataType: "select",
     isVisible: true,
@@ -699,6 +702,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "purchaseDate",
+    section: "purchaseInfo",
     label: "Purchase Date",
     dataType: "date",
     isVisible: true,
@@ -711,6 +715,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "branchId",
+    section: "purchaseInfo",
     label: "Branch",
     dataType: "select",
     isVisible: true,
@@ -724,6 +729,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "buyerId",
+    section: "purchaseInfo",
     label: "Buyer",
     dataType: "select",
     isVisible: true,
@@ -737,6 +743,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "supplierId",
+    section: "purchaseInfo",
     label: "Supplier",
     dataType: "select",
     isVisible: true,
@@ -750,6 +757,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "pricingType",
+    section: "commercialDetails",
     label: "Pricing Type",
     dataType: "select",
     isVisible: true,
@@ -774,6 +782,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "supplierInvoiceNo",
+    section: "commercialDetails",
     label: "Supplier Invoice No.",
     dataType: "text",
     isVisible: true,
@@ -786,6 +795,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "supplierReferenceNo",
+    section: "commercialDetails",
     label: "Supplier Reference No.",
     dataType: "text",
     isVisible: true,
@@ -798,6 +808,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "brokerId",
+    section: "commercialDetails",
     label: "Broker",
     dataType: "select",
     isVisible: true,
@@ -812,6 +823,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "brokerCommission",
+    section: "commercialDetails",
     label: "Broker Commission",
     dataType: "decimal",
     fieldType: "Currency",
@@ -825,6 +837,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "lotNumber",
+    section: "commercialDetails",
     label: "Shipment Lot Number",
     dataType: "text",
     isVisible: true,
@@ -837,6 +850,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "containerId",
+    section: "shipmentDetails",
     label: "Container Number",
     dataType: "select",
     fieldType: "Lookup",
@@ -856,6 +870,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "blNo",
+    section: "shipmentDetails",
     label: "Bill of Lading No.",
     dataType: "text",
     isVisible: true,
@@ -868,6 +883,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "loadingDate",
+    section: "shipmentDetails",
     label: "Loading Date",
     dataType: "date",
     isVisible: true,
@@ -880,6 +896,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "transportModeId",
+    section: "shipmentDetails",
     label: "Through",
     dataType: "select",
     isVisible: true,
@@ -893,6 +910,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "vesselId",
+    section: "shipmentDetails",
     label: "Vessel Name",
     dataType: "select",
     isVisible: true,
@@ -906,6 +924,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "voyageNumber",
+    section: "shipmentDetails",
     label: "Voyage Number",
     dataType: "text",
     isVisible: true,
@@ -918,6 +937,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "portOfLoadingId",
+    section: "shipmentDetails",
     label: "Port of Loading",
     dataType: "select",
     isVisible: true,
@@ -931,6 +951,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "portOfDischargeId",
+    section: "shipmentDetails",
     label: "Port of Discharge",
     dataType: "select",
     isVisible: true,
@@ -944,6 +965,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "warehouseId",
+    section: "shipmentDetails",
     label: "Warehouse",
     dataType: "select",
     isVisible: true,
@@ -957,6 +979,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "incotermId",
+    section: "shipmentDetails",
     label: "Incoterm",
     dataType: "select",
     isVisible: true,
@@ -970,6 +993,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "invoice",
+    section: "documents",
     label: "Invoice",
     dataType: "text",
     fieldType: "FileUpload",
@@ -983,6 +1007,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "billOfLading",
+    section: "documents",
     label: "Bill of Lading",
     dataType: "text",
     fieldType: "FileUpload",
@@ -996,6 +1021,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "packingList",
+    section: "documents",
     label: "Packing List",
     dataType: "text",
     fieldType: "FileUpload",
@@ -1009,6 +1035,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "certificateOfOrigin",
+    section: "documents",
     label: "Certificate of Origin",
     dataType: "text",
     fieldType: "FileUpload",
@@ -1022,6 +1049,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "otherDocuments",
+    section: "documents",
     label: "Other Documents",
     dataType: "text",
     fieldType: "MultiUpload",
@@ -1035,6 +1063,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     module: "purchase",
     entity: "header",
     fieldKey: "otherDocuments2",
+    section: "documents",
     label: "Other Documents 2",
     dataType: "text",
     fieldType: "MultiUpload",
@@ -1433,4 +1462,51 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
 
 export function getFieldDefaults(module: string, entity: string): FieldDefault[] {
   return FIELD_DEFAULTS.filter((field) => field.module === module && field.entity === entity);
+}
+
+/**
+ * Which (module, entity) pairs are split into sections, and what each
+ * section is called - code-declared, same as FIELD_DEFAULTS itself. Only
+ * purchase/header is split today (Prompt 23's redesign); every other
+ * entity has no entry here and keeps returning a flat `fields` list
+ * exactly as before (core/field-engine/group-sections.ts's
+ * groupFieldsIntoSections returns undefined for an empty list).
+ */
+export const SECTION_DEFAULTS: FieldSectionDefault[] = [
+  {
+    module: "purchase",
+    entity: "header",
+    key: "purchaseInfo",
+    label: "Purchase Information",
+    description: "Basic information about this purchase",
+    sortOrder: 0,
+  },
+  {
+    module: "purchase",
+    entity: "header",
+    key: "commercialDetails",
+    label: "Commercial Details",
+    description: "Pricing, invoice, broker and reference information",
+    sortOrder: 1,
+  },
+  {
+    module: "purchase",
+    entity: "header",
+    key: "shipmentDetails",
+    label: "Shipment Details",
+    description: "Container, vessel, ports, warehouse and shipping information",
+    sortOrder: 2,
+  },
+  {
+    module: "purchase",
+    entity: "header",
+    key: "documents",
+    label: "Documents",
+    description: "Supporting documents for this purchase",
+    sortOrder: 3,
+  },
+];
+
+export function getFieldSections(module: string, entity: string): FieldSectionDefault[] {
+  return SECTION_DEFAULTS.filter((section) => section.module === module && section.entity === entity);
 }
