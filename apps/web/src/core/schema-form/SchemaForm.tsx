@@ -274,8 +274,7 @@ function SchemaFormBody({
               title={section.label || undefined}
               size="small"
               variant={section.label ? "outlined" : "borderless"}
-              className={section.label ? "schema-form-section" : undefined}
-              styles={section.label ? { body: { padding: "20px 24px" } } : undefined}
+              {...(section.label ? { className: "schema-form-section", styles: { body: { padding: "20px 24px" } } } : {})}
             >
               {section.description && (
                 <Typography.Text type="secondary" className="section-description">
