@@ -295,16 +295,16 @@ function SchemaFormBody({
               {footer}
               {submitError && <Alert type="error" showIcon message={submitError} />}
               {mode !== "view" && (
-                <Space>
+                <div className="schema-form-actions-buttons">
                   {onDiscard && (
                     <Popconfirm title="Discard unsaved changes?" onConfirm={onDiscard} okText="Discard" cancelText="Keep editing">
-                      <Button>Discard</Button>
+                      <Button block>Discard</Button>
                     </Popconfirm>
                   )}
-                  <Button type="primary" htmlType="submit">
+                  <Button type="primary" htmlType="submit" block>
                     Save
                   </Button>
-                </Space>
+                </div>
               )}
             </Space>
           </div>

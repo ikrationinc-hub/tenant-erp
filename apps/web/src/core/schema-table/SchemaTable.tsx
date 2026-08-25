@@ -59,7 +59,12 @@ function buildActionsColumn(
         return null;
       }
       return (
-        <Space size="small">
+        // Stops a click here from also bubbling into the row's own
+        // onClick (rowActionKey) below - relevant even for this row's own
+        // action, since re-navigating to the same route it's already on
+        // is a harmless no-op but a second action (e.g. a future danger
+        // one) firing twice would not be.
+        <Space size="small" onClick={(event) => event.stopPropagation()}>
           {visible.map((action) => (
             <Button key={action.key} type="link" danger={action.danger ?? false} onClick={() => action.onClick(row)}>
               {action.label}
@@ -122,12 +127,13 @@ export function SchemaTable({
   filters = [],
   actions = [],
   pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
+  rowActionKey,
 }: SchemaTableProps): ReactElement {
   const filterKeys = useMemo(
     () => filters.flatMap((filter) => (filter.type === "dateRange" ? [`${filter.key}From`, `${filter.key}To`] : [filter.key])),
     [filters],
   );
-  const { state, setPage, setPageSize, setSort, setSearch, setFilter } = useEntityListState(filterKeys);
+  const { state, setPage, setPageSize, setSort, setSearch, setFilter, clearAll } = useEntityListState(filterKeys);
 
   const schemaQuery = useQuery({
     queryKey: ["field-definitions", module, entity],
@@ -161,6 +167,7 @@ export function SchemaTable({
   const dataColumns = withExtraColumns(columnsFromFieldDefinitions(schemaQuery.data, columns, masterLabels), extraColumns);
   const actionsColumn = buildActionsColumn(actions, permissions);
   const tableColumns: TableColumnsType<EntityRow> = actionsColumn ? [...dataColumns, actionsColumn] : dataColumns;
+  const rowAction = actions.find((action) => action.key === rowActionKey);
 
   const handleChange: TableProps<EntityRow>["onChange"] = (pagination, _filters, sorter) => {
     const single = Array.isArray(sorter) ? sorter[0] : sorter;
@@ -193,7 +200,7 @@ export function SchemaTable({
           padding: 12,
         }}
       >
-        <FilterBar filters={filters} state={state} onSearch={setSearch} onFilterChange={setFilter} />
+        <FilterBar filters={filters} state={state} onSearch={setSearch} onFilterChange={setFilter} onClear={clearAll} />
       </div>
       <Table<EntityRow>
         rowKey="id"
@@ -204,6 +211,14 @@ export function SchemaTable({
         dataSource={listQuery.data?.items ?? []}
         loading={listQuery.isFetching}
         onChange={handleChange}
+        onRow={
+          rowAction
+            ? (row) => {
+                const visible = (!rowAction.permission || permissions.has(rowAction.permission)) && (!rowAction.isVisible || rowAction.isVisible(row));
+                return visible ? { onClick: () => rowAction.onClick(row), style: { cursor: "pointer" } } : {};
+              }
+            : undefined
+        }
         locale={{ emptyText: <Empty description="No records" /> }}
         pagination={{
           current: state.page,

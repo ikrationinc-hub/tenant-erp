@@ -64,4 +64,15 @@ export interface SchemaTableProps {
   filters?: SchemaTableFilter[];
   actions?: SchemaTableAction[];
   pageSizeOptions?: number[];
+  /**
+   * When set, clicking anywhere in a row fires the action with this `key`
+   * (if that row has one visible) - a bigger, more forgiving click target
+   * than the small text link alone. The link itself still renders, both
+   * because "what does clicking this row do" should be visible up front
+   * and for keyboard/screen-reader users a row div can't serve. Opt-in,
+   * not a SchemaTable-wide default - a screen with several row actions
+   * (edit/deactivate/...) has no one obvious thing a whole-row click
+   * should do.
+   */
+  rowActionKey?: string;
 }

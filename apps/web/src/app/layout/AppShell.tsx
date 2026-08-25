@@ -4,7 +4,6 @@ import { Layout, Typography } from "antd";
 import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { useAppStore } from "../../core/store/app-store";
 import { NavigationMenu } from "../../core/navigation/NavigationMenu";
-import { MenuBreadcrumbs } from "../../core/navigation/MenuBreadcrumbs";
 import { sider, slate } from "../../theme/palette";
 import { HeaderBar } from "./HeaderBar";
 
@@ -93,7 +92,6 @@ export function AppShell(): ReactElement {
             Layout.headerHeight (48) is the only other thing consuming
             vertical space in this Layout. */}
         <Content style={{ padding: 16, height: "calc(100vh - 48px)", overflowY: "auto" }}>
-          <MenuBreadcrumbs />
           <Outlet />
         </Content>
       </Layout>

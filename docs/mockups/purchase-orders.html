@@ -1,0 +1,737 @@
+<title>Purchase Orders</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0F172A;
+    --ink-secondary: #475467;
+    --ink-tertiary: #98A2B3;
+    --border: #E4E7EC;
+    --fill: #EEF1F5;
+    --bg: #F8F9FB;
+    --surface: #FFFFFF;
+    --accent: #1B4B91;
+    --accent-hover: #163C74;
+    --accent-active: #122F5C;
+    --success: #0e9f6e;
+
+    --status-draft: var(--ink-tertiary);
+    --status-approved: var(--accent);
+    --status-posted: var(--success);
+
+    --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    --radius: 4px;
+    --radius-lg: 6px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: inherit; }
+
+  button, input, select { font-family: inherit; font-size: inherit; }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ---------- app chrome (simulated) ---------- */
+
+  .app-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 52px;
+    padding: 0 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--ink);
+  }
+
+  .brand-mark {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .context-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: var(--radius);
+    background: var(--fill);
+    color: var(--ink);
+    font-weight: 500;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  .context-pill:hover { background: var(--border); }
+  .context-pill svg { color: var(--ink-tertiary); }
+
+  .avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 12px;
+    margin-left: 4px;
+  }
+
+  /* ---------- page ---------- */
+
+  .app-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px 24px 40px;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  .page-header h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  .page-header p {
+    margin: 4px 0 0;
+    color: var(--ink-secondary);
+    font-size: 12.5px;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 120ms ease;
+    white-space: nowrap;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:active { background: var(--accent-active); }
+
+  /* ---------- signal strip ---------- */
+
+  .signal-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .stat-chip {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 128px;
+    padding: 9px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--chip-color, var(--ink-tertiary));
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: box-shadow 140ms ease, border-color 140ms ease, transform 140ms ease;
+  }
+
+  .stat-chip:hover {
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .stat-chip .chip-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 10.5px;
+    color: var(--ink-secondary);
+  }
+
+  .stat-chip .chip-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--chip-color, var(--ink-tertiary));
+  }
+
+  .stat-chip .chip-value {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 21px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .stat-chip--total { border-left-color: var(--accent); }
+
+  /* ---------- filter bar ---------- */
+
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 16px;
+  }
+
+  .field {
+    position: relative;
+    flex: 1 1 180px;
+    min-width: 180px;
+  }
+
+  .field input,
+  .field .fake-select,
+  .field .fake-range {
+    width: 100%;
+    height: 32px;
+    background: var(--bg);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    padding: 0 30px 0 10px;
+    color: var(--ink);
+    font-size: 13px;
+    transition: border-color 120ms ease, background 120ms ease;
+  }
+
+  .field input::placeholder,
+  .field .fake-select[data-empty="true"],
+  .field .fake-range span.ph {
+    color: var(--ink-secondary);
+  }
+
+  .field input:hover,
+  .field .fake-select:hover,
+  .field .fake-range:hover {
+    border-color: var(--ink-tertiary);
+  }
+
+  .field input:focus,
+  .field input:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--surface);
+  }
+
+  .field .fake-select {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+
+  .field .fake-select[data-filled="true"] {
+    color: var(--ink);
+    font-weight: 500;
+    border-color: var(--border);
+    background: var(--surface);
+  }
+
+  .field .icon-end {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--ink-tertiary);
+    pointer-events: none;
+    display: flex;
+  }
+
+  .field .fake-range {
+    flex: 1 1 220px;
+    min-width: 220px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink-secondary);
+  }
+  .field .fake-range .arrow { color: var(--ink-tertiary); }
+
+  .clear-filters {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-weight: 500;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 6px 4px;
+    flex: 0 0 auto;
+  }
+  .clear-filters:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  /* ---------- table ---------- */
+
+  .table-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .table-scroll { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 920px;
+  }
+
+  thead th {
+    text-align: left;
+    background: var(--fill);
+    color: var(--ink-secondary);
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  thead th .sort {
+    display: inline-flex;
+    flex-direction: column;
+    margin-left: 5px;
+    vertical-align: middle;
+    opacity: 0.4;
+  }
+
+  th.num, td.num { text-align: right; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--fill);
+    cursor: pointer;
+    transition: background 120ms ease;
+    opacity: 0;
+    animation: rowIn 260ms ease forwards;
+  }
+  tbody tr:nth-child(1) { animation-delay: 20ms; }
+  tbody tr:nth-child(2) { animation-delay: 70ms; }
+  tbody tr:nth-child(3) { animation-delay: 120ms; }
+
+  tbody tr:hover { background: var(--fill); }
+  tbody tr:last-child { border-bottom: none; }
+
+  td {
+    padding: 10px 12px;
+    color: var(--ink);
+    vertical-align: middle;
+  }
+
+  td.po-number {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    transition: color 120ms ease;
+  }
+  tbody tr:hover td.po-number { color: var(--accent); }
+
+  td.mono {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-secondary);
+    font-size: 12.5px;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 8px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 12px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  .status-pill--draft {
+    background: rgba(152, 162, 179, 0.14);
+    border-color: rgba(152, 162, 179, 0.35);
+    color: var(--ink-secondary);
+  }
+  .status-pill--draft .dot { background: var(--status-draft); }
+
+  .status-pill--approved {
+    background: rgba(27, 75, 145, 0.08);
+    border-color: rgba(27, 75, 145, 0.28);
+    color: var(--accent);
+  }
+  .status-pill--approved .dot { background: var(--status-approved); }
+
+  .status-pill--posted {
+    background: rgba(14, 159, 110, 0.10);
+    border-color: rgba(14, 159, 110, 0.30);
+    color: #0b7f59;
+  }
+  .status-pill--posted .dot { background: var(--status-posted); }
+
+  .open-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 12.5px;
+    text-decoration: none;
+  }
+  tbody tr:hover .open-link { color: var(--accent-hover); }
+  .open-link svg { transition: transform 120ms ease; }
+  tbody tr:hover .open-link svg { transform: translateX(2px); }
+
+  .table-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--fill);
+    color: var(--ink-secondary);
+    font-size: 12.5px;
+  }
+
+  .table-footer .records {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    margin-right: auto;
+  }
+
+  .page-btn {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius);
+    color: var(--ink-tertiary);
+  }
+  .page-btn--current {
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+    font-family: var(--mono);
+  }
+
+  .page-size {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--ink-secondary);
+  }
+
+  /* ---------- notes ---------- */
+
+  .notes {
+    max-width: 1400px;
+    margin: 34px auto 0;
+    padding: 0 24px 40px;
+  }
+
+  .notes-inner {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px 26px;
+  }
+
+  .notes-eyebrow {
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--ink-tertiary);
+    margin: 0 0 6px;
+  }
+
+  .notes h2 {
+    margin: 0 0 4px;
+    font-size: 17px;
+    font-weight: 700;
+  }
+
+  .notes > .notes-inner > p.lede {
+    margin: 0 0 18px;
+    color: var(--ink-secondary);
+    max-width: 62ch;
+  }
+
+  .notes-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px 28px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .notes-list li {
+    padding-top: 12px;
+    border-top: 1px solid var(--fill);
+  }
+
+  .notes-list strong {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 3px;
+  }
+
+  .notes-list span {
+    color: var(--ink-secondary);
+    font-size: 12.5px;
+  }
+
+  @keyframes rowIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    tbody tr { animation: none; opacity: 1; }
+    .stat-chip, .btn-primary, .context-pill, td.po-number, .open-link, .open-link svg { transition: none; }
+  }
+
+  @media (max-width: 720px) {
+    .app-page { padding: 16px; }
+    .page-header { flex-direction: column; }
+  }
+</style>
+
+<div class="app-topbar">
+  <div class="brand"><span class="brand-mark"></span>Ikration ERP</div>
+  <div class="topbar-right">
+    <div class="context-pill">MK <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="context-pill">Head Office <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="avatar">MK</div>
+  </div>
+</div>
+
+<div class="app-page">
+  <div class="page-header">
+    <div>
+      <h1>Purchase Orders</h1>
+      <p>3 orders &middot; Container division &middot; Head Office</p>
+    </div>
+    <button class="btn-primary">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      New Purchase
+    </button>
+  </div>
+
+  <div class="signal-strip">
+    <div class="stat-chip stat-chip--total">
+      <span class="chip-label">Total</span>
+      <span class="chip-value">3</span>
+    </div>
+    <div class="stat-chip" style="--chip-color:#98A2B3">
+      <span class="chip-label"><span class="chip-dot"></span>Draft</span>
+      <span class="chip-value">1</span>
+    </div>
+    <div class="stat-chip" style="--chip-color:#1B4B91">
+      <span class="chip-label"><span class="chip-dot"></span>Approved</span>
+      <span class="chip-value">1</span>
+    </div>
+    <div class="stat-chip" style="--chip-color:#0e9f6e">
+      <span class="chip-label"><span class="chip-dot"></span>Posted</span>
+      <span class="chip-value">1</span>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="field">
+      <input type="text" placeholder="Search">
+      <span class="icon-end">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M12.5 12.5L9.8 9.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </span>
+    </div>
+    <div class="field">
+      <div class="fake-select" data-empty="true">Status</div>
+      <span class="icon-end">
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+    </div>
+    <div class="field">
+      <div class="fake-range"><span class="ph">Start date</span><span class="arrow">&rarr;</span><span class="ph">End date</span></div>
+      <span class="icon-end">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="2.5" width="10" height="9" rx="1.3" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 5.2h10M4 1v2.4M9 1v2.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </span>
+    </div>
+    <div class="field">
+      <div class="fake-select" data-empty="true">Supplier</div>
+      <span class="icon-end">
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+    </div>
+    <div class="field">
+      <div class="fake-select" data-empty="true">Branch</div>
+      <span class="icon-end">
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Purchase Number<span class="sort">&#9650;</span></th>
+            <th>Status</th>
+            <th>Division<span class="sort">&#9650;</span></th>
+            <th>Purchase Date<span class="sort">&#9650;</span></th>
+            <th>Branch<span class="sort">&#9650;</span></th>
+            <th>Buyer<span class="sort">&#9650;</span></th>
+            <th>Supplier<span class="sort">&#9650;</span></th>
+            <th>Supplier Invoice No.<span class="sort">&#9650;</span></th>
+            <th class="num">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="po-number">PO-2025-0001</td>
+            <td><span class="status-pill status-pill--draft"><span class="dot"></span>Draft</span></td>
+            <td>Container</td>
+            <td class="mono">2025-01-15</td>
+            <td>Head Office</td>
+            <td>MK</td>
+            <td>Gulf Metal Traders LLC</td>
+            <td class="mono">DEV-SEED-DRAFT-1</td>
+            <td class="num"><a class="open-link" href="#">Open <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8l6-6M3 2h5v5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a></td>
+          </tr>
+          <tr>
+            <td class="po-number">PO-2025-0002</td>
+            <td><span class="status-pill status-pill--approved"><span class="dot"></span>Approved</span></td>
+            <td>Container</td>
+            <td class="mono">2025-01-15</td>
+            <td>Head Office</td>
+            <td>MK</td>
+            <td>Shanghai Nonferrous Metals Co.</td>
+            <td class="mono">DEV-SEED-APPROVED-1</td>
+            <td class="num"><a class="open-link" href="#">Open <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8l6-6M3 2h5v5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a></td>
+          </tr>
+          <tr>
+            <td class="po-number">PO-2025-0003</td>
+            <td><span class="status-pill status-pill--posted"><span class="dot"></span>Posted</span></td>
+            <td>Container</td>
+            <td class="mono">2025-01-15</td>
+            <td>Head Office</td>
+            <td>MK</td>
+            <td>Rotterdam Commodities BV</td>
+            <td class="mono">DEV-SEED-POSTED-1</td>
+            <td class="num"><a class="open-link" href="#">Open <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8l6-6M3 2h5v5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-footer">
+      <span class="records">3 records</span>
+      <span>&lsaquo;</span>
+      <span class="page-btn page-btn--current">1</span>
+      <span>&rsaquo;</span>
+      <span class="page-size">20 / page <svg width="9" height="5" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="notes-inner">
+    <p class="notes-eyebrow">Design notes</p>
+    <h2>What changed, and why</h2>
+    <p class="lede">Same screen, same data, same tokens (IBM Plex Sans/Mono, steel-cobalt, the slate scale) — the changes below are about making the state of the list legible at a glance rather than introducing a new look.</p>
+    <ul class="notes-list">
+      <li>
+        <strong>Status, once</strong>
+        <span>Before, a coloured rail and a bold label said the same thing twice. Now it's one pill per row, coloured from the same status palette as the strip above — one system instead of two competing cues.</span>
+      </li>
+      <li>
+        <strong>See the mix before you filter</strong>
+        <span>A strip above the filters shows live counts per status. Knowing how many orders are still in Draft no longer means scanning the table or opening the Status dropdown.</span>
+      </li>
+      <li>
+        <strong>Filters you can actually see</strong>
+        <span>Empty filter inputs were a pale border on white, almost invisible against the bar. A soft fill now gives every control a visible edge at rest, and placeholder text moved to a readable slate.</span>
+      </li>
+      <li>
+        <strong>Rows you can click, not just read</strong>
+        <span>The whole row is now the target, not only the small "Open" text — with a hover fill and the PO number tinting on hover to confirm it's live. The link itself stays, for keyboard and screen-reader users.</span>
+      </li>
+      <li>
+        <strong>Numbers that line up</strong>
+        <span>PO numbers, dates and invoice references sit in the same monospace already used for the column headers, with tabular figures, so a column of numbers reads as a column.</span>
+      </li>
+      <li>
+        <strong>A touch more air</strong>
+        <span>Row padding grew from a cramped 6px to 10px. Nothing else about the density changed — but a table meant to be stared at for hours earns a little more room per line.</span>
+      </li>
+    </ul>
+  </div>
+</div>

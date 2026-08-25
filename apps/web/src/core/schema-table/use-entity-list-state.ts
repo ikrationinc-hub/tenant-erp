@@ -19,6 +19,7 @@ export interface EntityListStateControls {
   setSort: (sortBy: string | undefined, sortDir: "asc" | "desc" | undefined) => void;
   setSearch: (search: string | undefined) => void;
   setFilter: (key: string, value: string | undefined) => void;
+  clearAll: () => void;
 }
 
 function parsePositiveInt(raw: string | null, fallback: number): number {
@@ -74,5 +75,6 @@ export function useEntityListState(filterKeys: readonly string[]): EntityListSta
     setSort: (sortBy, sortDir) => update({ sortBy, sortDir, page: "1" }),
     setSearch: (search) => update({ search, page: "1" }),
     setFilter: (key, value) => update({ [key]: value, page: "1" }),
+    clearAll: () => update({ search: undefined, page: "1", ...Object.fromEntries(filterKeys.map((key) => [key, undefined])) }),
   };
 }

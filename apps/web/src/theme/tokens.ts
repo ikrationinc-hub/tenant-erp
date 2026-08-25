@@ -41,8 +41,10 @@ export const themeTokens: ThemeConfig = {
   },
   components: {
     Table: {
-      cellPaddingBlock: 6,
-      cellPaddingInline: 8,
+      // 6/8 read as cramped for data someone stares at for hours (e.g.
+      // Purchase Orders) - bumped once, app-wide, rather than per-screen.
+      cellPaddingBlock: 10,
+      cellPaddingInline: 12,
       headerBg: slate[100],
       headerColor: slate[600],
       rowHoverBg: slate[100],
