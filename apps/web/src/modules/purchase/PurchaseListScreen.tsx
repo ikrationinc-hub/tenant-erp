@@ -149,21 +149,21 @@ export function PurchaseListScreen(): ReactElement {
         <StatChip
           label="Draft"
           value={draftCount.data?.total}
-          color={PURCHASE_STATUS_COLORS.draft}
+          color={PURCHASE_STATUS_COLORS.draft ?? steelCobalt.base}
           active={activeStatus === "draft"}
           onClick={() => filterByStatus("draft")}
         />
         <StatChip
           label="Approved"
           value={approvedCount.data?.total}
-          color={PURCHASE_STATUS_COLORS.approved}
+          color={PURCHASE_STATUS_COLORS.approved ?? steelCobalt.base}
           active={activeStatus === "approved"}
           onClick={() => filterByStatus("approved")}
         />
         <StatChip
           label="Posted"
           value={postedCount.data?.total}
-          color={PURCHASE_STATUS_COLORS.posted}
+          color={PURCHASE_STATUS_COLORS.posted ?? steelCobalt.base}
           active={activeStatus === "posted"}
           onClick={() => filterByStatus("posted")}
         />

@@ -211,14 +211,14 @@ export function SchemaTable({
         dataSource={listQuery.data?.items ?? []}
         loading={listQuery.isFetching}
         onChange={handleChange}
-        onRow={
-          rowAction
-            ? (row) => {
+        {...(rowAction
+          ? {
+              onRow: (row: EntityRow) => {
                 const visible = (!rowAction.permission || permissions.has(rowAction.permission)) && (!rowAction.isVisible || rowAction.isVisible(row));
-                return visible ? { onClick: () => rowAction.onClick(row), style: { cursor: "pointer" } } : {};
-              }
-            : undefined
-        }
+                return visible ? { onClick: () => rowAction.onClick(row), style: { cursor: "pointer" as const } } : {};
+              },
+            }
+          : {})}
         locale={{ emptyText: <Empty description="No records" /> }}
         pagination={{
           current: state.page,
