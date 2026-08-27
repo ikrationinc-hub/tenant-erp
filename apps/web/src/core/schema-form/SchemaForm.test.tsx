@@ -257,7 +257,11 @@ describe("SchemaForm - metadata-driven rendering", () => {
     // name "Discard" once the popover is open - the confirm button is the
     // one appended later (Popconfirm portals into document.body).
     const discardButtons = await screen.findAllByRole("button", { name: "Discard" });
-    await user.click(discardButtons[discardButtons.length - 1]!);
+    const confirmButton = discardButtons[discardButtons.length - 1];
+    if (!confirmButton) {
+      throw new Error("Expected confirm discard button to be present");
+    }
+    await user.click(confirmButton);
     expect(onDiscard).toHaveBeenCalledTimes(1);
   });
 
