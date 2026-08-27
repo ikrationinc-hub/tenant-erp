@@ -45,6 +45,9 @@ const REAL_MIGRATION_VERSIONS = [
   "0027_prompt22_stock_timing_rework",
   "0028_prompt22_amount_mandatory",
   "0029_prompt23_lme_record_id_on_pricing",
+  "0030_early_magik",
+  "0031_pl2_bill_rename",
+  "0032_pl3_po_lifecycle",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

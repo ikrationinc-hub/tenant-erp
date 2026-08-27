@@ -63,7 +63,7 @@ interface SeededTenant {
   itemRefs: { itemId: string; uomId: string };
 }
 
-const ALL_PURCHASE_PERMISSIONS = ["purchase.po.create", "purchase.po.read", "purchase.po.update", "purchase.po.approve", "purchase.po.post"];
+const ALL_PURCHASE_PERMISSIONS = ["purchase.po.create", "purchase.po.read", "purchase.po.update", "purchase.po.issue", "purchase.po.cancel"];
 
 async function seedTenant(label: string): Promise<SeededTenant> {
   const unique = randomUUID().slice(0, 8);
@@ -194,7 +194,7 @@ interface ApiErrorBody {
   error: { code: string; message: string };
 }
 
-describe("modules/purchase - Approve guard: a purchase must have at least one valid item (core/workflow/guards.ts's requireAtLeastOneValidLine)", () => {
+describe("modules/purchase - Issue guard: a purchase must have at least one valid item (core/workflow/guards.ts's requireAtLeastOneValidLine)", () => {
   afterAll(async () => {
     await closeTenantDbPool();
     await closeDbPool();
@@ -212,10 +212,10 @@ describe("modules/purchase - Approve guard: a purchase must have at least one va
       // Hit via a direct API call (supertest against the real Express app),
       // not the UI - this is the server-side guard, independent of
       // whatever the frontend does or doesn't disable.
-      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/approve`).set("Authorization", authHeader);
+      const issueRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/issue`).set("Authorization", authHeader);
 
-      expect(approveRes.status).toBe(409);
-      expect((approveRes.body as ApiErrorBody).error.message).toBe("Cannot approve: purchase has no items");
+      expect(issueRes.status).toBe(409);
+      expect((issueRes.body as ApiErrorBody).error.message).toBe("Cannot issue: purchase has no items");
 
       const [purchase] = await withTenantSchema(tenant.schemaName, (tx) => tx.select().from(purchases).where(eq(purchases.id, purchaseId)));
       expect(purchase?.status).toBe("draft");
@@ -245,11 +245,11 @@ describe("modules/purchase - Approve guard: a purchase must have at least one va
       const itemId = await addItem(app, authHeader, purchaseId, tenant, "10");
       await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchaseItems).set({ quantity: "0.000000" }).where(eq(purchaseItems.id, itemId)));
 
-      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/approve`).set("Authorization", authHeader);
+      const issueRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/issue`).set("Authorization", authHeader);
 
-      expect(approveRes.status).toBe(409);
-      expect((approveRes.body as ApiErrorBody).error.message).toBe(
-        `Cannot approve: item ${itemId} has quantity 0.000000, must be greater than 0`,
+      expect(issueRes.status).toBe(409);
+      expect((issueRes.body as ApiErrorBody).error.message).toBe(
+        `Cannot issue: item ${itemId} has quantity 0.000000, must be greater than 0`,
       );
 
       const [purchase] = await withTenantSchema(tenant.schemaName, (tx) => tx.select().from(purchases).where(eq(purchases.id, purchaseId)));
@@ -264,7 +264,7 @@ describe("modules/purchase - Approve guard: a purchase must have at least one va
   );
 
   it(
-    "a draft with one valid item approves successfully",
+    "a draft with one valid item issues successfully",
     async () => {
       const tenant = await seedTenant("guard-valid");
       const app = createApp();
@@ -272,10 +272,10 @@ describe("modules/purchase - Approve guard: a purchase must have at least one va
       const purchaseId = await createDraftPurchase(app, authHeader, tenant);
       await addItem(app, authHeader, purchaseId, tenant, "10");
 
-      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/approve`).set("Authorization", authHeader);
+      const issueRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/issue`).set("Authorization", authHeader);
 
-      expect(approveRes.status).toBe(200);
-      expect((approveRes.body as { status: string }).status).toBe("approved");
+      expect(issueRes.status).toBe(200);
+      expect((issueRes.body as { status: string }).status).toBe("issued");
     },
     TEST_TIMEOUT_MS,
   );

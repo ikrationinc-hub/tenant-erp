@@ -73,9 +73,10 @@ describe("UserManagementScreen", () => {
       await user.type(drawer().getByLabelText("Temporary Password"), "TempPass123!");
 
       await user.click(drawer().getByRole("combobox", { name: "Roles" }));
-      // "Manager" holds purchase.po.approve in the mock catalogue - the
-      // provision path must reject it (core/rbac/queries.ts's
-      // roleIdsHoldApprovalPermission on the real backend).
+      // "Manager" holds purchase.po.issue (PL-3's rename of the old
+      // purchase.po.approve) in the mock catalogue - the provision path
+      // must reject it (core/rbac/queries.ts's roleIdsHoldApprovalPermission
+      // on the real backend, which matches both "approve" and "issue").
       await user.click(await screen.findByText("Manager"));
       await user.keyboard("{Escape}");
 

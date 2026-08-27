@@ -39,6 +39,9 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/suppliers",
   "/brokers",
   "/purchase/orders",
+  "/purchase/receipts",
+  "/purchase/bills",
+  "/purchase/payments",
   "/inventory",
   ...MASTER_MODULES.filter((module) => module.entity !== "customer").map((module) => `/masters/${module.urlSegment}`),
 ]);
@@ -132,6 +135,9 @@ describe("core/provisioning/seed-menu-tree - the seeded default navigation", () 
         "/admin/field-definitions",
         "/suppliers",
         "/purchase/orders",
+        "/purchase/receipts",
+        "/purchase/bills",
+        "/purchase/payments",
         "/inventory",
         ...MASTER_MODULES.map((module) => `/masters/${module.urlSegment}`),
       ]) {

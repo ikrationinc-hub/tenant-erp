@@ -7,14 +7,35 @@ import type { PaginatedRows } from "../../core/masters/types.js";
 import { nextNumber } from "../../core/numbering/next-number.js";
 import { requireAtLeastOneValidLine } from "../../core/workflow/guards.js";
 import { findTransition, runGuards, type WorkflowTransition } from "../../core/workflow/transitions.js";
-import { withTenantDb } from "../../database/get-db.js";
+import { withTenantDb, type TenantTx } from "../../database/get-db.js";
 import type { CreatePurchaseInput, PurchasesListQuery, UpdatePurchaseInput } from "./purchase.validator.js";
 import { listAllocationsForPurchase, type PurchaseAllocationRow } from "./purchase-allocations.repository.js";
 import { findCostsByPurchaseId, type PurchaseAdditionalCostsRow } from "./purchase-costs.repository.js";
 import { listHedgesForPurchase, type HedgeRow } from "./purchase-hedges.repository.js";
-import { listItemsWithPricingForPurchase, type PurchaseItemWithPricing } from "./purchase-items.repository.js";
-import { listInvoicesForPurchase, type PurchaseInvoiceRow } from "./purchase-invoices.repository.js";
+import {
+  listItemsWithPricingForPurchase,
+  listOrderedQuantitiesForPurchases,
+  type OrderedQuantityRow,
+  type PurchaseItemWithPricing,
+} from "./purchase-items.repository.js";
+import {
+  hasAnyBillForPurchase,
+  listBillsForPurchase,
+  listBillsForPurchases,
+  sumBilledQuantitiesByItem,
+  sumBilledQuantitiesByItemForPurchases,
+  type PurchaseBillRow,
+} from "./purchase-bills.repository.js";
 import { listLmeRecordsForPurchase, type LmeRecordRow } from "./purchase-lme.repository.js";
+import { computeBilledStatus, computePaidStatus, computeReceivedStatus, type BilledStatus, type PaidStatus, type ReceivedStatus } from "./purchase-lifecycle.js";
+import { sumPaidAmountsByBill, sumPaidAmountsByBillForPurchases, type PaidAmountRowForPurchase } from "./purchase-payments.repository.js";
+import {
+  hasAnyReceiptForPurchase,
+  listReceiptsForPurchase,
+  sumConfirmedReceivedQuantitiesByItem,
+  sumConfirmedReceivedQuantitiesByItemForPurchases,
+  type PurchaseReceiptRow,
+} from "./purchase-receipts.repository.js";
 import {
   findPurchaseById,
   findShipmentByPurchaseId,
@@ -34,15 +55,15 @@ interface ApproveGuardContext {
   hasLmeRecord: boolean;
 }
 
-/** Prompt 21 item 2: under pricing_type='lme', an LME record is the source the item rate was derived from (purchase-items.service.ts) - approving without one would lock in a rate with nothing behind it. Under 'fixed' (or a legacy purchase with pricingType unset), this guard is a no-op. */
+/** Prompt 21 item 2, renamed for PL-3's Issue transition: under pricing_type='lme', an LME record is the source the item rate was derived from (purchase-items.service.ts) - issuing without one would lock in a rate with nothing behind it. Under 'fixed' (or a legacy purchase with pricingType unset), this guard is a no-op. */
 function requireLmeRecordUnderLmePricing(context: ApproveGuardContext): void {
   if (context.pricingType === "lme" && !context.hasLmeRecord) {
-    throw new ConflictError("Cannot approve: LME pricing requires at least one LME record");
+    throw new ConflictError("Cannot issue: LME pricing requires at least one LME record");
   }
 }
 
 /**
- * What makes one purchase item "valid" to approve - domain-specific, so
+ * What makes one purchase item "valid" to issue - domain-specific, so
  * it stays here rather than in core/workflow/guards.ts's reusable
  * "at least one valid line" shape. Quantity is enforced positive already
  * at addItem/updatePurchaseItem time (purchase-items.service.ts's
@@ -51,42 +72,82 @@ function requireLmeRecordUnderLmePricing(context: ApproveGuardContext): void {
  * state (a future bulk-import path, a relaxed PATCH, direct data repair),
  * not just through today's one write path. purchaseRateUsd/exchangeRate
  * are ALSO required positive here - flagged for review with the user:
- * required for now, since an approved (soon-immutable) financial document
+ * required for now, since an issued (soon-immutable) financial document
  * with a zero rate has no real value either.
  */
 function validatePurchaseItemForApproval(item: PurchaseItemWithPricing): string | undefined {
   if (parseMoney(item.quantity).lte(0)) {
-    return `Cannot approve: item ${item.id} has quantity ${item.quantity}, must be greater than 0`;
+    return `Cannot issue: item ${item.id} has quantity ${item.quantity}, must be greater than 0`;
   }
   if (parseMoney(item.pricing.purchaseRateUsd).lte(0)) {
-    return `Cannot approve: item ${item.id} has purchase rate ${item.pricing.purchaseRateUsd}, must be greater than 0`;
+    return `Cannot issue: item ${item.id} has purchase rate ${item.pricing.purchaseRateUsd}, must be greater than 0`;
   }
   if (parseMoney(item.pricing.exchangeRate).lte(0)) {
-    return `Cannot approve: item ${item.id} has exchange rate ${item.pricing.exchangeRate}, must be greater than 0`;
+    return `Cannot issue: item ${item.id} has exchange rate ${item.pricing.exchangeRate}, must be greater than 0`;
   }
   return undefined;
 }
 
-/** FR-107/FR-108: Draft -> Approved -> Posted, each transition its own permission (core/workflow/transitions.ts). Approve's guard: a purchase can't become an approved (soon-immutable) financial document representing no goods - Sales will later allocate against these lines, so an empty or invalid one is a blocker, not a cosmetic gap. */
+interface CancelGuardContext {
+  hasAnyReceipt: boolean;
+  hasAnyBill: boolean;
+}
+
+/** PL-3: a PO can only be cancelled before anything's been fulfilled against it - once a receipt or bill exists, the PO is no longer a dead letter, it's a real transaction in motion (rule 8's spirit: cancellation is not a correction mechanism for a partially-fulfilled order). */
+function requireNothingFulfilledForCancel(context: CancelGuardContext): void {
+  if (context.hasAnyReceipt) {
+    throw new ConflictError("Cannot cancel: this purchase already has a receipt against it");
+  }
+  if (context.hasAnyBill) {
+    throw new ConflictError("Cannot cancel: this purchase already has a bill against it");
+  }
+}
+
+/**
+ * PL-3 (docs/PURCHASE-LIFECYCLE-4DOC.md, ADR 0018): Draft -> Issued ->
+ * Closed/Cancelled, each transition its own permission (core/workflow/
+ * transitions.ts). "Posted" is dropped entirely - superseded ADR 0015/
+ * 0016 immutability lock, now carried by the two terminal states instead.
+ * Issue's guards are the SAME ones "approve" used to run (zero-item block,
+ * LME/fixed validation) - only the transition's name and target status
+ * changed, not what it protects: a purchase can't become an issued
+ * (soon-immutable) financial document representing no goods. "Closed" has
+ * NO entry here - it is never invoked via findTransition/runGuards, only
+ * ever written by maybeAutoCloseIssuedPurchase below, from inside the
+ * SAME transaction as a receipt confirm or bill approve.
+ */
 const PURCHASE_WORKFLOW: WorkflowTransition<PurchaseRow["status"], ApproveGuardContext>[] = [
   {
-    name: "approve",
+    name: "issue",
     from: "draft",
-    to: "approved",
-    permission: "purchase.po.approve",
+    to: "issued",
+    permission: "purchase.po.issue",
     guards: [
       (context) =>
-        requireAtLeastOneValidLine(context.items, validatePurchaseItemForApproval, "Cannot approve: purchase has no items"),
+        requireAtLeastOneValidLine(context.items, validatePurchaseItemForApproval, "Cannot issue: purchase has no items"),
       requireLmeRecordUnderLmePricing,
     ],
   },
-  { name: "post", from: "approved", to: "posted", permission: "purchase.po.post" },
 ];
+
+/**
+ * Not expressed as a WorkflowTransition/findTransition entry: the engine
+ * (core/workflow/transitions.ts) models one static from->to edge per
+ * name, found by a plain name lookup - it has no way to represent "the
+ * same transition, usable from either of two starting states," and
+ * `transitionPurchaseStatus`'s CAS UPDATE genuinely needs the caller's
+ * OWN already-fetched current status as `from`, not a value guessed from
+ * a static table. cancel() below reads `existing.status` directly and
+ * validates it's one of these two allowed starting states itself -
+ * guards/permission stay identical to what a WorkflowTransition entry
+ * would declare, just checked inline rather than through runGuards.
+ */
+const CANCELLABLE_FROM_STATUSES: ReadonlyArray<PurchaseRow["status"]> = ["draft", "issued"];
 
 export interface PurchaseWithShipment extends PurchaseRow {
   shipment: PurchaseShipmentRow;
-  /** Session (b): populated on getById, omitted (undefined) on create/update's response - those return before any item exists yet or without re-querying the full item list. */
-  items?: PurchaseItemWithPricing[];
+  /** Session (b): populated on getById, omitted (undefined) on create/update's response - those return before any item exists yet or without re-querying the full item list. PL-4: each item also carries its own receivedQuantity/billedQuantity (attachItemFulfilment) so the frontend's Receive/Convert-to-Bill forms can default to outstanding quantity without a dedicated endpoint. */
+  items?: PurchaseItemWithFulfilment[];
   /** Session (c): same convention as `items` - populated on getById only. */
   allocations?: PurchaseAllocationRow[];
   /** Session (c): undefined until the first PATCH .../costs (no row exists yet), not just an empty/zeroed object. */
@@ -94,9 +155,18 @@ export interface PurchaseWithShipment extends PurchaseRow {
   /** Session (d): same convention as `items`/`allocations` - populated on getById only. */
   lmeRecords?: LmeRecordWithUsage[];
   hedges?: HedgeRow[];
-  /** Prompt 22: same convention as `items`/`allocations`/`lmeRecords`/`hedges` - populated on getById only. */
+  /** Prompt 22: same convention as `items`/`allocations`/`lmeRecords`/`hedges` - populated on getById only. Wire shape only (invoiceNumber/invoiceDate/invoiceAmountUsd) - see attachInvoiceVariance's doc comment for why this doesn't match the renamed internal purchase_bills columns. */
   invoices?: PurchaseInvoiceWithVariance[];
+  /** PL-1: same convention - populated on getById only. */
+  receipts?: PurchaseReceiptRow[];
+  /** PL-1 §4: derived, never stored - not_received/partial/fully_received, computed by summing CONFIRMED receipt quantities against each item's ordered quantity. */
+  receivedStatus?: ReceivedStatus;
+  /** PL-2 §4: derived, never stored - not_billed/partial/fully_billed, computed by summing every bill's (draft+approved) billed quantities against each item's ordered quantity. Mirrors receivedStatus exactly. */
+  billedStatus?: BilledStatus;
+  /** PL-5: derived, never stored - not_paid/partial/fully_paid, computed by summing every payment allocation against each of this purchase's own bills' amounts. Unlike received/billed (per-item), this is per-bill - a purchase with no bills yet is "not_paid", same "nothing to derive from" treatment as zero items being "not_received". */
+  paidStatus?: PaidStatus;
 }
+
 
 /**
  * Prompt 22 follow-up (client-confirmed): the supplier's invoice amount
@@ -107,22 +177,50 @@ export interface PurchaseWithShipment extends PurchaseRow {
  * glance. Informational only, same spirit as ADR 0014's allocation
  * total: never blocks create/update/approve, never persisted - computed
  * fresh on every getById from the purchase's current items and the
- * invoice's own stored amount.
+ * bill's own stored amount.
+ *
+ * PL-2: this is the WIRE shape, deliberately still Prompt 22's field
+ * names (invoiceNumber/invoiceDate/invoiceAmountUsd) - the REST surface
+ * and field-definitions entity ("invoice") are unrenamed in this prompt
+ * (PL-4 does the coordinated cutover), even though the internal
+ * PurchaseBillRow now has billNumber/billDate/billAmountUsd. This
+ * function is the ONE place that translates between the two - nowhere
+ * else in the response pipeline needs to know about the rename.
  */
-export interface PurchaseInvoiceWithVariance extends PurchaseInvoiceRow {
+export interface PurchaseInvoiceWithVariance {
+  id: string;
+  invoiceNumber: string;
+  supplierInvoiceNo: string | null;
+  invoiceDate: string;
+  dueDate: string | null;
+  invoiceAmountUsd: string;
+  taxAmount: string | null;
+  status: PurchaseBillRow["status"];
   purchaseItemsAmountUsd: string;
   varianceUsd: string;
   variancePct: string | null;
 }
 
-function attachInvoiceVariance(items: PurchaseItemWithPricing[], invoices: PurchaseInvoiceRow[]): PurchaseInvoiceWithVariance[] {
+function attachInvoiceVariance(items: PurchaseItemWithPricing[], bills: PurchaseBillRow[]): PurchaseInvoiceWithVariance[] {
   const purchaseItemsAmount = items.reduce((sum, item) => sum.plus(parseMoney(item.pricing.purchaseAmountUsd)), parseMoney("0"));
   const purchaseItemsAmountUsd = roundAmount(purchaseItemsAmount);
 
-  return invoices.map((invoice) => {
-    const varianceUsd = roundAmount(parseMoney(invoice.invoiceAmountUsd).minus(purchaseItemsAmount));
+  return bills.map((bill) => {
+    const varianceUsd = roundAmount(parseMoney(bill.billAmountUsd).minus(purchaseItemsAmount));
     const variancePct = purchaseItemsAmount.isZero() ? null : roundAmount(parseMoney(varianceUsd).dividedBy(purchaseItemsAmount).times(100));
-    return { ...invoice, purchaseItemsAmountUsd, varianceUsd, variancePct };
+    return {
+      id: bill.id,
+      invoiceNumber: bill.billNumber,
+      supplierInvoiceNo: bill.supplierInvoiceNo,
+      invoiceDate: bill.billDate,
+      dueDate: bill.dueDate,
+      invoiceAmountUsd: bill.billAmountUsd,
+      taxAmount: bill.taxAmount,
+      status: bill.status,
+      purchaseItemsAmountUsd,
+      varianceUsd,
+      variancePct,
+    };
   });
 }
 
@@ -141,6 +239,32 @@ export interface LmeRecordWithUsage extends LmeRecordRow {
 function attachLmeRecordUsage(items: PurchaseItemWithPricing[], lmeRecords: LmeRecordRow[]): LmeRecordWithUsage[] {
   const usedIds = new Set(items.map((item) => item.pricing.lmeRecordId).filter((id): id is string => id !== null));
   return lmeRecords.map((record) => ({ ...record, isUsed: usedIds.has(record.id) }));
+}
+
+/**
+ * PL-4: each item's own running received/billed quantity (defaulting to
+ * "0" when nothing's been received/billed against it yet) - the same
+ * per-item Maps getById already builds for computeReceivedStatus/
+ * computeBilledStatus, just also attached to the item row itself so the
+ * frontend's Receive form can default a line to (quantity - receivedQuantity)
+ * and the Convert to Bill form to (quantity - billedQuantity), without a
+ * separate "outstanding quantities" endpoint.
+ */
+export interface PurchaseItemWithFulfilment extends PurchaseItemWithPricing {
+  receivedQuantity: string;
+  billedQuantity: string;
+}
+
+function attachItemFulfilment(
+  items: PurchaseItemWithPricing[],
+  receivedByItemId: Map<string, string>,
+  billedByItemId: Map<string, string>,
+): PurchaseItemWithFulfilment[] {
+  return items.map((item) => ({
+    ...item,
+    receivedQuantity: receivedByItemId.get(item.id) ?? "0",
+    billedQuantity: billedByItemId.get(item.id) ?? "0",
+  }));
 }
 
 function requireTenantScope(ctx: RequestContext) {
@@ -164,24 +288,102 @@ export function assertDraft(purchase: PurchaseRow): void {
 }
 
 /**
- * Prompt 22 Part 4: items specifically stay editable past Draft, through
- * Approved - unlike the header/costs/allocation lock `assertDraft` above
- * enforces. Once a supplier invoice exists, the whole point is that the
- * purchase's items CAN change after approval (a correction, a quantity
- * update) and the resulting invoice re-approval reconciles stock to
- * match - that can only happen if the item endpoints don't hard-block at
- * Approved the way every other sub-resource does. Still blocks Posted
- * (rule 8: posted is immutable, corrections are reversal + re-entry).
+ * Items specifically stay editable past Draft, through Issued - unlike
+ * the header/costs/allocation lock `assertDraft` above enforces. PL-3:
+ * "Posted" is gone - the terminal states Closed and Cancelled are now
+ * what locks items (rule 8's immutability moved from a manual step to
+ * the two states a PO actually ends its life in). PL-1: additionally
+ * locks the moment ANY receipt (draft or confirmed) exists against the
+ * purchase - a receipt's over-receipt guard (purchase-receipts.service.ts)
+ * is checked against the item's ordered quantity at the receipt's OWN
+ * create time; letting an ordered quantity change afterward would
+ * silently invalidate that check with no reconciliation mechanism to
+ * catch it (unlike the superseded invoice-reconciliation design this
+ * replaces - see ADR 0016).
  */
-export function assertItemsEditable(purchase: PurchaseRow): void {
-  if (purchase.status === "posted") {
-    throw new ConflictError(`Purchase ${purchase.purchaseNumber} is posted and can no longer be edited`);
+export async function assertItemsEditable(tx: TenantTx, companyId: string, purchase: PurchaseRow): Promise<void> {
+  if (purchase.status === "closed" || purchase.status === "cancelled") {
+    throw new ConflictError(`Purchase ${purchase.purchaseNumber} is ${purchase.status} and can no longer be edited`);
+  }
+  if (await hasAnyReceiptForPurchase(tx, companyId, purchase.id)) {
+    throw new ConflictError(`Purchase ${purchase.purchaseNumber} already has a receipt against it - items can no longer be edited`);
   }
 }
 
-export async function list(ctx: RequestContext, params: PurchasesListQuery): Promise<PaginatedRows<PurchaseRow>> {
+/** PL-4/PL-5: the PO list's own row shape - every PurchaseRow field plus the three derived fulfilment axes (Zoho's Received ●/Billed ●/Paid ● dots), so the list screen can show them as columns without a second round trip per row. */
+export interface PurchaseRowWithFulfilment extends PurchaseRow {
+  receivedStatus: ReceivedStatus;
+  billedStatus: BilledStatus;
+  paidStatus: PaidStatus;
+}
+
+/**
+ * PL-4: batched, not per-row - ONE extra query each for received-sums,
+ * billed-sums, and ordered quantities, scoped to just the purchase IDs on
+ * THIS page (never all purchases in the company), then computeReceivedStatus/
+ * computeBilledStatus run per row from an in-memory Map lookup. Bounded
+ * cost regardless of page size: 3 extra queries per page load, not 3 per
+ * row - the N+1 this exists to avoid.
+ */
+export async function list(ctx: RequestContext, params: PurchasesListQuery): Promise<PaginatedRows<PurchaseRowWithFulfilment>> {
   const scope = requireTenantScope(ctx);
-  return withTenantDb(ctx, (tx) => listPurchases(tx, scope.companyId, params));
+  return withTenantDb(ctx, async (tx) => {
+    const page = await listPurchases(tx, scope.companyId, params);
+    const purchaseIds = page.items.map((row) => row.id);
+
+    const orderedRows = await listOrderedQuantitiesForPurchases(tx, scope.companyId, purchaseIds);
+    const orderedByPurchase = new Map<string, OrderedQuantityRow[]>();
+    for (const row of orderedRows) {
+      const bucket = orderedByPurchase.get(row.purchaseId) ?? [];
+      bucket.push(row);
+      orderedByPurchase.set(row.purchaseId, bucket);
+    }
+
+    const receivedRows = await sumConfirmedReceivedQuantitiesByItemForPurchases(tx, scope.companyId, purchaseIds);
+    const receivedByPurchase = new Map<string, Map<string, string>>();
+    for (const row of receivedRows) {
+      const bucket = receivedByPurchase.get(row.purchaseId) ?? new Map<string, string>();
+      bucket.set(row.purchaseItemId, row.receivedQuantity);
+      receivedByPurchase.set(row.purchaseId, bucket);
+    }
+
+    const billedRows = await sumBilledQuantitiesByItemForPurchases(tx, scope.companyId, purchaseIds);
+    const billedByPurchase = new Map<string, Map<string, string>>();
+    for (const row of billedRows) {
+      const bucket = billedByPurchase.get(row.purchaseId) ?? new Map<string, string>();
+      bucket.set(row.purchaseItemId, row.billedQuantity);
+      billedByPurchase.set(row.purchaseId, bucket);
+    }
+
+    const bills = await listBillsForPurchases(tx, scope.companyId, purchaseIds);
+    const billsByPurchase = new Map<string, PurchaseBillRow[]>();
+    for (const bill of bills) {
+      const bucket = billsByPurchase.get(bill.purchaseId) ?? [];
+      bucket.push(bill);
+      billsByPurchase.set(bill.purchaseId, bucket);
+    }
+
+    const paidRows: PaidAmountRowForPurchase[] = await sumPaidAmountsByBillForPurchases(tx, scope.companyId, purchaseIds);
+    const paidByPurchase = new Map<string, Map<string, string>>();
+    for (const row of paidRows) {
+      const bucket = paidByPurchase.get(row.purchaseId) ?? new Map<string, string>();
+      bucket.set(row.billId, row.paidAmountUsd);
+      paidByPurchase.set(row.purchaseId, bucket);
+    }
+
+    return {
+      ...page,
+      items: page.items.map((row) => {
+        const orderedItems = orderedByPurchase.get(row.id) ?? [];
+        return {
+          ...row,
+          receivedStatus: computeReceivedStatus(orderedItems, receivedByPurchase.get(row.id) ?? new Map<string, string>()),
+          billedStatus: computeBilledStatus(orderedItems, billedByPurchase.get(row.id) ?? new Map<string, string>()),
+          paidStatus: computePaidStatus(billsByPurchase.get(row.id) ?? [], paidByPurchase.get(row.id) ?? new Map<string, string>()),
+        };
+      }),
+    };
+  });
 }
 
 export async function getById(ctx: RequestContext, id: string): Promise<PurchaseWithShipment> {
@@ -200,16 +402,31 @@ export async function getById(ctx: RequestContext, id: string): Promise<Purchase
     const additionalCosts = await findCostsByPurchaseId(tx, scope.companyId, id);
     const lmeRecords = await listLmeRecordsForPurchase(tx, scope.companyId, id);
     const hedges = await listHedgesForPurchase(tx, scope.companyId, id);
-    const invoices = await listInvoicesForPurchase(tx, scope.companyId, id);
+    const bills = await listBillsForPurchase(tx, scope.companyId, id);
+    const receipts = await listReceiptsForPurchase(tx, scope.companyId, id);
+    const receivedSums = await sumConfirmedReceivedQuantitiesByItem(tx, scope.companyId, id);
+    const receivedByItemId = new Map(receivedSums.map((row) => [row.purchaseItemId, row.receivedQuantity]));
+    const billedSums = await sumBilledQuantitiesByItem(tx, scope.companyId, id);
+    const billedByItemId = new Map(billedSums.map((row) => [row.purchaseItemId, row.billedQuantity]));
+    const paidSums = await sumPaidAmountsByBill(
+      tx,
+      scope.companyId,
+      bills.map((bill) => bill.id),
+    );
+    const paidByBillId = new Map(paidSums.map((row) => [row.billId, row.paidAmountUsd]));
     return {
       ...purchase,
       shipment,
-      items,
+      items: attachItemFulfilment(items, receivedByItemId, billedByItemId),
       allocations,
       additionalCosts,
       lmeRecords: attachLmeRecordUsage(items, lmeRecords),
       hedges,
-      invoices: attachInvoiceVariance(items, invoices),
+      invoices: attachInvoiceVariance(items, bills),
+      receipts,
+      receivedStatus: computeReceivedStatus(items, receivedByItemId),
+      billedStatus: computeBilledStatus(items, billedByItemId),
+      paidStatus: computePaidStatus(bills, paidByBillId),
     };
   });
 }
@@ -321,17 +538,19 @@ export async function update(ctx: RequestContext, id: string, input: UpdatePurch
 }
 
 /**
- * FR-107/FR-108. Resolved open question #10: stock moves at Approved, not
- * Posted - `purchase.approved` fires (and the inventory subscriber writes
- * stock_movements) in the SAME transaction as this status change
- * (common/events/bus.ts). `transitionPurchaseStatus`'s conditional UPDATE
- * is what makes "two concurrent approvals -> exactly one succeeds" true:
- * the loser's UPDATE matches zero rows (status has already moved on) and
- * this function reports that as a 409, never a silent no-op success.
+ * PL-3 (renamed from "approve"): commits the PO to the supplier. No
+ * inventory or financial effect of its own - `purchase.approved` still
+ * fires for any future subscriber (none listens today - PL-1/ADR 0016
+ * moved stock to receipt confirm), same event name kept for continuity
+ * rather than invented churn. `transitionPurchaseStatus`'s conditional
+ * UPDATE is what makes "two concurrent issues -> exactly one succeeds"
+ * true: the loser's UPDATE matches zero rows (status has already moved
+ * on) and this function reports that as a 409, never a silent no-op
+ * success.
  */
-export async function approve(ctx: RequestContext, id: string): Promise<PurchaseRow> {
+export async function issue(ctx: RequestContext, id: string): Promise<PurchaseRow> {
   const scope = requireTenantScope(ctx);
-  const transition = findTransition(PURCHASE_WORKFLOW, "approve");
+  const transition = findTransition(PURCHASE_WORKFLOW, "issue");
 
   return withTenantDb(ctx, async (tx) => {
     const existing = await findPurchaseById(tx, scope.companyId, id);
@@ -351,10 +570,10 @@ export async function approve(ctx: RequestContext, id: string): Promise<Purchase
     const row = await transitionPurchaseStatus(tx, scope.companyId, id, {
       from: transition.from,
       to: transition.to,
-      extra: { approvedBy: scope.userId, approvedAt: new Date() },
+      extra: { issuedBy: scope.userId, issuedAt: new Date() },
     });
     if (!row) {
-      throw new ConflictError(`Purchase ${existing.purchaseNumber} is "${existing.status}", not "${transition.from}" - cannot approve`);
+      throw new ConflictError(`Purchase ${existing.purchaseNumber} is "${existing.status}", not "${transition.from}" - cannot issue`);
     }
 
     await eventBus.emit(tx, "purchase.approved", {
@@ -377,7 +596,7 @@ export async function approve(ctx: RequestContext, id: string): Promise<Purchase
       changedBy: scope.userId,
       entity: "purchase",
       entityId: id,
-      action: "purchase.approved",
+      action: "purchase.issued",
       before: { status: existing.status },
       after: { status: row.status },
     });
@@ -386,20 +605,38 @@ export async function approve(ctx: RequestContext, id: string): Promise<Purchase
   });
 }
 
-/** FR-107's third state. Resolved open question #10: purely an accounting lock (rule 8) on top of Approved - no inventory effect of its own. */
-export async function post(ctx: RequestContext, id: string): Promise<PurchaseRow> {
+/**
+ * PL-3: a PO the buyer calls off before it's fulfilled. Draft or Issued
+ * only, and only while nothing's been received or billed against it
+ * (requireNothingFulfilledForCancel) - a partially-fulfilled PO is a real
+ * transaction in motion, not a dead letter. Not modeled as a
+ * WorkflowTransition/findTransition entry - see CANCELLABLE_FROM_STATUSES'
+ * doc comment for why the engine's static from->to lookup doesn't fit a
+ * transition reachable from two different starting states.
+ */
+export async function cancel(ctx: RequestContext, id: string): Promise<PurchaseRow> {
   const scope = requireTenantScope(ctx);
-  const transition = findTransition(PURCHASE_WORKFLOW, "post");
 
   return withTenantDb(ctx, async (tx) => {
     const existing = await findPurchaseById(tx, scope.companyId, id);
     if (!existing) {
       throw new NotFoundError("Purchase not found");
     }
+    if (!CANCELLABLE_FROM_STATUSES.includes(existing.status)) {
+      throw new ConflictError(`Purchase ${existing.purchaseNumber} is "${existing.status}" - cannot cancel`);
+    }
 
-    const row = await transitionPurchaseStatus(tx, scope.companyId, id, { from: transition.from, to: transition.to });
+    const hasAnyReceipt = await hasAnyReceiptForPurchase(tx, scope.companyId, id);
+    const hasAnyBill = await hasAnyBillForPurchase(tx, scope.companyId, id);
+    requireNothingFulfilledForCancel({ hasAnyReceipt, hasAnyBill });
+
+    const row = await transitionPurchaseStatus(tx, scope.companyId, id, {
+      from: existing.status,
+      to: "cancelled",
+      extra: { cancelledBy: scope.userId, cancelledAt: new Date() },
+    });
     if (!row) {
-      throw new ConflictError(`Purchase ${existing.purchaseNumber} is "${existing.status}", not "${transition.from}" - cannot post`);
+      throw new ConflictError(`Purchase ${existing.purchaseNumber} is "${existing.status}" - cannot cancel`);
     }
 
     await insertAuditLog(tx, {
@@ -407,7 +644,7 @@ export async function post(ctx: RequestContext, id: string): Promise<PurchaseRow
       changedBy: scope.userId,
       entity: "purchase",
       entityId: id,
-      action: "purchase.posted",
+      action: "purchase.cancelled",
       before: { status: existing.status },
       after: { status: row.status },
     });

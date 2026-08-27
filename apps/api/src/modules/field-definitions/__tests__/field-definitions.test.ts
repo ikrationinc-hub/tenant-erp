@@ -409,7 +409,7 @@ describe("field-definitions HTTP module", () => {
   );
 
   it(
-    "purchase/header matches purchase-handlers.ts's HEADER_FIELDS field-for-field (header + flattened shipment + 6 attachment fields)",
+    "purchase/header matches purchase-handlers.ts's HEADER_FIELDS field-for-field (header + flattened shipment + 5 attachment fields)",
     async () => {
       const admin = await seedTenantWithAdmin("fd-header", ["field_definitions.field.read"]);
       const fields = await fetchOrderedFields(admin, "purchase", "header");
@@ -421,7 +421,6 @@ describe("field-definitions HTTP module", () => {
         { fieldKey: "buyerId", isMandatory: true },
         { fieldKey: "supplierId", isMandatory: true },
         { fieldKey: "pricingType", isMandatory: true },
-        { fieldKey: "supplierInvoiceNo", isMandatory: false },
         { fieldKey: "supplierReferenceNo", isMandatory: false },
         { fieldKey: "brokerId", isMandatory: false },
         { fieldKey: "brokerCommission", isMandatory: false },
@@ -436,7 +435,6 @@ describe("field-definitions HTTP module", () => {
         { fieldKey: "portOfDischargeId", isMandatory: true },
         { fieldKey: "warehouseId", isMandatory: true },
         { fieldKey: "incotermId", isMandatory: true },
-        { fieldKey: "invoice", isMandatory: false },
         { fieldKey: "billOfLading", isMandatory: false },
         { fieldKey: "packingList", isMandatory: false },
         { fieldKey: "certificateOfOrigin", isMandatory: false },
@@ -444,12 +442,12 @@ describe("field-definitions HTTP module", () => {
         { fieldKey: "otherDocuments2", isMandatory: false },
       ]);
 
-      // The 6 attachment fields need fieldType FileUpload/MultiUpload, not
+      // The 5 attachment fields need fieldType FileUpload/MultiUpload, not
       // just a bare dataType - otherwise they'd resolve to a plain Textbox
       // client-side (apps/web's resolve-field-type.ts), which would be a
       // functional break, not a cosmetic one.
       const rawFields = await fetchFields(admin, "purchase", "header");
-      expect(rawFields.find((f) => f.fieldKey === "invoice")?.fieldType).toBe("FileUpload");
+      expect(rawFields.find((f) => f.fieldKey === "billOfLading")?.fieldType).toBe("FileUpload");
       expect(rawFields.find((f) => f.fieldKey === "otherDocuments")?.fieldType).toBe("MultiUpload");
 
       // FR-101's server-assigned purchase number - same reasoning as
@@ -481,7 +479,7 @@ describe("field-definitions HTTP module", () => {
       ]);
       expect(sections.map((s) => s.fields.map((f) => f.fieldKey))).toEqual([
         ["purchaseNumber", "divisionId", "purchaseDate", "branchId", "buyerId", "supplierId"],
-        ["pricingType", "supplierInvoiceNo", "supplierReferenceNo", "brokerId", "brokerCommission", "lotNumber"],
+        ["pricingType", "supplierReferenceNo", "brokerId", "brokerCommission", "lotNumber"],
         [
           "containerId",
           "blNo",
@@ -494,7 +492,7 @@ describe("field-definitions HTTP module", () => {
           "warehouseId",
           "incotermId",
         ],
-        ["invoice", "billOfLading", "packingList", "certificateOfOrigin", "otherDocuments", "otherDocuments2"],
+        ["billOfLading", "packingList", "certificateOfOrigin", "otherDocuments", "otherDocuments2"],
       ]);
       // Every field still resolved into exactly one section - none silently dropped by the grouping pass.
       const totalGrouped = sections.reduce((sum, s) => sum + s.fields.length, 0);

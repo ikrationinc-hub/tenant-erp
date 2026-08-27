@@ -413,7 +413,7 @@ describe("user onboarding: invitations, provisioning, password-change scope", ()
         name: "Approver",
         createdBy: admin.adminUserId,
       });
-      const approvePermissionId = await findPermissionId(admin.tenant.schemaName, "purchase.po.approve");
+      const approvePermissionId = await findPermissionId(admin.tenant.schemaName, "purchase.po.issue");
       await grantPermissionToRole(
         admin.tenant.schemaName,
         admin.companyId,

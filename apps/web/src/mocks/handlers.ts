@@ -36,6 +36,7 @@ import { adminHandlers, resolveAdminFieldDefinitions } from "./admin-handlers";
 import { suppliersHandlers, resolveSupplierFieldDefinitions } from "./suppliers-handlers";
 import { brokersHandlers, resolveBrokerFieldDefinitions } from "./brokers-handlers";
 import { purchaseHandlers, resolvePurchaseFieldDefinitions } from "./purchase-handlers";
+import { purchasePaymentsHandlers, PAYMENT_FIELDS } from "./purchase-payments-handlers";
 import { inventoryHandlers } from "./inventory-handlers";
 import { attachmentsHandlers } from "./attachments-handlers";
 
@@ -214,6 +215,39 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
           sortOrder: 1,
           children: [],
         },
+        // PL-4: Zoho's own "Purchase Receives" and "Bills" nav items -
+        // must stay in lockstep with seed-menu-tree.ts's own two new
+        // children (the recurring drift bug CLAUDE.md flags).
+        {
+          id: "m-purchase-receipts",
+          key: "purchase.receipts",
+          label: "Purchase Receipts",
+          path: "/purchase/receipts",
+          icon: null,
+          sortOrder: 2,
+          children: [],
+        },
+        {
+          id: "m-purchase-bills",
+          key: "purchase.bills",
+          label: "Purchase Bills",
+          path: "/purchase/bills",
+          icon: null,
+          sortOrder: 3,
+          children: [],
+        },
+        // PL-5: Zoho's own "Payments Made" nav item - must stay in
+        // lockstep with seed-menu-tree.ts's own new child (the recurring
+        // drift bug CLAUDE.md flags).
+        {
+          id: "m-purchase-payments",
+          key: "purchase.payments",
+          label: "Payments Made",
+          path: "/purchase/payments",
+          icon: null,
+          sortOrder: 4,
+          children: [],
+        },
       ],
     },
     { id: "m-inventory", key: "inventory", label: "Inventory", path: "/inventory", icon: "inbox", sortOrder: 11, children: [] },
@@ -240,11 +274,14 @@ const mockPermissions: MyPermissionsResponse = myPermissionsResponseSchema.parse
     "purchase.po.read",
     "purchase.po.create",
     "purchase.po.update",
-    "purchase.po.approve",
-    "purchase.po.post",
+    "purchase.po.issue",
+    "purchase.po.cancel",
     "purchase.invoice.create",
     "purchase.invoice.update",
     "purchase.invoice.approve",
+    "purchase.receipt.create",
+    "purchase.receipt.confirm",
+    "purchase.payment.record",
     "inventory.stock.read",
     "suppliers.supplier.read",
     "suppliers.supplier.create",
@@ -338,6 +375,9 @@ export const handlers = [
     if (purchaseFields) {
       return HttpResponse.json(purchaseFields);
     }
+    if (module === "purchase" && entity === "payment") {
+      return HttpResponse.json(PAYMENT_FIELDS);
+    }
     return HttpResponse.json(mockFieldDefinitions);
   }),
   http.get(`${API_BASE}${endpoints.menus}`, () => HttpResponse.json(mockMenuTree)),
@@ -395,6 +435,7 @@ export const handlers = [
   ...suppliersHandlers,
   ...brokersHandlers,
   ...purchaseHandlers,
+  ...purchasePaymentsHandlers,
   ...inventoryHandlers,
   ...attachmentsHandlers,
 ];

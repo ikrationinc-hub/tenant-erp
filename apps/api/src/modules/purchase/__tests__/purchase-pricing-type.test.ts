@@ -68,8 +68,8 @@ const ALL_PURCHASE_PERMISSIONS = [
   "purchase.po.create",
   "purchase.po.read",
   "purchase.po.update",
-  "purchase.po.approve",
-  "purchase.po.post",
+  "purchase.po.issue",
+  "purchase.po.cancel",
   "brokers.broker.create",
 ];
 
@@ -264,7 +264,7 @@ describe("modules/purchase - Prompt 21 item 2: pricing_type drives item rate (lm
       expect((res.body as { pricing: { purchaseRateUsd: string } }).pricing.purchaseRateUsd).toBe(finalPurchaseRateUsd);
 
       // Approve succeeds: valid item + an LME record both satisfied.
-      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/approve`).set("Authorization", authHeader);
+      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/issue`).set("Authorization", authHeader);
       expect(approveRes.status).toBe(200);
     },
     TEST_TIMEOUT_MS,
@@ -294,10 +294,10 @@ describe("modules/purchase - Prompt 21 item 2: pricing_type drives item rate (lm
       await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchasePricing).set({ lmeRecordId: null }).where(eq(purchasePricing.companyId, tenant.companyId)));
       await withTenantSchema(tenant.schemaName, (tx) => tx.delete(lmeRecords).where(eq(lmeRecords.purchaseId, purchaseId)));
 
-      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/approve`).set("Authorization", authHeader);
+      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/issue`).set("Authorization", authHeader);
       expect(approveRes.status).toBe(409);
       expect((approveRes.body as { error: { message: string } }).error.message).toBe(
-        "Cannot approve: LME pricing requires at least one LME record",
+        "Cannot issue: LME pricing requires at least one LME record",
       );
     },
     TEST_TIMEOUT_MS,
@@ -319,7 +319,7 @@ describe("modules/purchase - Prompt 21 item 2: pricing_type drives item rate (lm
       expect(res.status).toBe(201);
       expect((res.body as { pricing: { purchaseRateUsd: string } }).pricing.purchaseRateUsd).toBe("8000.000000");
 
-      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/approve`).set("Authorization", authHeader);
+      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/issue`).set("Authorization", authHeader);
       expect(approveRes.status).toBe(200);
     },
     TEST_TIMEOUT_MS,

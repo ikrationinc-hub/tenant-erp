@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { TenantTx } from "../../database/get-db.js";
 import { purchaseItems, purchasePricing } from "../../database/tenant/schema.js";
 
@@ -11,7 +11,30 @@ export interface PurchaseItemWithPricing extends PurchaseItemRow {
   pricing: PurchasePricingRow;
 }
 
+export interface OrderedQuantityRow {
+  purchaseId: string;
+  id: string;
+  quantity: string;
+}
+
 /** Only the repository layer touches SQL (rule 5) - service/controller never import `db`. */
+
+/**
+ * PL-4: the batched, list-screen version of listItemsWithPricingForPurchase
+ * below - just `id`/`quantity` (all computeReceivedStatus/
+ * computeBilledStatus actually read), for every purchase on the current
+ * page in ONE query, avoiding an N+1. No pricing join - the list's
+ * Received/Billed columns don't need rates/amounts, only ordered quantity.
+ */
+export async function listOrderedQuantitiesForPurchases(tx: TenantTx, companyId: string, purchaseIds: string[]): Promise<OrderedQuantityRow[]> {
+  if (purchaseIds.length === 0) {
+    return [];
+  }
+  return tx
+    .select({ purchaseId: purchaseItems.purchaseId, id: purchaseItems.id, quantity: purchaseItems.quantity })
+    .from(purchaseItems)
+    .where(and(inArray(purchaseItems.purchaseId, purchaseIds), eq(purchaseItems.companyId, companyId), isNull(purchaseItems.deletedAt)));
+}
 
 export async function listItemsWithPricingForPurchase(
   tx: TenantTx,

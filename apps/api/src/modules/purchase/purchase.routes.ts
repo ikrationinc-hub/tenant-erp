@@ -5,9 +5,11 @@ import { scopeResolverMiddleware } from "../../common/middleware/scope-resolver.
 import * as purchaseAllocationsController from "./purchase-allocations.controller.js";
 import * as purchaseCostsController from "./purchase-costs.controller.js";
 import * as purchaseHedgesController from "./purchase-hedges.controller.js";
-import * as purchaseInvoicesController from "./purchase-invoices.controller.js";
+import * as purchaseBillsController from "./purchase-bills.controller.js";
 import * as purchaseItemsController from "./purchase-items.controller.js";
 import * as purchaseLmeController from "./purchase-lme.controller.js";
+import * as purchaseReceiptsController from "./purchase-receipts.controller.js";
+import * as purchasePaymentsController from "./purchase-payments.controller.js";
 import * as purchaseController from "./purchase.controller.js";
 
 export const purchaseRouter: Router = Router();
@@ -16,23 +18,27 @@ const requirePurchaseModule = requireModuleEnabled("purchase");
 const readPermission = requirePermission("purchase.po.read");
 const createPermission = requirePermission("purchase.po.create");
 const updatePermission = requirePermission("purchase.po.update");
-const approvePermission = requirePermission("purchase.po.approve");
-const postPermission = requirePermission("purchase.po.post");
+const issuePermission = requirePermission("purchase.po.issue");
+const cancelPermission = requirePermission("purchase.po.cancel");
 const invoiceCreatePermission = requirePermission("purchase.invoice.create");
 const invoiceUpdatePermission = requirePermission("purchase.invoice.update");
 const invoiceApprovePermission = requirePermission("purchase.invoice.approve");
+const receiptCreatePermission = requirePermission("purchase.receipt.create");
+const receiptConfirmPermission = requirePermission("purchase.receipt.confirm");
 
 purchaseRouter.get("/", scopeResolverMiddleware, requirePurchaseModule, readPermission, purchaseController.list);
 purchaseRouter.get("/:id", scopeResolverMiddleware, requirePurchaseModule, readPermission, purchaseController.getById);
 purchaseRouter.post("/", scopeResolverMiddleware, requirePurchaseModule, createPermission, purchaseController.create);
 purchaseRouter.patch("/:id", scopeResolverMiddleware, requirePurchaseModule, updatePermission, purchaseController.update);
 
-// FR-107/FR-108 - each transition its own permission (this task's own
-// instruction). Resolved open question #10: approve is where stock moves
-// (core/workflow/transitions.ts, purchase.service.ts); post is a pure
-// accounting lock (rule 8) with no inventory effect of its own.
-purchaseRouter.patch("/:id/approve", scopeResolverMiddleware, requirePurchaseModule, approvePermission, purchaseController.approve);
-purchaseRouter.patch("/:id/post", scopeResolverMiddleware, requirePurchaseModule, postPermission, purchaseController.post);
+// PL-3 (docs/PURCHASE-LIFECYCLE-4DOC.md, ADR 0018) - each transition its
+// own permission. "approve"/"post" are gone: issue commits the PO to the
+// supplier (core/workflow/transitions.ts, purchase.service.ts); cancel
+// kills an unfulfilled PO before anything's been received/billed against
+// it. "Closed" has no route at all - it's derived and automatic
+// (purchase.service.ts's maybeAutoClosePurchase), never user-invoked.
+purchaseRouter.patch("/:id/issue", scopeResolverMiddleware, requirePurchaseModule, issuePermission, purchaseController.issue);
+purchaseRouter.patch("/:id/cancel", scopeResolverMiddleware, requirePurchaseModule, cancelPermission, purchaseController.cancel);
 
 // FR-104 (Sub Tab 2, table D) - items are "one or multiple" per purchase,
 // so adding is its own endpoint rather than only a create-time array
@@ -137,28 +143,116 @@ purchaseRouter.patch(
   purchaseHedgesController.updateStatus,
 );
 
-// Prompt 22: the supplier invoice - its own lifecycle, own permissions
-// (create/update/approve, not the purchase's po.* ones). No GET list/byId
-// of its own, same convention as items/allocations/lme-records/hedges -
-// the full set comes back via GET /:id (purchase.service.ts's getById).
+// PL-2 (docs/PURCHASE-LIFECYCLE-4DOC.md, ADR 0017): the Bill - own
+// lifecycle, own permissions (create/update/approve, not the purchase's
+// po.* ones). Renamed internally from Prompt 22's "supplier invoice"
+// (purchase-bills.*), but the ROUTE PATH, PARAM NAME, and PERMISSION KEYS
+// are deliberately kept as /invoices, :invoiceId, purchase.invoice.* -
+// this prompt is backend-only; PL-4 does the coordinated REST-surface +
+// frontend cutover to Bill vocabulary. No GET list/byId of its own, same
+// convention as items/allocations/lme-records/hedges - the full set comes
+// back via GET /:id (purchase.service.ts's getById).
 purchaseRouter.post(
   "/:id/invoices",
   scopeResolverMiddleware,
   requirePurchaseModule,
   invoiceCreatePermission,
-  purchaseInvoicesController.create,
+  purchaseBillsController.create,
 );
 purchaseRouter.patch(
   "/:id/invoices/:invoiceId",
   scopeResolverMiddleware,
   requirePurchaseModule,
   invoiceUpdatePermission,
-  purchaseInvoicesController.update,
+  purchaseBillsController.update,
 );
 purchaseRouter.patch(
   "/:id/invoices/:invoiceId/approve",
   scopeResolverMiddleware,
   requirePurchaseModule,
   invoiceApprovePermission,
-  purchaseInvoicesController.approve,
+  purchaseBillsController.approve,
+);
+// PL-4: the itemized per-purchase bill list (with nested items) - a real
+// GET, unlike the header-only invoices array embedded in GET /:id. The
+// Bill form's "default to un-billed qty" needs each bill's own line
+// items, not just the purchase-level billedStatus aggregate.
+purchaseRouter.get(
+  "/:id/invoices",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  readPermission,
+  purchaseBillsController.list,
+);
+
+// PL-1 (docs/PURCHASE-LIFECYCLE-4DOC.md): the Purchase Receipt - its own
+// lifecycle (Draft -> Confirmed), own permissions, own numbering. This is
+// where stock actually moves (purchase-receipts.service.ts's confirm),
+// superseding invoice-approval-moves-stock (ADR 0015 -> ADR 0016). Has a
+// real GET list (unlike items/allocations/lme-records/hedges/invoices)
+// since a purchase can have MULTIPLE receipts and the fulfilment strip
+// needs to enumerate them, not just see the latest one via GET /:id.
+purchaseRouter.get(
+  "/:id/receipts",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  readPermission,
+  purchaseReceiptsController.list,
+);
+purchaseRouter.post(
+  "/:id/receipts",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  receiptCreatePermission,
+  purchaseReceiptsController.create,
+);
+purchaseRouter.patch(
+  "/:id/receipts/:receiptId/confirm",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  receiptConfirmPermission,
+  purchaseReceiptsController.confirm,
+);
+
+/**
+ * PL-4: the standalone "Purchase Receipts" and "Purchase Bills" list
+ * screens (Zoho's own top-level nav items for these documents) need a
+ * cross-purchase GET spanning every purchase in the company - `purchaseRouter`
+ * itself can't host that at a path like "/receipts" or "/bills" without
+ * colliding with its own "/:id" param route (Express would match "id" =
+ * "receipts"). Two small standalone routers instead, mounted at their own
+ * top-level paths in app.ts ("/purchase-receipts", "/purchase-bills") -
+ * same requirePurchaseModule/readPermission gating as everything else here
+ * (reusing purchase.po.read rather than adding new purchase.receipt.read/
+ * purchase.invoice.read permissions, since the per-purchase routes above
+ * already gate reads the same way).
+ */
+export const purchaseReceiptsListRouter: Router = Router();
+purchaseReceiptsListRouter.get("/", scopeResolverMiddleware, requirePurchaseModule, readPermission, purchaseReceiptsController.listAll);
+
+export const purchaseBillsListRouter: Router = Router();
+purchaseBillsListRouter.get("/", scopeResolverMiddleware, requirePurchaseModule, readPermission, purchaseBillsController.listAll);
+
+/**
+ * PL-5: Payment - unlike Receipt/Bill, never nested under a single
+ * purchase at all (it's scoped to a SUPPLIER, potentially settling bills
+ * across several purchases in one record), so it was never going to fit
+ * under purchaseRouter's own "/:id/..." shape to begin with - its own
+ * top-level router from the start, not a later standalone-list carve-out
+ * like the two above. "record" (not "create") is the permission action -
+ * seed-roles.ts's own Manager-tier bar for money actually leaving the
+ * company, see manifests.ts's doc comment on this permission entry.
+ */
+const paymentRecordPermission = requirePermission("purchase.payment.record");
+
+export const purchasePaymentsRouter: Router = Router();
+purchasePaymentsRouter.get("/", scopeResolverMiddleware, requirePurchaseModule, readPermission, purchasePaymentsController.listAll);
+purchasePaymentsRouter.get("/:id", scopeResolverMiddleware, requirePurchaseModule, readPermission, purchasePaymentsController.getById);
+purchasePaymentsRouter.post("/", scopeResolverMiddleware, requirePurchaseModule, paymentRecordPermission, purchasePaymentsController.create);
+purchasePaymentsRouter.get(
+  "/outstanding-bills/:supplierId",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  readPermission,
+  purchasePaymentsController.listOutstandingBills,
 );

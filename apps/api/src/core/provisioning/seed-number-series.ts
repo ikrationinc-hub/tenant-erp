@@ -29,6 +29,21 @@ const DEFAULT_SERIES: DefaultSeries[] = [
   // numbered independently of the purchase it's linked to - same {FY}
   // pattern as PO, not SUPPLIER/BROKER's company-wide one.
   { docType: "SUPPLIER_INVOICE", prefixPattern: "SINV-{FY}-{0000}", padding: 4 },
+  // PL-1: a purchase receipt is its own fiscal document too - same {FY}
+  // pattern as PO/SUPPLIER_INVOICE, numbered independently of both.
+  // CLAUDE.md's Vocabulary section: "Purchase Receipt" is the provisional
+  // canonical term (PR-) until the client confirms GRN, which would win
+  // if/when they do - not a hard rename now.
+  { docType: "PURCHASE_RECEIPT", prefixPattern: "PR-{FY}-{0000}", padding: 4 },
+  // PL-2: the Bill (renamed from Prompt 22's "Supplier Invoice",
+  // CLAUDE.md's Vocabulary section) gets its own series going forward -
+  // SUPPLIER_INVOICE is left alone, never reused, so historical
+  // SINV-numbered bills keep their numbers (numbering is never rewritten,
+  // rule 8's spirit).
+  { docType: "BILL", prefixPattern: "BILL-{FY}-{0000}", padding: 4 },
+  // PL-5: Payment, the 4th and final lifecycle document - its own fiscal
+  // document, same {FY} pattern as PO/BILL/PURCHASE_RECEIPT.
+  { docType: "PAYMENT", prefixPattern: "PAY-{FY}-{0000}", padding: 4 },
 ];
 
 /** Idempotent: number_series' own (company, branch, doc_type, fiscal_year) unique constraint (nullsNotDistinct) makes a second insert for the same series a no-op via onConflictDoNothing - re-running provisioning never resets an in-flight counter. */

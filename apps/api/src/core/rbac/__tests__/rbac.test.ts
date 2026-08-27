@@ -107,7 +107,7 @@ function buildTestApp(): express.Express {
   app.use(express.json());
   app.use(scopeResolverMiddleware);
 
-  app.get("/probe/permission", requirePermission("purchase.po.approve"), (_req, res) => {
+  app.get("/probe/permission", requirePermission("purchase.po.issue"), (_req, res) => {
     res.status(200).json({ ok: true });
   });
 
@@ -155,7 +155,7 @@ describe("permission engine (core/rbac)", () => {
     async () => {
       const seed = await seedTenantWithUser("rbac-grant");
       const app = buildTestApp();
-      const permissionId = await findPermissionId(seed.tenant.schemaName, "purchase.po.approve");
+      const permissionId = await findPermissionId(seed.tenant.schemaName, "purchase.po.issue");
 
       const role = await createRole({
         schemaName: seed.tenant.schemaName,
@@ -186,7 +186,7 @@ describe("permission engine (core/rbac)", () => {
     async () => {
       const seed = await seedTenantWithUser("rbac-invalidate");
       const app = buildTestApp();
-      const permissionId = await findPermissionId(seed.tenant.schemaName, "purchase.po.approve");
+      const permissionId = await findPermissionId(seed.tenant.schemaName, "purchase.po.issue");
 
       const role = await createRole({
         schemaName: seed.tenant.schemaName,
@@ -222,7 +222,7 @@ describe("permission engine (core/rbac)", () => {
     "resolve() reflects a granted permission in its returned Set without a second query",
     async () => {
       const seed = await seedTenantWithUser("rbac-resolve");
-      const permissionId = await findPermissionId(seed.tenant.schemaName, "purchase.po.approve");
+      const permissionId = await findPermissionId(seed.tenant.schemaName, "purchase.po.issue");
 
       const role = await createRole({
         schemaName: seed.tenant.schemaName,
@@ -243,7 +243,7 @@ describe("permission engine (core/rbac)", () => {
         },
       });
 
-      expect(resolved.permissions.has("purchase.po.approve")).toBe(true);
+      expect(resolved.permissions.has("purchase.po.issue")).toBe(true);
       expect(resolved.permissions.has("masters.country.update")).toBe(false);
     },
     TEST_TIMEOUT_MS,

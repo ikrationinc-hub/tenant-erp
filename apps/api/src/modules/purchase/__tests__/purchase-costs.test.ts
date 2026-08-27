@@ -237,7 +237,7 @@ describe("modules/purchase - Record Purchase, session (c): additional costs (doc
       const authHeader = `Bearer ${tenant.accessToken}`;
       const purchaseId = await createDraftPurchase(app, authHeader, tenant);
 
-      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "posted" }).where(eq(purchases.id, purchaseId)));
+      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "issued" }).where(eq(purchases.id, purchaseId)));
 
       const res = await request(app).patch(`/api/v1/purchases/${purchaseId}/costs`).set("Authorization", authHeader).send({ freight: "100" });
       expect(res.status).toBe(409);

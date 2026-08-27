@@ -52,30 +52,6 @@ export async function insertStockMovement(tx: TenantTx, values: StockMovementIns
   return row;
 }
 
-/**
- * Prompt 22 Part 4: the "still active" purchase_receipt rows a purchase
- * invoice previously wrote - i.e. not yet offset by a purchase_reversal
- * whose reversal_of_movement_id points back at them. Ledger-derived, not
- * a status flag on the row itself (append-only: nothing about an
- * existing row ever changes when it's reversed, only a NEW row gets
- * written referencing it). Re-approval reverses exactly these, then
- * writes fresh receipts for the purchase's current items - see
- * modules/inventory/inventory-subscriber.ts's handleInvoiceApproved.
- */
-export async function listActiveReceiptsForInvoice(tx: TenantTx, companyId: string, invoiceId: string): Promise<StockMovementRow[]> {
-  return tx
-    .select()
-    .from(stockMovements)
-    .where(
-      and(
-        eq(stockMovements.companyId, companyId),
-        eq(stockMovements.purchaseInvoiceId, invoiceId),
-        eq(stockMovements.movementType, "purchase_receipt"),
-        sql`not exists (select 1 from stock_movements rev where rev.reversal_of_movement_id = ${stockMovements.id})`,
-      ),
-    );
-}
-
 export async function listStockMovementsByReference(
   tx: TenantTx,
   companyId: string,
@@ -202,6 +178,7 @@ export async function listStockMovements(
         referenceType: stockMovements.referenceType,
         referenceId: stockMovements.referenceId,
         purchaseInvoiceId: stockMovements.purchaseInvoiceId,
+        receiptId: stockMovements.receiptId,
         reversalOfMovementId: stockMovements.reversalOfMovementId,
         createdAt: stockMovements.createdAt,
         updatedAt: stockMovements.updatedAt,

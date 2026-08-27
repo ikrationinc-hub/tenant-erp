@@ -54,13 +54,12 @@ const purchaseRowSchema = z.object({
   companyId: z.string(),
   purchaseNumber: z.string(),
   purchaseDate: z.string(),
-  status: z.enum(["draft", "approved", "posted"]),
+  status: z.enum(["draft", "issued", "closed", "cancelled"]),
   divisionId: z.string().nullable().optional(),
   pricingType: z.enum(["lme", "fixed"]).nullable().optional(),
   branchId: z.string(),
   buyerId: z.string(),
   supplierId: z.string(),
-  supplierInvoiceNo: z.string().nullable().optional(),
   supplierReferenceNo: z.string().nullable().optional(),
   brokerId: z.string().nullable().optional(),
   brokerCommission: z.string().nullable().optional(),
@@ -273,11 +272,11 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
       const updateRes = await request(app)
         .patch(`/api/v1/purchases/${created.id}`)
         .set("Authorization", authHeader)
-        .send({ supplierInvoiceNo: "INV-99", shipment: { containerId: tenant.refs.containerId2, loadingDate: "2023-01-05" } });
+        .send({ supplierReferenceNo: "REF-99", shipment: { containerId: tenant.refs.containerId2, loadingDate: "2023-01-05" } });
 
       expect(updateRes.status).toBe(200);
       const updated = asPurchase(updateRes);
-      expect(updated.supplierInvoiceNo).toBe("INV-99");
+      expect(updated.supplierReferenceNo).toBe("REF-99");
       expect(updated.shipment?.containerId).toBe(tenant.refs.containerId2);
       // Changing Loading Date recomputes Shipment Year - it's derived, never stale.
       expect(updated.shipment?.shipmentYear).toBe(2023);
@@ -301,12 +300,12 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
         await request(app).post("/api/v1/purchases").set("Authorization", authHeader).send(basePayload(tenant.refs)),
       );
 
-      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "approved" }).where(eq(purchases.id, created.id)));
+      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "issued" }).where(eq(purchases.id, created.id)));
 
       const updateRes = await request(app)
         .patch(`/api/v1/purchases/${created.id}`)
         .set("Authorization", authHeader)
-        .send({ supplierInvoiceNo: "should-not-apply" });
+        .send({ supplierReferenceNo: "should-not-apply" });
       expect(updateRes.status).toBe(409);
     },
     TEST_TIMEOUT_MS,
@@ -323,7 +322,7 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
         await request(app)
           .post("/api/v1/purchases")
           .set("Authorization", authHeader)
-          .send(basePayload(tenant.refs, { supplierInvoiceNo: `INV-${i}` }));
+          .send(basePayload(tenant.refs, { supplierReferenceNo: `REF-${i}` }));
       }
 
       const page1 = asPaginated(
@@ -376,8 +375,8 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
       const tenant = await seedPurchaseTenant("list-filters");
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
-      const approvePermissionId = await findPermissionId(tenant.schemaName, "purchase.po.approve");
-      await grantPermissionToRole(tenant.schemaName, tenant.companyId, tenant.roleId, approvePermissionId, tenant.userId);
+      const issuePermissionId = await findPermissionId(tenant.schemaName, "purchase.po.issue");
+      await grantPermissionToRole(tenant.schemaName, tenant.companyId, tenant.roleId, issuePermissionId, tenant.userId);
 
       const { otherBranchId, otherSupplierId, itemId, uomId } = await withTenantSchema(tenant.schemaName, async (tx) => {
         const [supplierType] = await tx.select().from(supplierTypes).where(eq(supplierTypes.companyId, tenant.companyId)).limit(1);
@@ -421,7 +420,7 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
           .send(basePayload(tenant.refs, { purchaseDate: "2024-01-10" })),
       );
 
-      // B: other branch/supplier, later date, gets approved.
+      // B: other branch/supplier, later date, gets issued.
       const purchaseB = asPurchase(
         await request(app)
           .post("/api/v1/purchases")
@@ -434,22 +433,22 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
             }),
           ),
       );
-      // Approve now requires at least one valid item (core/workflow/guards.ts's requireAtLeastOneValidLine).
+      // Issue now requires at least one valid item (core/workflow/guards.ts's requireAtLeastOneValidLine).
       const itemRes = await request(app)
         .post(`/api/v1/purchases/${purchaseB.id}/items`)
         .set("Authorization", authHeader)
         .send({ itemId, quantity: "10", uomId, purchaseRateUsd: "8000", exchangeRate: "3.6725" });
       expect(itemRes.status).toBe(201);
 
-      const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseB.id}/approve`).set("Authorization", authHeader);
-      expect(approveRes.status).toBe(200);
+      const issueRes = await request(app).patch(`/api/v1/purchases/${purchaseB.id}/issue`).set("Authorization", authHeader);
+      expect(issueRes.status).toBe(200);
 
       async function idsFor(query: Record<string, string>): Promise<Set<string>> {
         const res = asPaginated(await request(app).get("/api/v1/purchases").query(query).set("Authorization", authHeader));
         return new Set(res.items.map((row) => row.id));
       }
 
-      expect(await idsFor({ status: "approved" })).toEqual(new Set([purchaseB.id]));
+      expect(await idsFor({ status: "issued" })).toEqual(new Set([purchaseB.id]));
       expect(await idsFor({ status: "draft" })).toEqual(new Set([purchaseA.id]));
       expect(await idsFor({ supplierId: otherSupplierId })).toEqual(new Set([purchaseB.id]));
       expect(await idsFor({ branchId: otherBranchId })).toEqual(new Set([purchaseB.id]));
@@ -460,7 +459,7 @@ describe("modules/purchase - Record Purchase, session (a): header + shipment (do
       );
 
       // Combined: branchId + status together narrow to the intersection, not either alone.
-      expect(await idsFor({ branchId: otherBranchId, status: "approved" })).toEqual(new Set([purchaseB.id]));
+      expect(await idsFor({ branchId: otherBranchId, status: "issued" })).toEqual(new Set([purchaseB.id]));
       expect(await idsFor({ branchId: otherBranchId, status: "draft" })).toEqual(new Set());
     },
     TEST_TIMEOUT_MS,

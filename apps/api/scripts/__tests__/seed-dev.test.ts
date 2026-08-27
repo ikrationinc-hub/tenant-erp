@@ -46,7 +46,7 @@ describe("scripts/seed-dev - the pnpm seed:dev dev-seed data", () => {
   });
 
   it(
-    "creates 3 suppliers and one purchase in each of draft/approved/posted, and is idempotent - a second run creates nothing new",
+    "creates 3 suppliers and one purchase in each of draft/issued/closed, and is idempotent - a second run creates nothing new",
     async () => {
       const tenant = await seedProvisionedTenant("seed-dev");
 
@@ -59,17 +59,17 @@ describe("scripts/seed-dev - the pnpm seed:dev dev-seed data", () => {
 
       const purchaseRows = await withTenantSchema(tenant.schemaName, (tx) => tx.select().from(purchases));
       expect(purchaseRows).toHaveLength(3);
-      expect(new Set(purchaseRows.map((row) => row.status))).toEqual(new Set(["draft", "approved", "posted"]));
+      expect(new Set(purchaseRows.map((row) => row.status))).toEqual(new Set(["draft", "issued", "closed"]));
 
-      const postedRow = purchaseRows.find((row) => row.id === first.postedPurchaseId);
-      expect(postedRow?.status).toBe("posted");
+      const closedRow = purchaseRows.find((row) => row.id === first.closedPurchaseId);
+      expect(closedRow?.status).toBe("closed");
 
       // --- second run: same ids, no new rows -----------------------------
       const second = await seedDevData(tenant.slug);
       expect(second.supplierIds).toEqual(first.supplierIds);
       expect(second.draftPurchaseId).toBe(first.draftPurchaseId);
-      expect(second.approvedPurchaseId).toBe(first.approvedPurchaseId);
-      expect(second.postedPurchaseId).toBe(first.postedPurchaseId);
+      expect(second.issuedPurchaseId).toBe(first.issuedPurchaseId);
+      expect(second.closedPurchaseId).toBe(first.closedPurchaseId);
 
       const supplierRowsAfter = await withTenantSchema(tenant.schemaName, (tx) => tx.select().from(suppliers));
       expect(supplierRowsAfter).toHaveLength(3);

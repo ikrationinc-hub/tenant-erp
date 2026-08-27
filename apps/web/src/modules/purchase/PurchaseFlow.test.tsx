@@ -11,8 +11,14 @@ import { endpoints } from "../../core/api/endpoints";
 import { queryClient } from "../../core/api/query-client";
 import { PurchaseListScreen, PURCHASE_LIST_PATH } from "./PurchaseListScreen";
 import { PurchaseDetailScreen } from "./PurchaseDetailScreen";
+import { PurchasePaymentsListScreen, PURCHASE_PAYMENTS_LIST_PATH } from "./PurchasePaymentsListScreen";
 
-const ASYNC = { timeout: 20000 };
+// 30s (not 20s) - PL-5's own test runs a second full screen navigation
+// (Payments Made) with its own supplier-options/outstanding-bills queries
+// on top of everything PL-4's lifecycle test already does, and under
+// full-file CPU contention (many heavy AntD trees mounting sequentially in
+// one worker) 20s was occasionally too tight for that combination.
+const ASYNC = { timeout: 30000 };
 const API_BASE = import.meta.env.VITE_WEB_API_BASE_URL;
 
 function signIn(): void {
@@ -36,6 +42,7 @@ const testRoutes: RouteObject[] = [
     path: `${PURCHASE_LIST_PATH}/:id`,
     element: <PurchaseDetailScreenFromParams />,
   },
+  { path: PURCHASE_PAYMENTS_LIST_PATH, element: <PurchasePaymentsListScreen /> },
 ];
 
 // createMemoryRouter never touches window.location - useLocation() is the
@@ -133,7 +140,7 @@ async function fillHeaderAndShipment(
 
 describe("Purchase - create, items, and workflow", () => {
   it(
-    "creates a purchase, adds an item with server-computed pricing, then Approve -> Post makes it read-only",
+    "creates a purchase, adds an item with server-computed pricing, then Issue -> Cancel makes it read-only",
     async () => {
       signIn();
       const user = userEvent.setup();
@@ -164,16 +171,21 @@ describe("Purchase - create, items, and workflow", () => {
 
       expect(await screen.findByText("4216375.00", {}, ASYNC)).toBeInTheDocument();
 
-      // Workflow: Draft -> Approved -> Posted.
-      await user.click(await screen.findByRole("button", { name: "Approve" }, ASYNC));
-      expect(await screen.findByText("Approved", {}, ASYNC)).toBeInTheDocument();
+      // Workflow: Draft -> Issued -> Cancelled (PL-3: Closed is derived/
+      // automatic - reaching it would need a mocked receipt+bill, out of
+      // scope here; Cancelled is the terminal state this test can reach
+      // directly, and proves the same immutability rule 8 requires).
+      await user.click(await screen.findByRole("button", { name: "Issue" }, ASYNC));
+      expect(await screen.findByText("Issued", {}, ASYNC)).toBeInTheDocument();
 
-      await user.click(await screen.findByRole("button", { name: "Post" }, ASYNC));
-      expect(await screen.findByText("Posted", {}, ASYNC)).toBeInTheDocument();
+      await user.click(await screen.findByRole("button", { name: "Cancel" }, ASYNC));
+      // AntD Popconfirm's default confirm button text is "OK", not "Yes".
+      await user.click(await screen.findByRole("button", { name: "Cancel PO" }, ASYNC));
+      expect(await screen.findByText("Cancelled", {}, ASYNC)).toBeInTheDocument();
 
-      // Rule 8: posted is immutable, visible in the UI, not just the API.
+      // Rule 8: a terminal state is immutable, visible in the UI, not just the API.
       expect(
-        await screen.findByText(/posted and immutable/i, {}, ASYNC),
+        await screen.findByText(/cancelled before it was fulfilled/i, {}, ASYNC),
       ).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Add Item" })).not.toBeInTheDocument();
@@ -182,9 +194,9 @@ describe("Purchase - create, items, and workflow", () => {
   );
 });
 
-describe("Purchase - supplier invoice moves stock, not PO approval (Prompt 22)", () => {
+describe("Purchase - the Bill moves stock, not PO issuance (PL-1/PL-2)", () => {
   it(
-    "approving the PO shows no invoice yet; creating and approving a supplier invoice flips its own status independently",
+    "issuing the PO shows no invoice yet; creating and approving a bill flips its own status independently",
     async () => {
       signIn();
       const user = userEvent.setup();
@@ -206,35 +218,221 @@ describe("Purchase - supplier invoice moves stock, not PO approval (Prompt 22)",
       await user.click(itemDrawer.getByRole("button", { name: "Save" }));
       await screen.findByText("Purchase Items & Pricing", {}, ASYNC);
 
-      // Section always visible, empty until a supplier invoice actually exists.
-      expect(await screen.findByText("Supplier Invoices", {}, ASYNC)).toBeInTheDocument();
-      expect(screen.getByText(/a purchase order is intent only/i)).toBeInTheDocument();
+      // Section always visible, empty until a bill actually exists.
+      expect(await screen.findByText("Bills", {}, ASYNC)).toBeInTheDocument();
+      expect(screen.getByText(/no bills yet/i)).toBeInTheDocument();
 
-      await user.click(await screen.findByRole("button", { name: "Approve" }, ASYNC));
-      expect(await screen.findByText("Approved", {}, ASYNC)).toBeInTheDocument();
-      // Approving the PO alone never creates or touches an invoice.
-      expect(screen.getByText(/a purchase order is intent only/i)).toBeInTheDocument();
+      await user.click(await screen.findByRole("button", { name: "Issue" }, ASYNC));
+      expect(await screen.findByText("Order Placed", {}, ASYNC)).toBeInTheDocument();
+      // Issuing the PO alone never creates or touches a bill.
+      expect(screen.getByText(/no bills yet/i)).toBeInTheDocument();
 
-      await user.click(await screen.findByRole("button", { name: /Add Invoice/ }, ASYNC));
-      const invoiceDrawer = within(screen.getByRole("dialog"));
+      // PL-4: bills are created from the PO's own "Convert to Bill" action,
+      // prefilled with each item's un-billed quantity - not a blank form.
+      // Saving is a single action that both creates AND approves the bill
+      // (PurchaseBillForm), not a separate create-then-approve pair - there
+      // is no "save as draft" step in this flow.
+      await user.click(await screen.findByRole("button", { name: "Convert to Bill" }, ASYNC));
+      const billDrawer = within(screen.getByRole("dialog"));
+      await billDrawer.findByText("Outstanding", {}, ASYNC);
       // No {Enter} here: unlike the header/shipment form, Invoice Date is
       // the ONLY mandatory field on this form, so an Enter-triggered
       // native submit would actually pass validation and fire early,
       // closing the drawer before the explicit Save click below runs.
-      await user.type(invoiceDrawer.getByLabelText("Invoice Date"), "2026-08-05");
-      await user.type(invoiceDrawer.getByLabelText("Invoice Amount (USD)"), "50000");
-      await user.click(invoiceDrawer.getByText("Add Supplier Invoice"));
-      await user.click(invoiceDrawer.getByRole("button", { name: "Save" }));
+      await user.type(billDrawer.getByLabelText("Invoice Date"), "2026-08-05");
+      await user.type(billDrawer.getByLabelText("Invoice Amount (USD)"), "50000");
+      await user.click(billDrawer.getByRole("button", { name: "Save" }));
 
-      expect(await screen.findByText("Draft", {}, ASYNC)).toBeInTheDocument();
-      expect(screen.getByText(/^SINV-2024-/)).toBeInTheDocument();
+      expect(await screen.findByText(/^BILL-2024-/, {}, ASYNC)).toBeInTheDocument();
 
-      await user.click(await screen.findByRole("button", { name: "Approve" }, ASYNC));
-
-      // Two "Approved" tags now: the PO's own status tag, and the invoice row's.
-      await waitFor(() => expect(screen.getAllByText("Approved").length).toBeGreaterThanOrEqual(2), ASYNC);
+      // The bill's own status tag - the PO's own tag still says "Issued"
+      // (via "Order Placed" in the fulfilment strip), never "Approved"
+      // (PL-3: that verb belongs to the bill alone now).
+      await waitFor(() => expect(screen.getAllByText("Approved").length).toBeGreaterThanOrEqual(1), ASYNC);
+      expect(screen.getByText("Order Placed")).toBeInTheDocument();
     },
     60000,
+  );
+});
+
+describe("Purchase - PL-4 fulfilment lifecycle (Receive/Convert to Bill drive the fulfilment strip)", () => {
+  it(
+    "Receive creates a partial receipt and moves the strip to Partially Received; a second full receive plus a full bill closes the PO",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      const { router } = renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/new`] });
+
+      await fillHeaderAndShipment(user, "CONT-P4LIFECYCLE");
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(router.state.location.pathname).not.toBe(`${PURCHASE_LIST_PATH}/new`), ASYNC);
+
+      await user.click(await screen.findByRole("button", { name: "Add Item" }, ASYNC));
+      const itemDrawer = within(screen.getByRole("dialog"));
+      await user.click(itemDrawer.getByRole("combobox", { name: "Item" }));
+      await user.click((await screen.findAllByText("Items 1", {}, ASYNC)).at(-1) ?? screen.getByText("Items 1"));
+      await user.type(itemDrawer.getByLabelText("Quantity"), "500");
+      await user.click(itemDrawer.getByRole("combobox", { name: "Unit of Measure" }));
+      await user.click((await screen.findAllByText("Units of Measure 1", {}, ASYNC)).at(-1) ?? screen.getByText("Units of Measure 1"));
+      await user.type(itemDrawer.getByLabelText("Purchase Rate (USD)"), "100");
+      await user.type(itemDrawer.getByLabelText("Exchange Rate"), "3.6725");
+      await user.click(itemDrawer.getByRole("button", { name: "Save" }));
+      await screen.findByText("Purchase Items & Pricing", {}, ASYNC);
+
+      await user.click(await screen.findByRole("button", { name: "Issue" }, ASYNC));
+      expect(await screen.findByText("Order Placed", {}, ASYNC)).toBeInTheDocument();
+      expect(screen.getByText("Not Received")).toBeInTheDocument();
+
+      // Partial receive: cut the prefilled outstanding qty (500) down to 200.
+      await user.click(await screen.findByRole("button", { name: "Receive" }, ASYNC));
+      const receiveDrawer = within(latestDialogElement());
+      const receiveQtyInput = await receiveDrawer.findByRole("textbox", { name: /Quantity for item/ }, ASYNC);
+      await user.clear(receiveQtyInput);
+      await user.type(receiveQtyInput, "200");
+      await user.type(receiveDrawer.getByLabelText("Receipt Date"), "2026-08-10{Enter}");
+      await selectOption(user, "Warehouse", "Jebel Ali Warehouse");
+      await user.click(receiveDrawer.getByRole("button", { name: "Save" }));
+
+      // Stock moved and the strip reflects a partial receive - not fully
+      // done yet, so the Receive action stays available for the remainder.
+      await waitFor(() => expect(screen.getByText("Partially Received")).toBeInTheDocument(), ASYNC);
+      expect(await screen.findByRole("button", { name: "Receive" }, ASYNC)).toBeInTheDocument();
+
+      // Receive the remaining 300 - now fully received, Receive disappears.
+      await user.click(screen.getByRole("button", { name: "Receive" }));
+      const secondReceiveDrawer = within(latestDialogElement());
+      await secondReceiveDrawer.findByText("Outstanding", {}, ASYNC);
+      await user.type(secondReceiveDrawer.getByLabelText("Receipt Date"), "2026-08-11{Enter}");
+      await selectOption(user, "Warehouse", "Jebel Ali Warehouse");
+      await user.click(secondReceiveDrawer.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(screen.getByText("Received")).toBeInTheDocument(), ASYNC);
+      expect(screen.queryByRole("button", { name: "Receive" })).not.toBeInTheDocument();
+
+      // Fully bill the same 500 in one shot - both axes now fully done, so
+      // the PO auto-closes (no manual "Close" action exists anywhere).
+      await user.click(screen.getByRole("button", { name: "Convert to Bill" }));
+      const billDrawer = within(latestDialogElement());
+      await billDrawer.findByText("Outstanding", {}, ASYNC);
+      await user.type(billDrawer.getByLabelText("Invoice Date"), "2026-08-12{Enter}");
+      await user.type(billDrawer.getByLabelText("Invoice Amount (USD)"), "50000");
+      await user.click(billDrawer.getByRole("button", { name: "Save" }));
+
+      expect(await screen.findByText("Billed", {}, ASYNC)).toBeInTheDocument();
+      // "Closed" is now the PO's own status tag - the terminal, immutable
+      // state (rule 8), reached automatically with no Close button anywhere.
+      await waitFor(() => expect(screen.getByText("Closed")).toBeInTheDocument(), ASYNC);
+      expect(screen.queryByRole("button", { name: "Convert to Bill" })).not.toBeInTheDocument();
+    },
+    60000,
+  );
+});
+
+describe("Purchase - PL-5 Payment (records against a bill, drives the fulfilment strip's Pay step)", () => {
+  it(
+    "recording a payment for the bill's full amount moves the bill to Paid and the PO's own Pay step to Fully Paid",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      const { router } = renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/new`] });
+
+      await fillHeaderAndShipment(user, "CONT-P5PAYMENT");
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(router.state.location.pathname).not.toBe(`${PURCHASE_LIST_PATH}/new`), ASYNC);
+
+      // Every other test in this file bills the SAME mock supplier, and the
+      // mock's in-memory `purchases` array (purchase-handlers.ts) is never
+      // reset between tests in the same file - so by the time this test's
+      // own payment drawer opens, outstandingBillsForSupplier can return
+      // several other tests' own outstanding bills too. Capture this test's
+      // own PO number now (the header's "Purchase PO-000N") to disambiguate
+      // its own row from theirs, rather than assuming it's the only one.
+      const purchaseNumber = (await screen.findByRole("heading", { level: 4, name: /^Purchase PO-/ }, ASYNC)).textContent?.replace(
+        "Purchase ",
+        "",
+      );
+      if (!purchaseNumber) {
+        throw new Error("expected the page heading to resolve to \"Purchase PO-...\" after Save");
+      }
+
+      await user.click(await screen.findByRole("button", { name: "Add Item" }, ASYNC));
+      const itemDrawer = within(screen.getByRole("dialog"));
+      await user.click(itemDrawer.getByRole("combobox", { name: "Item" }));
+      await user.click((await screen.findAllByText("Items 1", {}, ASYNC)).at(-1) ?? screen.getByText("Items 1"));
+      await user.type(itemDrawer.getByLabelText("Quantity"), "500");
+      await user.click(itemDrawer.getByRole("combobox", { name: "Unit of Measure" }));
+      await user.click((await screen.findAllByText("Units of Measure 1", {}, ASYNC)).at(-1) ?? screen.getByText("Units of Measure 1"));
+      await user.type(itemDrawer.getByLabelText("Purchase Rate (USD)"), "100");
+      await user.type(itemDrawer.getByLabelText("Exchange Rate"), "3.6725");
+      await user.click(itemDrawer.getByRole("button", { name: "Save" }));
+      await screen.findByText("Purchase Items & Pricing", {}, ASYNC);
+
+      await user.click(await screen.findByRole("button", { name: "Issue" }, ASYNC));
+      expect(await screen.findByText("Order Placed", {}, ASYNC)).toBeInTheDocument();
+      expect(screen.getByText("Not Paid")).toBeInTheDocument();
+
+      await user.click(await screen.findByRole("button", { name: "Convert to Bill" }, ASYNC));
+      const billDrawer = within(latestDialogElement());
+      await billDrawer.findByText("Outstanding", {}, ASYNC);
+      await user.type(billDrawer.getByLabelText("Invoice Date"), "2026-08-12{Enter}");
+      await user.type(billDrawer.getByLabelText("Invoice Amount (USD)"), "50000");
+      await user.click(billDrawer.getByRole("button", { name: "Save" }));
+
+      expect(await screen.findByText("Billed", {}, ASYNC)).toBeInTheDocument();
+      // Billing alone never touches the Pay axis.
+      expect(screen.getByText("Not Paid")).toBeInTheDocument();
+
+      // The Bill drawer's own destroyOnHidden animation can still be
+      // mid-close here (same "lingering role=dialog portal" class of issue
+      // latestDialogElement's own doc comment describes) - wait for it to
+      // fully leave the DOM before navigating away, so its own portal
+      // content doesn't linger into the next screen's queries.
+      await waitFor(() => expect(screen.queryAllByRole("dialog")).toHaveLength(0), ASYNC);
+
+      // Payment is its own standalone screen (Zoho's own "Payments Made"),
+      // not reachable from the PO detail screen - navigate the SAME router
+      // there directly (real in-app navigation, not a second render tree -
+      // mounting a second RouterProvider/QueryClientProvider on top of the
+      // first left stale state behind even after unmounting the first).
+      await router.navigate(PURCHASE_PAYMENTS_LIST_PATH);
+
+      await screen.findByText("Payments Made", {}, ASYNC);
+      const newButtonText = await screen.findByText("New", {}, ASYNC);
+      const newButton = newButtonText.closest("button");
+      if (!newButton) {
+        throw new Error('expected a <button> ancestor of the "New" text');
+      }
+      await user.click(newButton);
+      const paymentDrawer = within(latestDialogElement());
+      await user.click(paymentDrawer.getByRole("combobox", { name: /Supplier/ }));
+      await user.click((await screen.findAllByText("Metal Traders LLC", {}, ASYNC)).at(-1) ?? screen.getByText("Metal Traders LLC"));
+
+      // Wait for the outstanding-bills table to actually load THIS test's
+      // own row, not just its own column headers (which render immediately
+      // once the <Table> mounts, before the outstanding-bills query has
+      // resolved). Every other test in this file bills the same mock
+      // supplier and none of their bills are ever cleared between tests, so
+      // this test's own PO number (captured above) is what disambiguates
+      // its row from theirs - a bare "some BILL-2024-* text exists" check
+      // is ambiguous once more than one test has run.
+      const ownRow = (await paymentDrawer.findByText(purchaseNumber, {}, ASYNC)).closest("tr");
+      if (!ownRow) {
+        throw new Error(`expected a <tr> ancestor of the outstanding-bills row for ${purchaseNumber}`);
+      }
+      const amountInput = within(ownRow).getByRole("textbox", { name: /Amount to pay for bill/ });
+      await user.type(amountInput, "50000");
+      await user.type(paymentDrawer.getByLabelText("Payment Date"), "2026-08-15{Enter}");
+      await user.click(paymentDrawer.getByRole("combobox", { name: "Payment Mode" }));
+      await user.click((await screen.findAllByText("Bank Transfer", {}, ASYNC)).at(-1) ?? screen.getByText("Bank Transfer"));
+      await user.click(paymentDrawer.getByRole("button", { name: "Save" }));
+
+      expect(await screen.findByText(/^PAY-2024-/, {}, ASYNC)).toBeInTheDocument();
+    },
+    // Longer than this file's other tests' 60000ms - this one does
+    // everything the PL-4 fulfilment lifecycle test does (create, item,
+    // issue, bill) PLUS a full second-screen navigation (Payments Made)
+    // and its own supplier-options/outstanding-bills queries on top.
+    90000,
   );
 });
 
@@ -303,34 +501,35 @@ function draftFixture(id: string): Record<string, unknown> {
 
 describe("Purchase - permission-gated workflow transitions", () => {
   it(
-    "hides Approve without purchase.po.approve, and hides Post without purchase.po.post",
+    "hides Issue without purchase.po.issue, and hides Cancel without purchase.po.cancel",
     async () => {
       signIn();
       server.use(
-        http.get(`${API_BASE}${endpoints.purchases}/purchase-no-approve`, () =>
-          HttpResponse.json(draftFixture("purchase-no-approve")),
+        http.get(`${API_BASE}${endpoints.purchases}/purchase-no-issue`, () =>
+          HttpResponse.json(draftFixture("purchase-no-issue")),
         ),
         http.get(`${API_BASE}${endpoints.myPermissions}`, () =>
           HttpResponse.json({
-            permissions: ["purchase.po.read", "purchase.po.update", "purchase.po.post"],
+            permissions: ["purchase.po.read", "purchase.po.update"],
           }),
         ),
       );
 
-      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-no-approve`] });
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-no-issue`] });
 
       expect(await screen.findByText("Draft", {}, ASYNC)).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Issue" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     },
     30000,
   );
 
   it(
     // The "enabled once it has an item" side of this is already exercised
-    // by this file's main create-add item-Approve flow test above - that
-    // one only reaches a clickable Approve because the button isn't
+    // by this file's main create-add item-Issue flow test above - that
+    // one only reaches a clickable Issue because the button isn't
     // disabled once an item exists.
-    "disables Approve, with a tooltip explaining why, on a draft with zero items - a UX nicety, never the actual guard (core/workflow/guards.ts enforces it server-side regardless of what the frontend does)",
+    "disables Issue, with a tooltip explaining why, on a draft with zero items - a UX nicety, never the actual guard (core/workflow/guards.ts enforces it server-side regardless of what the frontend does)",
     async () => {
       signIn();
       const user = userEvent.setup();
@@ -340,52 +539,52 @@ describe("Purchase - permission-gated workflow transitions", () => {
 
       renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-no-items`] });
 
-      const approveButton = await screen.findByRole("button", { name: "Approve" }, ASYNC);
-      expect(approveButton).toBeDisabled();
+      const issueButton = await screen.findByRole("button", { name: "Issue" }, ASYNC);
+      expect(issueButton).toBeDisabled();
 
-      await user.hover(approveButton);
-      expect(await screen.findByText("Add at least one item before approving", {}, ASYNC)).toBeInTheDocument();
+      await user.hover(issueButton);
+      expect(await screen.findByText("Add at least one item before issuing", {}, ASYNC)).toBeInTheDocument();
     },
     30000,
   );
 
   it(
-    "hides Post on an approved purchase without purchase.po.post",
+    "hides Cancel on an issued purchase without purchase.po.cancel",
     async () => {
       signIn();
       server.use(
-        http.get(`${API_BASE}${endpoints.purchases}/purchase-no-post`, () =>
-          HttpResponse.json({ ...draftFixture("purchase-no-post"), status: "approved" }),
+        http.get(`${API_BASE}${endpoints.purchases}/purchase-no-cancel`, () =>
+          HttpResponse.json({ ...draftFixture("purchase-no-cancel"), status: "issued" }),
         ),
         http.get(`${API_BASE}${endpoints.myPermissions}`, () =>
           HttpResponse.json({
-            permissions: ["purchase.po.read", "purchase.po.update", "purchase.po.approve"],
+            permissions: ["purchase.po.read", "purchase.po.update", "purchase.po.issue"],
           }),
         ),
       );
 
-      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-no-post`] });
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-no-cancel`] });
 
-      expect(await screen.findByText("Approved", {}, ASYNC)).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Post" })).not.toBeInTheDocument();
+      expect(await screen.findByText("Issued", {}, ASYNC)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     },
     30000,
   );
 
   it(
-    "hides the header form's Save button (and Additional Cost's) for a Viewer missing purchase.po.update, on a draft or approved purchase",
+    "hides the header form's Save button (and Additional Cost's) for a Viewer missing purchase.po.update, on a draft or issued purchase",
     async () => {
       signIn();
       server.use(
         http.get(`${API_BASE}${endpoints.purchases}/purchase-viewer`, () =>
-          HttpResponse.json({ ...draftFixture("purchase-viewer"), status: "approved" }),
+          HttpResponse.json({ ...draftFixture("purchase-viewer"), status: "issued" }),
         ),
         http.get(`${API_BASE}${endpoints.myPermissions}`, () => HttpResponse.json({ permissions: ["purchase.po.read"] })),
       );
 
       renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-viewer`] });
 
-      expect(await screen.findByText("Approved", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Issued", {}, ASYNC)).toBeInTheDocument();
       // Wait for both SchemaForms to actually finish their own
       // field-definitions fetch (each shows its own loading spinner until
       // then) - asserting Save's absence any earlier is meaningless, since
@@ -400,25 +599,24 @@ describe("Purchase - permission-gated workflow transitions", () => {
   );
 
   it(
-    // Prompt 22 Part 4: items are the deliberate exception now - they stay
-    // editable through Approved (a stock-relevant edit sends any approved
-    // invoice back to Draft for re-approval), unlike Header/Costs, which
-    // still lock at Approved exactly as before.
-    "hides Header/Costs Save buttons on an approved purchase even WITH purchase.po.update, but Add Item stays available",
+    // PL-3: items are the deliberate exception now - they stay editable
+    // through Issued (assertItemsEditable blocks only Closed/Cancelled),
+    // unlike Header/Costs, which lock the moment the purchase leaves Draft.
+    "hides Header/Costs Save buttons on an issued purchase even WITH purchase.po.update, but Add Item stays available",
     async () => {
       signIn();
       server.use(
-        http.get(`${API_BASE}${endpoints.purchases}/purchase-approved-locked`, () =>
-          HttpResponse.json({ ...draftFixture("purchase-approved-locked"), status: "approved" }),
+        http.get(`${API_BASE}${endpoints.purchases}/purchase-issued-locked`, () =>
+          HttpResponse.json({ ...draftFixture("purchase-issued-locked"), status: "issued" }),
         ),
         http.get(`${API_BASE}${endpoints.myPermissions}`, () =>
-          HttpResponse.json({ permissions: ["purchase.po.read", "purchase.po.update", "purchase.po.create", "purchase.po.post"] }),
+          HttpResponse.json({ permissions: ["purchase.po.read", "purchase.po.update", "purchase.po.create", "purchase.po.cancel"] }),
         ),
       );
 
-      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-approved-locked`] });
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/purchase-issued-locked`] });
 
-      expect(await screen.findByText("Approved", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Issued", {}, ASYNC)).toBeInTheDocument();
       expect(
         await screen.findByText(/Header, costs, and customer allocation are now locked/i, {}, ASYNC),
       ).toBeInTheDocument();
@@ -445,12 +643,11 @@ describe("Purchase - list view", () => {
                 id: "list-row-1",
                 purchaseNumber: "PO-LIST-1",
                 purchaseDate: "2026-08-01",
-                status: "approved",
+                status: "issued",
                 branchId: "33333333-3333-4333-8333-333333333333",
                 // Buyer names a tenant company, not a user (client correction).
                 buyerId: "22222222-2222-4222-8222-222222222222",
                 supplierId: "sup-1",
-                supplierInvoiceNo: "INV-1",
               },
             ],
             total: 1,
@@ -465,7 +662,10 @@ describe("Purchase - list view", () => {
       expect(await screen.findByText("Dubai HQ", {}, ASYNC)).toBeInTheDocument();
       expect(await screen.findByText("Ikration Metals Trading", {}, ASYNC)).toBeInTheDocument();
       expect(await screen.findByText("Metal Traders LLC", {}, ASYNC)).toBeInTheDocument();
-      expect(screen.getByText("Approved")).toBeInTheDocument();
+      // "Issued" appears twice on this screen now (the status stat-chip
+      // label above the table, and the row's own status tag) - assert
+      // there are at least two rather than a single unique match.
+      expect(screen.getAllByText("Issued").length).toBeGreaterThanOrEqual(2);
       expect(screen.queryByText("33333333-3333-4333-8333-333333333333")).not.toBeInTheDocument();
       expect(screen.queryByRole("columnheader", { name: "Container Number" })).not.toBeInTheDocument();
       expect(screen.queryByRole("columnheader", { name: "Invoice" })).not.toBeInTheDocument();
@@ -494,11 +694,11 @@ describe("Purchase - metadata-driven sections", () => {
       expect(screen.getByRole("combobox", { name: "Supplier" })).toBeInTheDocument();
       expect(screen.getByRole("combobox", { name: "Container Number" })).toBeInTheDocument();
       // H Attachments - folded into the same header entity.
-      expect(screen.getByLabelText("Invoice")).toBeInTheDocument();
+      expect(screen.getByLabelText("Bill of Lading")).toBeInTheDocument();
       expect(screen.getByLabelText("Other Documents")).toBeInTheDocument();
       // D Item / E Pricing, F Allocation, G Additional Cost, LME + Hedging -
       // rendered as their own panels once the record exists (create mode
-      // gates them the same way Draft/Approved status gates Approve/Post).
+      // gates them the same way Draft/Issued status gates the Issue/Cancel buttons).
       expect(screen.getByText("Purchase Items & Pricing")).toBeInTheDocument();
       expect(screen.getByText("Additional Cost")).toBeInTheDocument();
       expect(screen.getByText("Customer Allocation")).toBeInTheDocument();
@@ -653,7 +853,7 @@ describe("Purchase - attachment upload wiring", () => {
   // through customRequest, and the field settles out of its uploading
   // state once the mock "server" (attachments-handlers.ts) responds.
   it(
-    "drives a real upload through the Invoice field and clears the uploading state",
+    "drives a real upload through the Bill of Lading field and clears the uploading state",
     async () => {
       signIn();
       const user = userEvent.setup();
@@ -664,17 +864,17 @@ describe("Purchase - attachment upload wiring", () => {
 
       renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/${purchaseId}`] });
 
-      const input = await screen.findByLabelText("Invoice", {}, ASYNC);
-      const file = new File(["%PDF-1.4"], "supplier-invoice.pdf", { type: "application/pdf" });
+      const input = await screen.findByLabelText("Bill of Lading", {}, ASYNC);
+      const file = new File(["%PDF-1.4"], "bill-of-lading.pdf", { type: "application/pdf" });
       await user.upload(input, file);
 
       // rc-upload manages its hidden <input type="file"> imperatively and
       // can recreate it around the upload lifecycle, so anchor on the
       // FieldShell's <label> (a stable, React-managed node) instead of the
       // input itself to find the surrounding Form.Item.
-      const formItem = screen.getByText("Invoice").closest(".ant-form-item");
+      const formItem = screen.getByText("Bill of Lading").closest(".ant-form-item");
       if (!(formItem instanceof HTMLElement)) {
-        throw new Error("expected the Invoice field's Form.Item wrapper");
+        throw new Error("expected the Bill of Lading field's Form.Item wrapper");
       }
       await waitFor(
         () => expect(within(formItem).getByRole("button", { name: /Select file/ })).not.toHaveClass("ant-btn-loading"),
@@ -713,7 +913,7 @@ describe("Purchase - attachment upload wiring", () => {
           });
           return HttpResponse.json({
             items: [
-              row("77777777-7777-4777-8777-777777777777", "invoice", "prior-session-invoice.pdf"),
+              row("77777777-7777-4777-8777-777777777777", "billOfLading", "prior-session-bill-of-lading.pdf"),
               row("88888888-8888-4888-8888-888888888888", "otherDocuments", "extra-doc-1.pdf"),
               row("99999999-9999-4999-8999-999999999999", "otherDocuments", "extra-doc-2.pdf"),
             ],
@@ -726,7 +926,7 @@ describe("Purchase - attachment upload wiring", () => {
 
       renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/${purchaseId}`] });
 
-      expect(await screen.findByText("prior-session-invoice.pdf", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("prior-session-bill-of-lading.pdf", {}, ASYNC)).toBeInTheDocument();
       expect(await screen.findByText("extra-doc-1.pdf", {}, ASYNC)).toBeInTheDocument();
       expect(await screen.findByText("extra-doc-2.pdf", {}, ASYNC)).toBeInTheDocument();
     },
