@@ -11,7 +11,7 @@ import { resolveMasterScreen } from "../modules/masters/master-registry";
 import { resolveAdminScreen } from "../modules/admin/admin-registry";
 import { resolveSupplierScreen } from "../modules/suppliers/supplier-registry";
 import { resolveBrokerScreen } from "../modules/brokers/broker-registry";
-import { resolvePurchaseScreen } from "../modules/purchase/purchase-registry";
+import { resolvePurchaseScreen, resolvePurchaseReceiptsScreen, resolvePurchaseBillsScreen, resolvePurchasePaymentsScreen } from "../modules/purchase/purchase-registry";
 import { resolveInventoryScreen } from "../modules/inventory/inventory-registry";
 import { SchemaFormDevPage } from "./dev/SchemaFormDevPage";
 import { SchemaTableDevPage } from "./dev/SchemaTableDevPage";
@@ -56,6 +56,9 @@ export const routes: RouteObject[] = [
                       resolveSupplierScreen(entry, pathname) ??
                       resolveBrokerScreen(entry, pathname) ??
                       resolvePurchaseScreen(entry, pathname) ??
+                      resolvePurchaseReceiptsScreen(entry, pathname) ??
+                      resolvePurchaseBillsScreen(entry, pathname) ??
+                      resolvePurchasePaymentsScreen(entry, pathname) ??
                       resolveInventoryScreen(entry, pathname)
                     }
                   />

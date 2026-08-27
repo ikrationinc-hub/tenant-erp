@@ -28,12 +28,14 @@ import {
 import { createMasterRepository } from "../src/core/masters/repository.js";
 import { findSupplierByName } from "../src/modules/suppliers/suppliers.repository.js";
 import * as suppliersService from "../src/modules/suppliers/suppliers.service.js";
-import { findPurchaseBySupplierInvoiceNo } from "../src/modules/purchase/purchase.repository.js";
+import { findPurchaseByShipmentContainerId } from "../src/modules/purchase/purchase.repository.js";
 import * as purchaseService from "../src/modules/purchase/purchase.service.js";
 import * as purchaseItemsService from "../src/modules/purchase/purchase-items.service.js";
 import * as purchaseCostsService from "../src/modules/purchase/purchase-costs.service.js";
 import * as purchaseLmeService from "../src/modules/purchase/purchase-lme.service.js";
 import * as purchaseHedgesService from "../src/modules/purchase/purchase-hedges.service.js";
+import * as purchaseReceiptsService from "../src/modules/purchase/purchase-receipts.service.js";
+import * as purchaseBillsService from "../src/modules/purchase/purchase-bills.service.js";
 
 /**
  * The reusable half of `pnpm seed:dev` - separated from scripts/seed-dev.ts
@@ -45,15 +47,15 @@ import * as purchaseHedgesService from "../src/modules/purchase/purchase-hedges.
  * for an in-process test).
  *
  * Idempotent: every insert is guarded by a lookup on a stable natural key
- * first (master code, supplier name, purchase supplierInvoiceNo), so a
- * second run updates nothing and creates nothing new.
+ * first (master code, supplier name, a purchase's own shipment containerId),
+ * so a second run updates nothing and creates nothing new.
  */
 
 export interface SeedDevResult {
   supplierIds: string[];
   draftPurchaseId: string;
-  approvedPurchaseId: string;
-  postedPurchaseId: string;
+  issuedPurchaseId: string;
+  closedPurchaseId: string;
 }
 
 const decimalString = (value: number, decimals: number): string => value.toFixed(decimals);
@@ -167,12 +169,18 @@ export async function seedDevData(tenantSlug: string): Promise<SeedDevResult> {
       throw new Error("expected 3 suppliers to exist by this point");
     }
 
-    async function ensurePurchase(supplierInvoiceNo: string, supplierId: string) {
-      const existing = await withTenantSchema(schemaName, (tx) => findPurchaseBySupplierInvoiceNo(tx, companyId, supplierInvoiceNo));
+    // seedTag replaces the old supplierInvoiceNo natural key (removed from
+    // the PO - that data belongs on the Bill now, purchase_bills.supplierInvoiceNo).
+    // The container is created FIRST (ensureMaster is itself idempotent by
+    // code), then its id is the stable 1:1 key findPurchaseByShipmentContainerId
+    // looks up against - purchase_number itself is only known after
+    // creation, since it's numbering-engine-generated.
+    async function ensurePurchase(seedTag: string, supplierId: string) {
+      const containerId = await ensureMaster(schemaName, containers, companyId, createdBy, `CONT-${seedTag}`, `CONT-${seedTag}`);
+      const existing = await withTenantSchema(schemaName, (tx) => findPurchaseByShipmentContainerId(tx, companyId, containerId));
       if (existing) {
         return { purchase: existing, alreadyExisted: true as const };
       }
-      const containerId = await ensureMaster(schemaName, containers, companyId, createdBy, `CONT-${supplierInvoiceNo}`, `CONT-${supplierInvoiceNo}`);
       const purchase = await purchaseService.create(ctx, {
         purchaseDate: "2025-01-15",
         divisionId,
@@ -181,11 +189,10 @@ export async function seedDevData(tenantSlug: string): Promise<SeedDevResult> {
         // buyerId names a tenant company, not a user (client correction).
         buyerId: companyId,
         supplierId,
-        supplierInvoiceNo,
         shipment: {
-          lotNumber: `LOT-${supplierInvoiceNo}`,
+          lotNumber: `LOT-${seedTag}`,
           containerId,
-          blNo: `BL-${supplierInvoiceNo}`,
+          blNo: `BL-${seedTag}`,
           loadingDate: "2025-01-10",
           transportModeId,
           portOfLoadingId: portLoadingId,
@@ -199,9 +206,9 @@ export async function seedDevData(tenantSlug: string): Promise<SeedDevResult> {
 
     const draft = await ensurePurchase("DEV-SEED-DRAFT-1", supplierA);
 
-    const approved = await ensurePurchase("DEV-SEED-APPROVED-1", supplierB);
-    if (!approved.alreadyExisted) {
-      await purchaseItemsService.addItem(ctx, approved.purchase.id, {
+    const issued = await ensurePurchase("DEV-SEED-ISSUED-1", supplierB);
+    if (!issued.alreadyExisted) {
+      await purchaseItemsService.addItem(ctx, issued.purchase.id, {
         itemId,
         gradeId,
         quantity: decimalString(200, 6),
@@ -209,12 +216,17 @@ export async function seedDevData(tenantSlug: string): Promise<SeedDevResult> {
         purchaseRateUsd: decimalString(8500, 6),
         exchangeRate: decimalString(3.6725, 6),
       });
-      await purchaseService.approve(ctx, approved.purchase.id);
+      await purchaseService.issue(ctx, issued.purchase.id);
     }
 
-    const posted = await ensurePurchase("DEV-SEED-POSTED-1", supplierC);
-    if (!posted.alreadyExisted) {
-      await purchaseItemsService.addItem(ctx, posted.purchase.id, {
+    // PL-3: "Closed" is derived and automatic (fully received AND fully
+    // billed), never a manual step - demonstrating the full lifecycle
+    // here means actually confirming a receipt and approving a bill for
+    // the whole ordered quantity, not just calling a "close" endpoint
+    // (none exists).
+    const closed = await ensurePurchase("DEV-SEED-CLOSED-1", supplierC);
+    if (!closed.alreadyExisted) {
+      const item = await purchaseItemsService.addItem(ctx, closed.purchase.id, {
         itemId,
         gradeId,
         quantity: decimalString(500, 6),
@@ -222,13 +234,13 @@ export async function seedDevData(tenantSlug: string): Promise<SeedDevResult> {
         purchaseRateUsd: decimalString(8432.75, 6),
         exchangeRate: decimalString(3.6725, 6),
       });
-      await purchaseCostsService.setAdditionalCosts(ctx, posted.purchase.id, {
+      await purchaseCostsService.setAdditionalCosts(ctx, closed.purchase.id, {
         freight: decimalString(1500, 2),
         insurance: decimalString(400, 2),
         customs: decimalString(600, 2),
         otherCharges: decimalString(150, 2),
       });
-      await purchaseLmeService.addLmeRecord(ctx, posted.purchase.id, {
+      await purchaseLmeService.addLmeRecord(ctx, closed.purchase.id, {
         lmeExchangeId,
         metal: "Copper",
         lmeType: "close",
@@ -236,7 +248,7 @@ export async function seedDevData(tenantSlug: string): Promise<SeedDevResult> {
         fixingDate: "2025-01-14",
         agreedPremiumPct: decimalString(2.35, 6),
       });
-      await purchaseHedgesService.addHedge(ctx, posted.purchase.id, {
+      await purchaseHedgesService.addHedge(ctx, closed.purchase.id, {
         hedgePlatformId,
         contractNumber: "DEV-HEDGE-1",
         position: "buy",
@@ -244,15 +256,28 @@ export async function seedDevData(tenantSlug: string): Promise<SeedDevResult> {
         rate: decimalString(8432.75, 6),
         hedgeDate: "2025-01-14",
       });
-      await purchaseService.approve(ctx, posted.purchase.id);
-      await purchaseService.post(ctx, posted.purchase.id);
+      await purchaseService.issue(ctx, closed.purchase.id);
+
+      const receipt = await purchaseReceiptsService.create(ctx, closed.purchase.id, {
+        receiptDate: "2025-01-20",
+        warehouseId,
+        items: [{ purchaseItemId: item.id, receivedQuantity: decimalString(500, 6) }],
+      });
+      await purchaseReceiptsService.confirm(ctx, closed.purchase.id, receipt.id);
+
+      const bill = await purchaseBillsService.create(ctx, closed.purchase.id, {
+        invoiceDate: "2025-01-21",
+        invoiceAmountUsd: decimalString(500 * 8432.75, 2),
+        items: [{ purchaseItemId: item.id, billedQuantity: decimalString(500, 6), billedAmountUsd: decimalString(500 * 8432.75, 2) }],
+      });
+      await purchaseBillsService.approve(ctx, closed.purchase.id, bill.id);
     }
 
     return {
       supplierIds,
       draftPurchaseId: draft.purchase.id,
-      approvedPurchaseId: approved.purchase.id,
-      postedPurchaseId: posted.purchase.id,
+      issuedPurchaseId: issued.purchase.id,
+      closedPurchaseId: closed.purchase.id,
     };
   });
 }

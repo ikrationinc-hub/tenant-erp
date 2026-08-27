@@ -295,7 +295,7 @@ describe("modules/purchase - Record Purchase, session (c): customer allocation (
       const authHeader = `Bearer ${tenant.accessToken}`;
       const purchaseId = await createDraftPurchase(app, authHeader, tenant);
 
-      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "approved" }).where(eq(purchases.id, purchaseId)));
+      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "issued" }).where(eq(purchases.id, purchaseId)));
 
       const res = await request(app)
         .post(`/api/v1/purchases/${purchaseId}/allocations`)
@@ -378,7 +378,7 @@ describe("modules/purchase - Record Purchase, session (c): customer allocation (
             .send({ reservedCustomerId: tenant.customerAId, allocationPct: "60" }),
         );
 
-        await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "approved" }).where(eq(purchases.id, purchaseId)));
+        await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "issued" }).where(eq(purchases.id, purchaseId)));
 
         const editRes = await request(app)
           .patch(`/api/v1/purchases/${purchaseId}/allocations/${allocation.id}`)

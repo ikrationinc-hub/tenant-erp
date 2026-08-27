@@ -1,72 +1,25 @@
 import { eventBus } from "../../common/events/bus.js";
-import type { InvoiceApprovedEvent } from "../../common/events/types.js";
-import { parseMoney, roundRate } from "../../common/money/decimal.js";
+import type { ReceiptConfirmedEvent } from "../../common/events/types.js";
 import { insertAuditLog } from "../../core/audit/write.js";
 import type { TenantTx } from "../../database/get-db.js";
-import { insertStockMovement, listActiveReceiptsForInvoice } from "./stock-movements.repository.js";
+import { insertStockMovement } from "./stock-movements.repository.js";
 
 /**
- * Prompt 22 Part 3/4: THE stock-writing handler - purchase.approved no
- * longer has one (a purchase order is intent, it never moves stock).
- * Runs on EVERY invoice.approved, first approval and every re-approval
- * alike, in the SAME transaction as the invoice's status change (common/
- * events/bus.ts: a throw here rolls back the approval too). Two-phase,
- * always in this order:
+ * PL-1 (docs/PURCHASE-LIFECYCLE-4DOC.md, ADR 0016): THE stock-writing
+ * handler - neither purchase.approved nor invoice.approved has one
+ * anymore (a purchase order is intent; a bill is a financial fact;
+ * physical stock only exists once the RECEIPT is confirmed). Runs in the
+ * SAME transaction as the receipt's Draft->Confirmed status change
+ * (common/events/bus.ts: a throw here rolls back the confirmation too).
  *
- *   1. Reverse whatever this invoice's PREVIOUS approval(s) still have
- *      active (a no-op on a genuine first approval - there's nothing to
- *      reverse yet). NEVER an UPDATE/DELETE of the original row (rule 8's
- *      spirit, append-only ledger) - a NEW purchase_reversal row,
- *      negative, pointing back at what it offsets via
- *      reversal_of_movement_id.
- *   2. Write a fresh purchase_receipt for every one of the purchase's
- *      CURRENT items.
- *
- * This uniform "reverse-then-reissue" shape is deliberately not a smart
- * per-item diff (skip items that didn't change) - Part 4 asks for
- * reconciliation on ANY stock-relevant edit, and full reverse+reissue is
- * correct regardless of what specifically changed (an item added,
- * removed, or resized), never assumes what changed, and is exactly as
- * simple on a first approval as on a tenth re-approval.
+ * Unlike the superseded invoice.approved handler this replaces, there is
+ * no reverse-then-reissue reconciliation: a confirmed receipt is
+ * immutable (rule 8 - no re-confirm path exists), so this only ever
+ * writes fresh purchase_receipt rows, once, for this one receipt's own
+ * lines - never a reversal, never a re-run for the same receiptId.
  */
-async function handleInvoiceApproved(tx: TenantTx, event: InvoiceApprovedEvent): Promise<void> {
+async function handleReceiptConfirmed(tx: TenantTx, event: ReceiptConfirmedEvent): Promise<void> {
   const movementDate = new Date().toISOString().slice(0, 10);
-
-  const activeReceipts = await listActiveReceiptsForInvoice(tx, event.companyId, event.invoiceId);
-  for (const receipt of activeReceipts) {
-    const reversalQuantity = roundRate(parseMoney(receipt.quantity).negated());
-    const reversal = await insertStockMovement(tx, {
-      companyId: event.companyId,
-      ...(receipt.branchId ? { branchId: receipt.branchId } : {}),
-      itemId: receipt.itemId,
-      ...(receipt.gradeId ? { gradeId: receipt.gradeId } : {}),
-      warehouseId: receipt.warehouseId,
-      quantity: reversalQuantity,
-      uomId: receipt.uomId,
-      movementType: "purchase_reversal",
-      movementDate,
-      referenceType: receipt.referenceType,
-      referenceId: receipt.referenceId,
-      purchaseInvoiceId: event.invoiceId,
-      reversalOfMovementId: receipt.id,
-      createdBy: event.approvedBy,
-    });
-
-    await insertAuditLog(tx, {
-      companyId: event.companyId,
-      changedBy: event.approvedBy,
-      entity: "stock_movement",
-      entityId: reversal.id,
-      action: "stock_movement.created",
-      after: {
-        itemId: reversal.itemId,
-        warehouseId: reversal.warehouseId,
-        quantity: reversal.quantity,
-        movementType: reversal.movementType,
-        reversalOfMovementId: reversal.reversalOfMovementId,
-      },
-    });
-  }
 
   for (const item of event.items) {
     const movement = await insertStockMovement(tx, {
@@ -81,13 +34,13 @@ async function handleInvoiceApproved(tx: TenantTx, event: InvoiceApprovedEvent):
       movementDate,
       referenceType: "purchase_item",
       referenceId: item.purchaseItemId,
-      purchaseInvoiceId: event.invoiceId,
-      createdBy: event.approvedBy,
+      receiptId: event.receiptId,
+      createdBy: event.confirmedBy,
     });
 
     await insertAuditLog(tx, {
       companyId: event.companyId,
-      changedBy: event.approvedBy,
+      changedBy: event.confirmedBy,
       entity: "stock_movement",
       entityId: movement.id,
       action: "stock_movement.created",
@@ -96,7 +49,7 @@ async function handleInvoiceApproved(tx: TenantTx, event: InvoiceApprovedEvent):
         warehouseId: movement.warehouseId,
         quantity: movement.quantity,
         movementType: movement.movementType,
-        purchaseInvoiceId: movement.purchaseInvoiceId,
+        receiptId: movement.receiptId,
       },
     });
   }
@@ -115,4 +68,4 @@ async function handleInvoiceApproved(tx: TenantTx, event: InvoiceApprovedEvent):
  * the entire coupling between the two modules, and it's one-directional,
  * mediated by common/events' shared types.
  */
-eventBus.on("invoice.approved", handleInvoiceApproved);
+eventBus.on("receipt.confirmed", handleReceiptConfirmed);

@@ -115,7 +115,7 @@ describe("core/menu-engine: resolveMenuTree", () => {
         key: "gated-item",
         label: "Gated Item",
         path: "/gated",
-        requiredPermission: "purchase.po.approve",
+        requiredPermission: "purchase.po.issue",
         createdBy: seed.userId,
       });
 
@@ -165,7 +165,7 @@ describe("core/menu-engine: resolveMenuTree", () => {
         companyId: seed.companyId,
         key: "parent",
         label: "Parent",
-        requiredPermission: "purchase.po.approve",
+        requiredPermission: "purchase.po.issue",
         createdBy: seed.userId,
       });
       await createMenu({
@@ -196,7 +196,7 @@ describe("core/menu-engine: resolveMenuTree", () => {
         key: "approve-po",
         label: "Approve PO",
         path: "/po/approve",
-        requiredPermission: "purchase.po.approve",
+        requiredPermission: "purchase.po.issue",
         createdBy: seed.userId,
       });
 
@@ -210,7 +210,7 @@ describe("core/menu-engine: resolveMenuTree", () => {
         createdBy: seed.userId,
       });
       await assignRoleToUser(seed.tenant.schemaName, seed.companyId, seed.userId, role.id, seed.userId);
-      const permissionId = await findPermissionId(seed.tenant.schemaName, "purchase.po.approve");
+      const permissionId = await findPermissionId(seed.tenant.schemaName, "purchase.po.issue");
       await grantPermissionToRole(seed.tenant.schemaName, seed.companyId, role.id, permissionId, seed.userId);
 
       const after = await resolveMenuTree(ctx);

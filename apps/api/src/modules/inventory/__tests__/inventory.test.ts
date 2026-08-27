@@ -149,8 +149,8 @@ async function seedTenant(label: string, permissionKeys: string[]): Promise<Seed
   return { schemaName: tenant.schemaName, companyId, userId, accessToken: token, purchaseRefs, itemRefs };
 }
 
-/** Prompt 22: stock now moves on supplier INVOICE approval, not purchase approval - approving the purchase here is still needed (an invoice can't be approved against a still-draft purchase), but it's the invoice create+approve that actually writes the movements this test suite reads back. */
-async function createPurchaseWithApprovedInvoice(
+/** PL-1: stock now moves on Purchase Receipt confirmation, not purchase approval or invoice approval - approving the purchase here is still needed (a receipt can't be created against a still-draft purchase), but it's the receipt create+confirm that actually writes the movements this test suite reads back. */
+async function createPurchaseWithConfirmedReceipt(
   app: ReturnType<typeof createApp>,
   authHeader: string,
   tenant: SeededTenant,
@@ -188,20 +188,20 @@ async function createPurchaseWithApprovedInvoice(
   expect(itemRes.status).toBe(201);
   const itemId = (itemRes.body as { id: string }).id;
 
-  const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/approve`).set("Authorization", authHeader);
+  const approveRes = await request(app).patch(`/api/v1/purchases/${purchaseId}/issue`).set("Authorization", authHeader);
   expect(approveRes.status).toBe(200);
 
-  const invoiceRes = await request(app)
-    .post(`/api/v1/purchases/${purchaseId}/invoices`)
+  const receiptRes = await request(app)
+    .post(`/api/v1/purchases/${purchaseId}/receipts`)
     .set("Authorization", authHeader)
-    .send({ invoiceDate: "2024-06-20", invoiceAmountUsd: "50000" });
-  expect(invoiceRes.status).toBe(201);
-  const invoiceId = (invoiceRes.body as { id: string }).id;
+    .send({ receiptDate: "2024-06-20", warehouseId: tenant.purchaseRefs.warehouseId, items: [{ purchaseItemId: itemId, receivedQuantity: quantity }] });
+  expect(receiptRes.status).toBe(201);
+  const receiptId = (receiptRes.body as { id: string }).id;
 
-  const invoiceApproveRes = await request(app)
-    .patch(`/api/v1/purchases/${purchaseId}/invoices/${invoiceId}/approve`)
+  const receiptConfirmRes = await request(app)
+    .patch(`/api/v1/purchases/${purchaseId}/receipts/${receiptId}/confirm`)
     .set("Authorization", authHeader);
-  expect(invoiceApproveRes.status).toBe(200);
+  expect(receiptConfirmRes.status).toBe(200);
 
   return { purchaseId, itemId };
 }
@@ -210,10 +210,10 @@ const ALL_PURCHASE_PERMISSIONS = [
   "purchase.po.create",
   "purchase.po.read",
   "purchase.po.update",
-  "purchase.po.approve",
-  "purchase.po.post",
-  "purchase.invoice.create",
-  "purchase.invoice.approve",
+  "purchase.po.issue",
+  "purchase.po.cancel",
+  "purchase.receipt.create",
+  "purchase.receipt.confirm",
 ];
 
 describe("modules/inventory - Stock Ledger (FR-108 read surface)", () => {
@@ -230,8 +230,8 @@ describe("modules/inventory - Stock Ledger (FR-108 read surface)", () => {
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
 
-      await createPurchaseWithApprovedInvoice(app, authHeader, tenant, "100");
-      await createPurchaseWithApprovedInvoice(app, authHeader, tenant, "50");
+      await createPurchaseWithConfirmedReceipt(app, authHeader, tenant, "100");
+      await createPurchaseWithConfirmedReceipt(app, authHeader, tenant, "50");
 
       const res = await request(app).get("/api/v1/inventory/balances").set("Authorization", authHeader);
       expect(res.status).toBe(200);
@@ -251,8 +251,8 @@ describe("modules/inventory - Stock Ledger (FR-108 read surface)", () => {
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
 
-      const first = await createPurchaseWithApprovedInvoice(app, authHeader, tenant, "10");
-      const second = await createPurchaseWithApprovedInvoice(app, authHeader, tenant, "20");
+      const first = await createPurchaseWithConfirmedReceipt(app, authHeader, tenant, "10");
+      const second = await createPurchaseWithConfirmedReceipt(app, authHeader, tenant, "20");
 
       const listRes = await request(app).get("/api/v1/inventory/movements").set("Authorization", authHeader);
       expect(listRes.status).toBe(200);

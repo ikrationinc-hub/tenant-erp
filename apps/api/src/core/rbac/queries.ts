@@ -116,10 +116,16 @@ export async function roleIdsExist(
 }
 
 /**
- * "Approval permission" means any permission whose action is literally
- * "approve" (purchase.po.approve today) - a DB column check, not a
- * hardcoded key list, so a future module adding its own *.approve
- * permission is covered automatically.
+ * "Approval permission" means any permission whose action is "approve" OR
+ * "issue" (purchase.po.issue, PL-3's rename of the old purchase.po.approve
+ * - issuing a PO is the exact same class of irreversible financial
+ * commitment "approve" always meant to guard here) - a DB column check
+ * against a short, explicit action list, not a hardcoded permission-key
+ * list, so a future module adding its own *.approve permission is covered
+ * automatically. "cancel" is deliberately excluded: calling off an
+ * unfulfilled PO is not the financial commitment this check exists to
+ * gate - see purchase.service.ts's requireNothingFulfilledForCancel for
+ * cancel's own (different) guard.
  */
 export async function roleIdsHoldApprovalPermission(
   tx: TenantTx,
@@ -136,7 +142,7 @@ export async function roleIdsHoldApprovalPermission(
       and(
         inArray(rolePermissions.roleId, roleIds),
         isNull(rolePermissions.deletedAt),
-        eq(permissions.action, "approve"),
+        inArray(permissions.action, ["approve", "issue"]),
       ),
     )
     .limit(1);

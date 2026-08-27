@@ -325,8 +325,21 @@ const permissionCatalogue: PermissionCatalogueEntry[] = [
   { key: "purchase.po.read", module: "purchase", entity: "po", action: "read", description: "View purchases" },
   { key: "purchase.po.create", module: "purchase", entity: "po", action: "create", description: "Create a purchase, add items/allocations/LME records/hedges" },
   { key: "purchase.po.update", module: "purchase", entity: "po", action: "update", description: "Edit a draft purchase, set additional costs, close a hedge" },
-  { key: "purchase.po.approve", module: "purchase", entity: "po", action: "approve", description: "Approve a purchase" },
-  { key: "purchase.po.post", module: "purchase", entity: "po", action: "post", description: "Post an approved purchase" },
+  // PL-3: "approve"/"post" are gone - a PO is Draft -> Issued -> Closed/
+  // Cancelled, Closed reached automatically once fully received AND fully
+  // billed (never a manual endpoint). purchase.invoice.*/purchase.receipt.*
+  // (PL-1/PL-2) are their own documents' own permissions, not the PO's.
+  { key: "purchase.po.issue", module: "purchase", entity: "po", action: "issue", description: "Issue a purchase order to the supplier" },
+  { key: "purchase.po.cancel", module: "purchase", entity: "po", action: "cancel", description: "Cancel a purchase order before it's fulfilled" },
+  { key: "purchase.invoice.create", module: "purchase", entity: "invoice", action: "create", description: "Create a bill against a purchase" },
+  { key: "purchase.invoice.update", module: "purchase", entity: "invoice", action: "update", description: "Edit a draft bill" },
+  { key: "purchase.invoice.approve", module: "purchase", entity: "invoice", action: "approve", description: "Approve a bill" },
+  { key: "purchase.receipt.create", module: "purchase", entity: "receipt", action: "create", description: "Create a purchase receipt against a purchase order" },
+  { key: "purchase.receipt.confirm", module: "purchase", entity: "receipt", action: "confirm", description: "Confirm a purchase receipt - this is what moves stock" },
+  // PL-5: "record" (not "create") - money actually leaving the company
+  // gets the same Manager-tier bar as issue/approve/confirm, not the
+  // Officer-tier "create" bucket (see manifests.ts's own doc comment).
+  { key: "purchase.payment.record", module: "purchase", entity: "payment", action: "record", description: "Record a payment against one or more bills" },
   { key: "suppliers.supplier.read", module: "suppliers", entity: "supplier", action: "read", description: "View suppliers" },
   { key: "suppliers.supplier.create", module: "suppliers", entity: "supplier", action: "create", description: "Create a supplier" },
   { key: "suppliers.supplier.update", module: "suppliers", entity: "supplier", action: "update", description: "Edit, activate, or deactivate a supplier" },
@@ -336,7 +349,7 @@ const permissionCatalogue: PermissionCatalogueEntry[] = [
 
 const rolePermissions = new Map<string, Set<string>>([
   ["role-admin", new Set(permissionCatalogue.map((entry) => entry.key))],
-  ["role-manager", new Set(["masters.country.read", "users.user.read", "purchase.po.read", "purchase.po.create", "purchase.po.approve"])],
+  ["role-manager", new Set(["masters.country.read", "users.user.read", "purchase.po.read", "purchase.po.create", "purchase.po.issue", "purchase.po.cancel", "purchase.payment.record"])],
   ["role-officer", new Set(["masters.country.read", "purchase.po.read", "purchase.po.create"])],
   ["role-viewer", new Set(["masters.country.read", "purchase.po.read"])],
 ]);

@@ -17,13 +17,24 @@ export type DefaultRoleName = (typeof DEFAULT_ROLE_NAMES)[number];
  *   manages records, not other people's access.
  * - Manager: Officer + approve actions, role assignment, and the
  *   provisioning exception path (financial approvals and who's assigned
- *   which role are manager-level decisions).
+ *   which role are manager-level decisions). PL-1's "confirm" (a purchase
+ *   receipt's Draft->Confirmed transition - the one that moves stock) is
+ *   the same tier as approve for the same reason: an irreversible,
+ *   ledger-affecting transition. PL-3's "issue" (a PO's Draft->Issued
+ *   transition, replacing the old "approve") and "cancel" (Draft/Issued ->
+ *   Cancelled) are the same tier too - issuing commits the order to a
+ *   supplier, cancelling kills that commitment; both are the same class of
+ *   decision as approve/confirm, not day-to-day data entry. PL-5's
+ *   "record" (recording a Payment) is deliberately its own action name,
+ *   not "create" - money actually leaving the company belongs at this
+ *   tier, not the Officer-tier day-to-day "create" bucket every other
+ *   document's own creation permission falls into.
  * - Admin: everything, unconditionally.
  */
 const ROLE_PERMISSION_FILTERS: Record<DefaultRoleName, (action: string) => boolean> = {
   Viewer: (action) => action === "read",
   Officer: (action) => ["read", "create", "update"].includes(action),
-  Manager: (action) => ["read", "create", "update", "approve", "assign", "provision"].includes(action),
+  Manager: (action) => ["read", "create", "update", "approve", "confirm", "issue", "cancel", "record", "assign", "provision"].includes(action),
   Admin: () => true,
 };
 

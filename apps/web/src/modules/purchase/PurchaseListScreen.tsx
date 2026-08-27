@@ -12,7 +12,7 @@ import { endpoints, withQuery } from "../../core/api/endpoints";
 import type { EntityRow } from "../../core/schema-table/types";
 import { StatusTag } from "../../core/status-tag/StatusTag";
 import { PURCHASE_STATUS_COLORS } from "../../core/status-tag/status-colors";
-import { steelCobalt } from "../../theme/palette";
+import { semantic, slate, steelCobalt } from "../../theme/palette";
 
 function useMasterOptions(endpoint: string) {
   const query = useQuery({
@@ -48,6 +48,37 @@ function usePurchaseStatusTotal(status: string | undefined, sharedParams: Record
     queryFn: () => apiFetch(withQuery(endpoints.purchases, params), {}, { schema: paginatedRowsResponseSchema }),
     placeholderData: keepPreviousData,
   });
+}
+
+const FULFILMENT_LABELS: Record<string, string> = {
+  not_received: "Not Received",
+  partial: "Partial",
+  fully_received: "Fully Received",
+  not_billed: "Not Billed",
+  fully_billed: "Fully Billed",
+  not_paid: "Not Paid",
+  fully_paid: "Fully Paid",
+};
+
+const FULFILMENT_COLORS: Record<string, string> = {
+  not_received: slate[400],
+  not_billed: slate[400],
+  not_paid: slate[400],
+  partial: semantic.warning,
+  fully_received: semantic.success,
+  fully_billed: semantic.success,
+  fully_paid: semantic.success,
+};
+
+/** Zoho's Received ●/Billed ● dots - a small colored bullet + label, distinct from StatusTag's pill (this is a secondary, derived axis, not the PO's own primary status). */
+function FulfilmentDot({ value }: { value: string }): ReactElement {
+  const color = FULFILMENT_COLORS[value] ?? slate[400];
+  return (
+    <Space size={6}>
+      <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: color }} />
+      <span>{FULFILMENT_LABELS[value] ?? value}</span>
+    </Space>
+  );
 }
 
 /** One card in the status strip above the filter bar - colored from the same map StatusTag's pill uses, so both surfaces read as one system. A real <button>, not a styled <div>, so it's keyboard-operable for free. */
@@ -112,8 +143,9 @@ export function PurchaseListScreen(): ReactElement {
   const activeStatus = searchParams.get("status") ?? undefined;
   const totalCount = usePurchaseStatusTotal(undefined, sharedCountParams);
   const draftCount = usePurchaseStatusTotal("draft", sharedCountParams);
-  const approvedCount = usePurchaseStatusTotal("approved", sharedCountParams);
-  const postedCount = usePurchaseStatusTotal("posted", sharedCountParams);
+  const issuedCount = usePurchaseStatusTotal("issued", sharedCountParams);
+  const closedCount = usePurchaseStatusTotal("closed", sharedCountParams);
+  const cancelledCount = usePurchaseStatusTotal("cancelled", sharedCountParams);
 
   function filterByStatus(status: string | undefined): void {
     setSearchParams((previous) => {
@@ -154,18 +186,25 @@ export function PurchaseListScreen(): ReactElement {
           onClick={() => filterByStatus("draft")}
         />
         <StatChip
-          label="Approved"
-          value={approvedCount.data?.total}
-          color={PURCHASE_STATUS_COLORS.approved ?? steelCobalt.base}
-          active={activeStatus === "approved"}
-          onClick={() => filterByStatus("approved")}
+          label="Issued"
+          value={issuedCount.data?.total}
+          color={PURCHASE_STATUS_COLORS.issued ?? steelCobalt.base}
+          active={activeStatus === "issued"}
+          onClick={() => filterByStatus("issued")}
         />
         <StatChip
-          label="Posted"
-          value={postedCount.data?.total}
-          color={PURCHASE_STATUS_COLORS.posted ?? steelCobalt.base}
-          active={activeStatus === "posted"}
-          onClick={() => filterByStatus("posted")}
+          label="Closed"
+          value={closedCount.data?.total}
+          color={PURCHASE_STATUS_COLORS.closed ?? steelCobalt.base}
+          active={activeStatus === "closed"}
+          onClick={() => filterByStatus("closed")}
+        />
+        <StatChip
+          label="Cancelled"
+          value={cancelledCount.data?.total}
+          color={PURCHASE_STATUS_COLORS.cancelled ?? steelCobalt.base}
+          active={activeStatus === "cancelled"}
+          onClick={() => filterByStatus("cancelled")}
         />
       </Space>
 
@@ -186,7 +225,6 @@ export function PurchaseListScreen(): ReactElement {
           { fieldKey: "branchId", render: (value) => resolvedLabel(branchLabels, value) },
           { fieldKey: "buyerId", render: (value) => resolvedLabel(buyerLabels, value) },
           { fieldKey: "supplierId", render: (value) => resolvedLabel(supplierLabels, value) },
-          { fieldKey: "supplierInvoiceNo", monospace: true },
           { fieldKey: "pricingType", hidden: true },
           { fieldKey: "supplierReferenceNo", hidden: true },
           { fieldKey: "brokerId", hidden: true },
@@ -202,7 +240,6 @@ export function PurchaseListScreen(): ReactElement {
           { fieldKey: "portOfDischargeId", hidden: true },
           { fieldKey: "warehouseId", hidden: true },
           { fieldKey: "incotermId", hidden: true },
-          { fieldKey: "invoice", hidden: true },
           { fieldKey: "billOfLading", hidden: true },
           { fieldKey: "packingList", hidden: true },
           { fieldKey: "certificateOfOrigin", hidden: true },
@@ -217,6 +254,30 @@ export function PurchaseListScreen(): ReactElement {
             width: 110,
             render: (row) => <StatusTag value={asDisplayString(row.status)} colorMap={PURCHASE_STATUS_COLORS} />,
           },
+          // Zoho's own Received ●/Billed ● dots - derived, never stored
+          // (purchase.service.ts's list() computes both server-side, rule
+          // 3's spirit extended to any derived-status value, not just money).
+          {
+            key: "receivedStatus",
+            title: "Received",
+            after: "status",
+            width: 130,
+            render: (row) => <FulfilmentDot value={asDisplayString(row.receivedStatus)} />,
+          },
+          {
+            key: "billedStatus",
+            title: "Billed",
+            after: "receivedStatus",
+            width: 130,
+            render: (row) => <FulfilmentDot value={asDisplayString(row.billedStatus)} />,
+          },
+          {
+            key: "paidStatus",
+            title: "Paid",
+            after: "billedStatus",
+            width: 130,
+            render: (row) => <FulfilmentDot value={asDisplayString(row.paidStatus)} />,
+          },
         ]}
         filters={[
           {
@@ -225,11 +286,33 @@ export function PurchaseListScreen(): ReactElement {
             type: "select",
             options: [
               { label: "Draft", value: "draft" },
-              { label: "Approved", value: "approved" },
-              { label: "Posted", value: "posted" },
+              { label: "Issued", value: "issued" },
+              { label: "Closed", value: "closed" },
+              { label: "Cancelled", value: "cancelled" },
+            ],
+          },
+          {
+            key: "receivedStatus",
+            label: "Received",
+            type: "select",
+            options: [
+              { label: "Not Received", value: "not_received" },
+              { label: "Partial", value: "partial" },
+              { label: "Fully Received", value: "fully_received" },
+            ],
+          },
+          {
+            key: "billedStatus",
+            label: "Billed",
+            type: "select",
+            options: [
+              { label: "Not Billed", value: "not_billed" },
+              { label: "Partial", value: "partial" },
+              { label: "Fully Billed", value: "fully_billed" },
             ],
           },
           { key: "purchaseDate", label: "Purchase Date", type: "dateRange" },
+          { key: "divisionId", label: "Division", type: "select", options: divisions },
           { key: "supplierId", label: "Supplier", type: "select", options: suppliers },
           { key: "branchId", label: "Branch", type: "select", options: branches },
         ]}

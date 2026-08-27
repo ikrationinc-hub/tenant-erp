@@ -348,7 +348,7 @@ describe("modules/purchase - Record Purchase, session (b): items + pricing (docs
   );
 
   it(
-    "a non-draft purchase rejects adding or editing items",
+    "a closed purchase rejects adding or editing items - PL-3: items stay editable through Issued, only Closed/Cancelled lock them",
     async () => {
       const tenant = await seedTenant("immutable-items");
       const app = createApp();
@@ -362,7 +362,7 @@ describe("modules/purchase - Record Purchase, session (b): items + pricing (docs
           .send({ itemId: tenant.itemRefs.itemId, quantity: "10", uomId: tenant.itemRefs.uomId, purchaseRateUsd: "100", exchangeRate: "3.6725" }),
       );
 
-      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "posted" }).where(eq(purchases.id, purchaseId)));
+      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "closed" }).where(eq(purchases.id, purchaseId)));
 
       const addRes = await request(app)
         .post(`/api/v1/purchases/${purchaseId}/items`)

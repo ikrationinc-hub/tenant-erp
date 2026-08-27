@@ -34,8 +34,10 @@ export type ShipmentInput = z.infer<typeof shipmentInputSchema>;
  * Tables A+B (Purchase Header + Supplier Details) plus the nested Shipment
  * Details block - built together per this task's suggested session order.
  * `purchaseNumber`/`status` are never accepted here: FR-101's auto-generated
- * number and the Draft->Approved->Posted workflow (not yet built - session
- * (e)) are exclusively system-controlled.
+ * number and the Draft->Issued->Closed/Cancelled workflow (PL-3, replacing
+ * the original Draft->Approved->Posted design) are exclusively system-
+ * controlled - issue/cancel have their own endpoints, Closed is derived
+ * only (never a manual transition).
  *
  * `divisionId`/`pricingType` (Prompt 21 items 1/2) are required here even
  * though both columns are nullable at the DB level - existing purchases
@@ -52,7 +54,6 @@ export const createPurchaseSchema = z
     branchId: z.string().uuid(),
     buyerId: z.string().uuid(),
     supplierId: z.string().uuid(),
-    supplierInvoiceNo: z.string().min(1).optional(),
     supplierReferenceNo: z.string().min(1).optional(),
     brokerId: z.string().uuid().optional(),
     brokerCommission: decimalStringSchema.optional(),
@@ -75,7 +76,6 @@ export const updatePurchaseSchema = z
     branchId: z.string().uuid().optional(),
     buyerId: z.string().uuid().optional(),
     supplierId: z.string().uuid().optional(),
-    supplierInvoiceNo: z.string().min(1).optional(),
     supplierReferenceNo: z.string().min(1).optional(),
     brokerId: z.string().uuid().optional(),
     brokerCommission: decimalStringSchema.optional(),
@@ -97,9 +97,12 @@ export const purchasesListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(20),
   search: z.string().min(1).optional(),
-  status: z.enum(["draft", "approved", "posted"]).optional(),
+  status: z.enum(["draft", "issued", "closed", "cancelled"]).optional(),
   supplierId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
+  divisionId: z.string().uuid().optional(),
+  receivedStatus: z.enum(["not_received", "partial", "fully_received"]).optional(),
+  billedStatus: z.enum(["not_billed", "partial", "fully_billed"]).optional(),
   purchaseDateFrom: dateStringSchema.optional(),
   purchaseDateTo: dateStringSchema.optional(),
 });

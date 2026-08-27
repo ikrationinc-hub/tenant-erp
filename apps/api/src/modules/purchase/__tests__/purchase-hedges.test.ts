@@ -300,14 +300,14 @@ describe("modules/purchase - Platform Hedging / LME Records, session (d): hedgin
   );
 
   it(
-    "a hedge can be added even after the purchase has been posted (independent of the purchase's own status)",
+    "a hedge can be added even after the purchase has been closed (independent of the purchase's own status)",
     async () => {
-      const tenant = await seedTenant("post-post-hedge");
+      const tenant = await seedTenant("post-close-hedge");
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
       const purchaseId = await createDraftPurchase(app, authHeader, tenant);
 
-      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "posted" }).where(eq(purchases.id, purchaseId)));
+      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "closed" }).where(eq(purchases.id, purchaseId)));
 
       const res = await request(app)
         .post(`/api/v1/purchases/${purchaseId}/hedges`)

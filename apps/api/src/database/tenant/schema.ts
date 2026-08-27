@@ -1070,7 +1070,22 @@ export const brokerBanksRelations = relations(brokerBanks, ({ one }) => ({
 // session ever moves it off "draft" - the actual Draft->Approved->Posted
 // transitions, their permissions, and Posted immutability (CLAUDE.md rule
 // 8) are the workflow engine, explicitly deferred to session (e).
-export const purchaseStatusEnum = pgEnum("purchase_status", ["draft", "approved", "posted"]);
+//
+// PL-3 (docs/PURCHASE-LIFECYCLE-4DOC.md, ADR 0018): reworked to
+// Draft -> Issued -> Closed/Cancelled, per ADR 0016/0017's own scoping.
+// "Issued" replaces "Approved" (commitment sent to supplier); "Posted" is
+// DROPPED entirely - its only real effect (rule 8 immutability) is now
+// carried by the two terminal states instead of a separate manual step.
+// "Closed" is a DERIVED, automatic transition (never a user-invoked
+// endpoint) - fires the moment receivedStatus="fully_received" AND
+// billedStatus="fully_billed" are both true, checked in the same
+// transaction as whatever confirmed a receipt or approved a bill last
+// (purchase-receipts.service.ts's confirm, purchase-bills.service.ts's
+// approve). "Cancelled" is new: a PO the buyer called off before
+// fulfilment - manually invoked, guarded so it can never fire once
+// anything's been received or billed against the PO (see
+// requireNothingFulfilledForCancel in purchase.service.ts).
+export const purchaseStatusEnum = pgEnum("purchase_status", ["draft", "issued", "closed", "cancelled"]);
 /** Prompt 21 item 2: drives which section is active - 'fixed' keeps today's manual item rate and hides LME Records; 'lme' shows LME Records and derives the item rate from the LME final rate (purchase-items.service.ts). */
 export const purchasePricingTypeEnum = pgEnum("purchase_pricing_type", ["lme", "fixed"]);
 /** Prompt 21 item 4: unused today (a single broker_commission amount is all the form captures) - added now, nullable, so a %/flat split can be introduced later without a migration. Nothing reads or writes this column yet. */
@@ -1107,7 +1122,6 @@ export const purchases = pgTable(
     supplierId: uuid("supplier_id")
       .notNull()
       .references(() => suppliers.id, { onDelete: "restrict" }),
-    supplierInvoiceNo: text("supplier_invoice_no"),
     supplierReferenceNo: text("supplier_reference_no"),
     /** Prompt 21 item 2 - same "leave existing rows unset, require going forward" treatment as divisionId, for the same reason (no sensible value to backfill existing purchases to). */
     pricingType: purchasePricingTypeEnum("pricing_type"),
@@ -1116,9 +1130,12 @@ export const purchases = pgTable(
     /** Money (rule 1): numeric, decimal.js at the repository boundary, never a float. Nullable - only meaningful when brokerId is set. */
     brokerCommission: numeric("broker_commission", { precision: 18, scale: 2 }),
     brokerCommissionType: brokerCommissionTypeEnum("broker_commission_type"),
-    /** Sub Tab 2's "Standard fields - every record": "Approved By · Approved Date" - the only workflow-transition actor/timestamp the spec names explicitly (no "Posted By/Date" - that transition's actor is still fully recoverable from audit_logs, same as everywhere else in this build). Set once, by session (e)'s approve() transition; never touched again. */
-    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "restrict" }),
-    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    /** Sub Tab 2's "Standard fields - every record": "Approved By · Approved Date" in the spec's original naming - renamed in PL-3 (column rename, same "rename in place, keep history" discipline as PL-2's invoice_number -> bill_number) since "Approved" no longer exists as a status; this is now the Draft->Issued transition's actor/timestamp. Set once, by purchase.service.ts's issue() transition; never touched again. */
+    issuedBy: uuid("issued_by").references(() => users.id, { onDelete: "restrict" }),
+    issuedAt: timestamp("issued_at", { withTimezone: true }),
+    /** PL-3: the Cancelled transition's actor/timestamp - nullable, set only on Draft/Issued -> Cancelled. No "closedBy" column: Closed is a derived, automatic transition with no human actor (see purchaseStatusEnum's doc comment) - its timestamp still lives in audit_logs like every other system-driven change. */
+    cancelledBy: uuid("cancelled_by").references(() => users.id, { onDelete: "restrict" }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     ...auditColumns(),
   },
   (table) => [
@@ -1208,7 +1225,8 @@ export const purchasesRelations = relations(purchases, ({ one, many }) => ({
     fields: [purchases.id],
     references: [purchaseShipments.purchaseId],
   }),
-  invoices: many(purchaseInvoices),
+  bills: many(purchaseBills),
+  receipts: many(purchaseReceipts),
 }));
 
 export const purchaseShipmentsRelations = relations(purchaseShipments, ({ one }) => ({
@@ -1593,25 +1611,26 @@ export const hedgesRelations = relations(hedges, ({ one }) => ({
   }),
 }));
 
-// --- Prompt 22: Supplier Invoice (stock timing rework) ---------------------
-// Client-confirmed model: a purchase order is intent - it never moves
-// stock. Stock enters inventory only when the SUPPLIER INVOICE (this new
-// document) is received, uploaded, and approved. One-to-many with
-// `purchases` (a purchase HAS invoices - the general shape partial
-// shipments need), but modules/purchase/purchase-invoices.service.ts
-// enforces "exactly one" by default via its own ALLOW_PARTIAL_INVOICING
-// flag - confirmed with the user rather than guessed.
-export const purchaseInvoiceStatusEnum = pgEnum("purchase_invoice_status", ["draft", "approved", "reversed"]);
+// --- PL-2 (docs/PURCHASE-LIFECYCLE-4DOC.md, ADR 0017): the Bill -----------
+// Renamed from Prompt 22's "Supplier Invoice" (CLAUDE.md's Vocabulary
+// section: "Bill" is canonical, "supplier invoice" is not - one word for
+// one thing). Still the financial-liability document PL-1/ADR 0016 already
+// decoupled from stock: a purchase order is intent, a receipt is the
+// physical fact, a BILL is the financial fact. One-to-many with `purchases`
+// (a purchase HAS bills - partial billing is now a real, first-class case,
+// not just schema headroom - see purchase-bills.service.ts's
+// ALLOW_PARTIAL_BILLING flag and purchase_bill_items below).
+export const purchaseBillStatusEnum = pgEnum("purchase_bill_status", ["draft", "approved", "reversed", "paid"]);
 
 /**
- * `reversed` exists in the enum for a future whole-invoice cancellation
- * flow (not built by this prompt - Parts 2-5 only ever move an invoice
- * between draft and approved) - added now so that feature doesn't need a
- * migration later, same "add the column/value now, wire it up later"
- * precedent as Prompt 21's broker_commission_type.
+ * `reversed` exists for a future whole-bill cancellation flow (not built
+ * yet - same "add the value now, wire it up later" precedent as
+ * broker_commission_type). `paid` is reserved for the deferred Payment
+ * phase (PL-2's own scope note: do NOT build payment now) - nothing
+ * transitions a bill to `paid` yet.
  */
-export const purchaseInvoices = pgTable(
-  "purchase_invoices",
+export const purchaseBills = pgTable(
+  "purchase_bills",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     companyId: uuid("company_id")
@@ -1621,55 +1640,294 @@ export const purchaseInvoices = pgTable(
     purchaseId: uuid("purchase_id")
       .notNull()
       .references(() => purchases.id, { onDelete: "restrict" }),
-    /** Own gapless series (docType "SUPPLIER_INVOICE", rule 7) - an invoice is its own fiscal document, numbered independently of the purchase it's linked to. */
-    invoiceNumber: text("invoice_number").notNull(),
-    /** The supplier's own invoice reference - free text, distinct from invoiceNumber (this system's own gapless number). */
+    /** Own gapless series (docType "BILL", rule 7) - a bill is its own fiscal document, numbered independently of the PO, the receipt, and any prior SUPPLIER_INVOICE-numbered row (that series is left alone; existing SINV-numbered bills keep their historical numbers, rule 8's spirit - numbering is never rewritten). */
+    billNumber: text("bill_number").notNull(),
+    /** The supplier's own invoice reference - free text, distinct from billNumber (this system's own gapless number). */
     supplierInvoiceNo: text("supplier_invoice_no"),
-    invoiceDate: date("invoice_date").notNull(),
-    status: purchaseInvoiceStatusEnum("status").notNull().default("draft"),
+    billDate: date("bill_date").notNull(),
+    /** PL-2: when payment is due - informational only (no dunning/ageing logic; that's the deferred Payment phase's job). Nullable - not every bill's due date is known/entered at create time. */
+    dueDate: date("due_date"),
+    status: purchaseBillStatusEnum("status").notNull().default("draft"),
     /** What the supplier's invoice states as its total - mandatory (it's the whole point of the document), reference/reconciliation only, never fed into any calculation of its own (rule 1: numeric, decimal.js at the repository boundary) - though purchase.service.ts's getById DOES compute a variance FROM it, for display only, never a block. */
-    invoiceAmountUsd: numeric("invoice_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    billAmountUsd: numeric("bill_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    /** PL-2 item 5: a clean seam only - tax is multi-country and an open client question (CLAUDE.md's "Do NOT import from Zoho" - no TDS/TCS mechanics). Nullable, reference-only, never computed or enforced. The real tax engine waits on the client's answer (see ADR 0017). */
+    taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }),
     approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "restrict" }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     ...auditColumns(),
   },
   (table) => [
-    uniqueIndex("purchase_invoices_company_id_invoice_number_key")
-      .on(table.companyId, table.invoiceNumber)
+    uniqueIndex("purchase_bills_company_id_bill_number_key")
+      .on(table.companyId, table.billNumber)
       .where(sql`${table.deletedAt} is null`),
-    index("purchase_invoices_purchase_id_idx").on(table.purchaseId),
+    index("purchase_bills_purchase_id_idx").on(table.purchaseId),
   ],
 );
 
-export const purchaseInvoicesRelations = relations(purchaseInvoices, ({ one }) => ({
+/**
+ * PL-2: which purchase_item(s) this bill covers and how much of each is
+ * being billed - mirrors purchase_receipt_items' shape exactly (billed
+ * qty can be < ordered qty; multiple bills per PO until fully billed).
+ * `billedAmountUsd` is this line's own amount (not derived from the
+ * purchase item's own pricing) - the supplier's invoice states its own
+ * per-line price, which may differ from what the PO recorded, same
+ * "reference only" treatment as the bill's own header total.
+ */
+export const purchaseBillItems = pgTable(
+  "purchase_bill_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    billId: uuid("bill_id")
+      .notNull()
+      .references(() => purchaseBills.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    purchaseItemId: uuid("purchase_item_id")
+      .notNull()
+      .references(() => purchaseItems.id, { onDelete: "restrict" }),
+    billedQuantity: numeric("billed_quantity", { precision: 18, scale: 6 }).notNull(),
+    billedAmountUsd: numeric("billed_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    ...auditColumns(),
+  },
+  (table) => [index("purchase_bill_items_bill_id_idx").on(table.billId), index("purchase_bill_items_purchase_item_id_idx").on(table.purchaseItemId)],
+);
+
+export const purchaseBillsRelations = relations(purchaseBills, ({ one, many }) => ({
   purchase: one(purchases, {
-    fields: [purchaseInvoices.purchaseId],
+    fields: [purchaseBills.purchaseId],
     references: [purchases.id],
   }),
   branch: one(branches, {
-    fields: [purchaseInvoices.branchId],
+    fields: [purchaseBills.branchId],
     references: [branches.id],
+  }),
+  items: many(purchaseBillItems),
+}));
+
+export const purchaseBillItemsRelations = relations(purchaseBillItems, ({ one }) => ({
+  bill: one(purchaseBills, {
+    fields: [purchaseBillItems.billId],
+    references: [purchaseBills.id],
+  }),
+  purchaseItem: one(purchaseItems, {
+    fields: [purchaseBillItems.purchaseItemId],
+    references: [purchaseItems.id],
   }),
 }));
 
-// --- Workflow + stock (FR-107/108, session (e) - the last piece of "the
-// big one") ----------------------------------------------------------------
-// Resolved open question #10: stock moves at Approved, not Posted - FR-108
-// literally says "Approved purchase updates inventory." Posted is a pure
-// accounting lock on top (rule 8's immutability), with no inventory effect
-// of its own. The Draft->Approved transition emits `purchase.approved` on
-// common/events/bus.ts; modules/inventory's subscriber (registered at boot,
-// never imported by modules/purchase - "modules must not call each other
-// directly") writes these rows in the SAME transaction as the approval,
-// so the two can never diverge (a failure in either rolls back both).
-// Prompt 22 Part 5: "purchase_reversal" - the offsetting NEGATIVE row a
-// re-approval writes to undo a purchase_invoice's previously-moved
-// quantity, before writing a fresh purchase_receipt for the corrected
-// one. Never a third "purchase_adjustment" type - the reverse-then-
-// reissue mechanism (inventory-subscriber.ts's handleInvoiceApproved)
-// only ever needs these two, and reusing purchase_receipt for the
-// reissued row keeps every genuine receipt (first approval or Nth)
-// reporting identically.
+// --- PL-1: Purchase Receipt (four-document lifecycle, docs/PURCHASE-
+// LIFECYCLE-4DOC.md) -----------------------------------------------------
+// Supersedes Prompt 22's design (ADR 0015): stock no longer moves on
+// invoice approval. A purchase order is intent; the Bill is a financial
+// fact; only the RECEIPT - the physical arrival of goods - is a physical
+// fact, so only confirming a receipt writes stock_movements. The Bill
+// (purchase_bills, renamed from purchase_invoices in PL-2) is purely
+// financial (no stock coupling, no reverse-then-reissue reconciliation -
+// see ADR 0016).
+export const purchaseReceiptStatusEnum = pgEnum("purchase_receipt_status", ["draft", "confirmed", "reversed"]);
+
+/**
+ * One purchase can have MULTIPLE receipts (partial shipments arrive over
+ * time) - purchaseId is a plain FK, not unique, unlike purchase_shipments'
+ * 1:1. `reversed` exists for a future whole-receipt cancellation flow
+ * (not built by PL-1 - confirming is the only transition today), same
+ * "add the value now, wire it up later" precedent as purchase_bills' own
+ * `reversed`.
+ */
+export const purchaseReceipts = pgTable(
+  "purchase_receipts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    purchaseId: uuid("purchase_id")
+      .notNull()
+      .references(() => purchases.id, { onDelete: "restrict" }),
+    /** Own gapless series (docType "PURCHASE_RECEIPT", rule 7) - a receipt is its own fiscal document, numbered independently of the PO and any invoice. */
+    receiptNumber: text("receipt_number").notNull(),
+    receiptDate: date("receipt_date").notNull(),
+    warehouseId: uuid("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id, { onDelete: "restrict" }),
+    receivedBy: uuid("received_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    status: purchaseReceiptStatusEnum("status").notNull().default("draft"),
+    confirmedBy: uuid("confirmed_by").references(() => users.id, { onDelete: "restrict" }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("purchase_receipts_company_id_receipt_number_key")
+      .on(table.companyId, table.receiptNumber)
+      .where(sql`${table.deletedAt} is null`),
+    index("purchase_receipts_purchase_id_idx").on(table.purchaseId),
+  ],
+);
+
+/**
+ * Which purchase_item(s) this receipt covers and how much of each
+ * actually arrived - `receivedQuantity` can be less than the purchase
+ * item's own ordered `quantity` (a partial receipt); the guard that sums
+ * received-across-all-receipts <= ordered lives in the service layer
+ * (purchase-receipts.service.ts), not here, matching this codebase's
+ * "only cross-row invariants that need a query live outside the schema"
+ * convention (e.g. ALLOW_PARTIAL_INVOICING).
+ */
+export const purchaseReceiptItems = pgTable(
+  "purchase_receipt_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    receiptId: uuid("receipt_id")
+      .notNull()
+      .references(() => purchaseReceipts.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    purchaseItemId: uuid("purchase_item_id")
+      .notNull()
+      .references(() => purchaseItems.id, { onDelete: "restrict" }),
+    receivedQuantity: numeric("received_quantity", { precision: 18, scale: 6 }).notNull(),
+    ...auditColumns(),
+  },
+  (table) => [index("purchase_receipt_items_receipt_id_idx").on(table.receiptId), index("purchase_receipt_items_purchase_item_id_idx").on(table.purchaseItemId)],
+);
+
+export const purchaseReceiptsRelations = relations(purchaseReceipts, ({ one, many }) => ({
+  purchase: one(purchases, {
+    fields: [purchaseReceipts.purchaseId],
+    references: [purchases.id],
+  }),
+  branch: one(branches, {
+    fields: [purchaseReceipts.branchId],
+    references: [branches.id],
+  }),
+  warehouse: one(warehouses, {
+    fields: [purchaseReceipts.warehouseId],
+    references: [warehouses.id],
+  }),
+  items: many(purchaseReceiptItems),
+}));
+
+export const purchaseReceiptItemsRelations = relations(purchaseReceiptItems, ({ one }) => ({
+  receipt: one(purchaseReceipts, {
+    fields: [purchaseReceiptItems.receiptId],
+    references: [purchaseReceipts.id],
+  }),
+  purchaseItem: one(purchaseItems, {
+    fields: [purchaseReceiptItems.purchaseItemId],
+    references: [purchaseItems.id],
+  }),
+}));
+
+// --- PL-5 (docs/PURCHASE-LIFECYCLE-4DOC.md): Payment ----------------------
+// The 4th and final lifecycle document - deferred through PL-1/2/3/4, now
+// built. Scoped to a SUPPLIER, not a single purchase or bill - Zoho's own
+// "Payments Made" model, which this mirrors: one payment can settle
+// several bills for the same supplier in one transaction (payment_
+// allocations is the join, one row per bill it touches), and a single
+// bill can be paid across several payments (partial payment). No status
+// enum on the payment itself - unlike Receipt/Bill, a payment is a single
+// atomic event recorded once (no draft/confirm lifecycle - Zoho's own
+// Payments Made has no draft state either); its EFFECT (how much of a
+// bill is settled) is what's derived, on purchase_bills, the same
+// "compute on read from a sum" pattern PL-1/PL-2's received/billed axes
+// already established.
+export const paymentModeEnum = pgEnum("payment_mode", ["cash", "cheque", "bank_transfer", "other"]);
+
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    /** A payment is made TO a supplier, not to a single purchase/bill - the bill(s) it settles are named in payment_allocations below, which can span multiple purchases for the same supplier. */
+    supplierId: uuid("supplier_id")
+      .notNull()
+      .references(() => suppliers.id, { onDelete: "restrict" }),
+    /** Own gapless series (docType "PAYMENT", rule 7) - a payment is its own fiscal document. */
+    paymentNumber: text("payment_number").notNull(),
+    paymentDate: date("payment_date").notNull(),
+    paymentMode: paymentModeEnum("payment_mode").notNull(),
+    /** Free text - a cheque number, a wire transfer reference, etc. No bank-account master exists yet (client's spec only ever gave a free-text "Bank Details" field on the supplier itself - see supplier_banks); revisit if/when one is built. */
+    referenceNumber: text("reference_number"),
+    /** The payment's own total - always USD (matches purchase_bills.billAmountUsd; no multi-currency payment reconciliation in this first pass). Must equal the sum of this payment's own allocations (enforced at the service layer, same "sum of children equals the parent's own total" discipline as nothing else in this schema currently needs, since Receipt/Bill both let their own sum run under the parent's total instead of requiring equality). */
+    paymentAmountUsd: numeric("payment_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    notes: text("notes"),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("payments_company_id_payment_number_key")
+      .on(table.companyId, table.paymentNumber)
+      .where(sql`${table.deletedAt} is null`),
+    index("payments_supplier_id_idx").on(table.supplierId),
+  ],
+);
+
+/**
+ * The join between a payment and the bill(s) it settles - one row per
+ * bill a payment is applied to. `appliedAmountUsd` is how much of THIS
+ * payment went to THIS bill - may be less than the bill's own outstanding
+ * balance (partial payment, same "partial is a first-class case" pattern
+ * PL-1/PL-2 established for Receipt/Bill quantities), and a bill can
+ * appear across multiple payments' own allocation rows over time.
+ */
+export const paymentAllocations = pgTable(
+  "payment_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paymentId: uuid("payment_id")
+      .notNull()
+      .references(() => payments.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    billId: uuid("bill_id")
+      .notNull()
+      .references(() => purchaseBills.id, { onDelete: "restrict" }),
+    appliedAmountUsd: numeric("applied_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    ...auditColumns(),
+  },
+  (table) => [index("payment_allocations_payment_id_idx").on(table.paymentId), index("payment_allocations_bill_id_idx").on(table.billId)],
+);
+
+export const paymentsRelations = relations(payments, ({ one, many }) => ({
+  supplier: one(suppliers, {
+    fields: [payments.supplierId],
+    references: [suppliers.id],
+  }),
+  branch: one(branches, {
+    fields: [payments.branchId],
+    references: [branches.id],
+  }),
+  allocations: many(paymentAllocations),
+}));
+
+export const paymentAllocationsRelations = relations(paymentAllocations, ({ one }) => ({
+  payment: one(payments, {
+    fields: [paymentAllocations.paymentId],
+    references: [payments.id],
+  }),
+  bill: one(purchaseBills, {
+    fields: [paymentAllocations.billId],
+    references: [purchaseBills.id],
+  }),
+}));
+
+// --- Workflow + stock (FR-107/108, reworked by PL-1/ADR 0016) -------------
+// Stock moves ONLY on Purchase Receipt Draft->Confirmed, in the SAME
+// transaction as the confirmation (common/events/bus.ts: synchronous,
+// transaction-scoped emit - a subscriber throw rolls back the receipt
+// confirmation too). Neither PO approval nor invoice approval has any
+// inventory side effect. `purchase_reversal` is the offsetting NEGATIVE
+// row a future receipt-correction flow would write to undo a receipt's
+// previously-moved quantity - not built by PL-1 (a confirmed receipt's
+// items are immutable, matching rule 8), reserved for that later flow.
 export const stockMovementTypeEnum = pgEnum("stock_movement_type", ["purchase_receipt", "purchase_reversal"]);
 
 /**
@@ -1707,9 +1965,11 @@ export const stockMovements = pgTable(
     movementDate: date("movement_date").notNull(),
     referenceType: text("reference_type").notNull(),
     referenceId: uuid("reference_id").notNull(),
-    /** Prompt 22 Part 3: "the stock movement references BOTH the purchase and the invoice" - referenceType/referenceId already resolves back to the purchase (via purchase_item -> purchases, listStockMovements' own join), this is the direct pointer to the invoice that brought the goods in. Nullable - a movement type this prompt doesn't introduce (a future sale/adjustment) has no invoice at all. */
-    purchaseInvoiceId: uuid("purchase_invoice_id").references(() => purchaseInvoices.id, { onDelete: "restrict" }),
-    /** Prompt 22 Part 4: set ONLY on a purchase_reversal row, pointing at the purchase_receipt it offsets - append-only-safe (a NEW row referencing an OLD one, never a mutation of the old one) way to know which receipts are still "active" vs already reconciled, without a mutable flag on the original row. */
+    /** Superseded by receiptId below (PL-1/ADR 0016) - kept nullable, unwritten by any current path, only so historical Prompt-22-era rows (written before the rework, back when this pointed at the same table under its old name purchase_invoices) keep resolving. Column name and FK target renamed in PL-2's rename (purchase_invoices -> purchase_bills); the physical column itself (purchase_invoice_id) is untouched to avoid rewriting historical data for a column nothing writes anymore. */
+    purchaseInvoiceId: uuid("purchase_invoice_id").references(() => purchaseBills.id, { onDelete: "restrict" }),
+    /** PL-1: the direct pointer to the purchase_receipt that brought the goods in - referenceType/referenceId already resolves back to the purchase (via purchase_item -> purchases, listStockMovements' own join), this is the specific document that triggered THIS movement. Nullable - a movement type PL-1 doesn't introduce (a future sale/adjustment) has no receipt at all. */
+    receiptId: uuid("receipt_id").references(() => purchaseReceipts.id, { onDelete: "restrict" }),
+    /** Set ONLY on a purchase_reversal row, pointing at the purchase_receipt movement it offsets - append-only-safe (a NEW row referencing an OLD one, never a mutation of the old one) way to know which receipts are still "active" vs already reconciled, without a mutable flag on the original row. Not written by PL-1 (a confirmed receipt's items are immutable); reserved for a future receipt-correction flow. */
     reversalOfMovementId: uuid("reversal_of_movement_id").references((): AnyPgColumn => stockMovements.id, { onDelete: "restrict" }),
     ...auditColumns(),
   },
@@ -1717,6 +1977,7 @@ export const stockMovements = pgTable(
     index("stock_movements_company_item_warehouse_idx").on(table.companyId, table.itemId, table.warehouseId),
     index("stock_movements_reference_idx").on(table.referenceType, table.referenceId),
     index("stock_movements_purchase_invoice_id_idx").on(table.purchaseInvoiceId),
+    index("stock_movements_receipt_id_idx").on(table.receiptId),
     // Prompt 22 Part 5: the flagged gap - quantity sign was convention-only
     // ("Positive = inbound", see the doc comment above). Enforced at the DB
     // level, not just an application-level insert helper, so no future
@@ -1753,8 +2014,12 @@ export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
     fields: [stockMovements.uomId],
     references: [uom.id],
   }),
-  purchaseInvoice: one(purchaseInvoices, {
+  purchaseInvoice: one(purchaseBills, {
     fields: [stockMovements.purchaseInvoiceId],
-    references: [purchaseInvoices.id],
+    references: [purchaseBills.id],
+  }),
+  receipt: one(purchaseReceipts, {
+    fields: [stockMovements.receiptId],
+    references: [purchaseReceipts.id],
   }),
 }));

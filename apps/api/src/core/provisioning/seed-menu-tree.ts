@@ -130,6 +130,30 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
         path: "/purchase/orders",
         requiredPermission: "purchase.po.read",
       },
+      // PL-4: Zoho's own "Purchase Receives" and "Bills" nav items -
+      // reusing purchase.po.read (no purchase.receipt.read/
+      // purchase.invoice.read exist - the backend routes these list
+      // screens call gate on purchase.po.read too, see purchase.routes.ts).
+      {
+        key: "purchase.receipts",
+        label: "Purchase Receipts",
+        path: "/purchase/receipts",
+        requiredPermission: "purchase.po.read",
+      },
+      {
+        key: "purchase.bills",
+        label: "Purchase Bills",
+        path: "/purchase/bills",
+        requiredPermission: "purchase.po.read",
+      },
+      // PL-5: Zoho's own "Payments Made" nav item - reusing
+      // purchase.po.read, same reasoning as Receipts/Bills above.
+      {
+        key: "purchase.payments",
+        label: "Payments Made",
+        path: "/purchase/payments",
+        requiredPermission: "purchase.po.read",
+      },
     ],
   },
   {

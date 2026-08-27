@@ -22,43 +22,54 @@ interface MockMovement {
 }
 
 /**
- * Prompt 22, mock world: one movement per item, but only for a purchase
- * with at least one APPROVED invoice - a purchase's own status (even
- * "posted") never moves stock by itself anymore. This mock simplifies
- * the real reverse-then-reissue reconciliation (Part 4) to "current items
- * of every purchase with an approved invoice" - good enough to prove the
- * UI wiring (approving an invoice makes stock appear); it does not
- * replicate the real backend's exact reconciliation trail.
+ * PL-1, mock world: one movement per CONFIRMED receipt line - a purchase's
+ * own status, and a bill's approval, never move stock by themselves
+ * anymore (that's the whole point of the four-document rework: only the
+ * Receipt moves stock). Mirrors the real backend's receipt.confirmed
+ * subscriber - each confirmed receipt's own lines become movements,
+ * keyed by their own purchaseItemId, resolved back to the item/grade/uom
+ * the parent purchase's item carries.
  */
 function computeMovements(): MockMovement[] {
   const movements: MockMovement[] = [];
   for (const purchase of purchases) {
-    const hasApprovedInvoice = purchase.invoices.some((invoice) => invoice.status === "approved");
-    if (!hasApprovedInvoice) {
-      continue;
-    }
-    const warehouseId = typeof purchase.shipment.warehouseId === "string" ? purchase.shipment.warehouseId : "";
+    const warehouseIdFallback = typeof purchase.shipment.warehouseId === "string" ? purchase.shipment.warehouseId : "";
     const branchId = typeof purchase.branchId === "string" ? purchase.branchId : null;
-    for (const item of purchase.items) {
-      const itemId = typeof item.itemId === "string" ? item.itemId : "";
-      const gradeId = typeof item.gradeId === "string" ? item.gradeId : null;
-      const quantity = typeof item.quantity === "string" ? item.quantity : "0";
-      const uomId = typeof item.uomId === "string" ? item.uomId : "";
-      movements.push({
-        id: `movement-${String(item.id)}`,
-        itemId,
-        gradeId,
-        warehouseId,
-        quantity,
-        uomId,
-        branchId,
-        movementType: "purchase_receipt",
-        movementDate: typeof purchase.purchaseDate === "string" ? purchase.purchaseDate : "",
-        referenceType: "purchase_item",
-        referenceId: String(item.id),
-        sourcePurchaseId: purchase.id,
-        sourcePurchaseNumber: purchase.purchaseNumber,
-      });
+    const itemsById = new Map(purchase.items.map((item) => [String(item.id), item]));
+
+    for (const receipt of purchase.receipts) {
+      if (receipt.status !== "confirmed") {
+        continue;
+      }
+      const receiptWarehouseId = typeof receipt.warehouseId === "string" ? receipt.warehouseId : warehouseIdFallback;
+      const lines = Array.isArray(receipt.items) ? (receipt.items as Record<string, unknown>[]) : [];
+      for (const line of lines) {
+        const purchaseItemId = typeof line.purchaseItemId === "string" ? line.purchaseItemId : "";
+        const item = itemsById.get(purchaseItemId);
+        if (!item) {
+          continue;
+        }
+        const itemId = typeof item.itemId === "string" ? item.itemId : "";
+        const gradeId = typeof item.gradeId === "string" ? item.gradeId : null;
+        const quantity = typeof line.receivedQuantity === "string" ? line.receivedQuantity : "0";
+        const uomId = typeof item.uomId === "string" ? item.uomId : "";
+        const lineId = typeof line.id === "string" || typeof line.id === "number" ? String(line.id) : purchaseItemId;
+        movements.push({
+          id: `movement-${lineId}`,
+          itemId,
+          gradeId,
+          warehouseId: receiptWarehouseId,
+          quantity,
+          uomId,
+          branchId,
+          movementType: "purchase_receipt",
+          movementDate: typeof receipt.receiptDate === "string" ? receipt.receiptDate : "",
+          referenceType: "purchase_item",
+          referenceId: purchaseItemId,
+          sourcePurchaseId: purchase.id,
+          sourcePurchaseNumber: purchase.purchaseNumber,
+        });
+      }
     }
   }
   return movements.reverse();

@@ -15,7 +15,7 @@ function requireTenantScope(ctx: RequestContext) {
   return { ...scope, userId: scope.userId };
 }
 
-/** FR-204. NOT gated by the purchase's draft/approved/posted status (resolved open question #8, same reasoning as LME records) - hedging commonly happens across a purchase's whole lifecycle, staged across multiple positions. */
+/** FR-204. NOT gated by the purchase's own status at all (resolved open question #8, same reasoning as LME records) - hedging commonly happens across a purchase's whole lifecycle, staged across multiple positions. */
 export async function addHedge(ctx: RequestContext, purchaseId: string, input: AddHedgeInput): Promise<HedgeRow> {
   const scope = requireTenantScope(ctx);
 

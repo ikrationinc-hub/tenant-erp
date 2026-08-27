@@ -40,9 +40,10 @@ async function assertLmeRecordNotUsed(tx: TenantTx, companyId: string, record: L
 }
 
 /**
- * FR-201/FR-202/FR-203. NOT gated by the purchase's draft/approved/posted
- * status (resolved open question #6) - a purchase can already be
- * Approved or Posted when its price gets fixed. The price is recorded
+ * FR-201/FR-202/FR-203. NOT gated by the purchase's own status at all
+ * (resolved open question #6) - a purchase can already be Issued when its
+ * price gets fixed; only a per-record "already used by an item" lock
+ * applies (isUsed, computed in purchase.service.ts). The price is recorded
  * into market_prices FIRST via the PriceSource (this task's own
  * instruction: "never straight onto a transaction"), and only the
  * resulting row's id/value is snapshotted onto the lme_record - never a

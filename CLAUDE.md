@@ -174,3 +174,73 @@ packages/contracts/  shared Zod schemas + types (api ↔ web)
 - Hardcode a field label or a route in `apps/web`
 - `parseFloat` an amount
 - Optimize before it's measured
+
+
+## Vocabulary — canonical terms (use these exact words everywhere)
+
+Naming must be consistent across the API, the UI, the database, the audit log,
+and every prompt. Drift here (Supplier in one screen, Vendor in another) confuses
+users and fragments search. These are the canonical terms.
+
+### Document lifecycle — use Zoho's names (the client benchmarked against Zoho)
+
+| Concept | Canonical term | NOT |
+|---|---|---|
+| The purchase order | **Purchase Order** (PO) | — |
+| Goods physically arriving | **Purchase Receipt** / "Receive" | goods-in, GRN* |
+| The supplier's invoice to us | **Bill** | supplier invoice**, voucher |
+| Money we pay out | **Payment** (deferred phase) | — |
+| Fulfilment axes on a PO | **Received** / **Billed** | fulfilled, delivered |
+| Fully received + fully billed | **Closed** | posted, completed |
+| PO committed & sent to supplier | **Issued** | approved, posted |
+
+\* The client may call the receipt a **GRN** (goods receipt note) — common in
+trading/shipping. If they do, GRN wins. Treat "Purchase Receipt" as the working
+default until the client confirms; it is provisional.
+\** The spec sometimes said "supplier invoice." We standardize on **Bill** for the
+document we receive from a supplier. Use one word, not two, for one thing.
+
+### Parties — use the spec's / client's names, NOT Zoho's
+
+| Party | Canonical term | NOT |
+|---|---|---|
+| Who we buy from | **Supplier** | Vendor (Zoho's word — do not use) |
+| Who we sell to | **Customer** | Client, Buyer |
+| The introducer/agent (D party) | **Broker** | agent, introducer, middleman |
+
+Rationale: the client's own documents say Supplier/Customer. Their language beats
+Zoho's. "Vendor" must not appear anywhere in Ikration.
+
+### On the SELL side (Sales module, later) — mirror the convention
+
+| Buy side | Sell side |
+|---|---|
+| Purchase Order | **Sales Order** |
+| Purchase Receipt (goods in) | **Delivery** (goods out) |
+| Bill (invoice we receive) | **Invoice** (invoice we issue) |
+| Payment (we pay) | **Receipt** of payment (we're paid) |
+
+Note the deliberate split Zoho uses and we adopt: a **Bill** is received from a
+supplier; an **Invoice** is issued to a customer. Never use "invoice" for the
+supplier document or "bill" for the customer document.
+
+### Trading vocabulary — keep as-is (Zoho has no equivalent; do not invent)
+
+LME · Agreed % (never "Premium") · Division · Broker · Lot · Bill of Lading (BL) ·
+Container · Vessel · Voyage · Incoterm · Hedge / Hedging · Allocation · Fixing Date ·
+Fixed vs LME (pricing type).
+
+### Do NOT import from Zoho
+
+- **TDS / TCS** — Indian withholding-tax jargon. Ikration's tax is multi-country
+  and unresolved. Never use these terms or build their mechanics.
+- **Vendor** — see parties above.
+- **"Convert to Bill" tax handling** — the phrase/button is fine; the Indian tax
+  logic behind it is not.
+
+### The rule
+
+Match Zoho for the lifecycle document nouns; keep the client's/spec's words for
+parties; keep trading vocabulary for trading concepts; drop Zoho's tax jargon.
+When the client uses a different word in a review (e.g. GRN), the client wins —
+update this list and rename consistently.

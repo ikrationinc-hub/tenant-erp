@@ -28,8 +28,8 @@ async function main(): Promise<void> {
   const result = await seedDevData(slug);
   console.log(`Suppliers ensured: ${result.supplierIds.length}`);
   console.log(`Draft purchase: ${result.draftPurchaseId}`);
-  console.log(`Approved purchase: ${result.approvedPurchaseId}`);
-  console.log(`Posted purchase: ${result.postedPurchaseId}`);
+  console.log(`Issued purchase: ${result.issuedPurchaseId}`);
+  console.log(`Closed purchase: ${result.closedPurchaseId}`);
   console.log("\nDone.");
 }
 

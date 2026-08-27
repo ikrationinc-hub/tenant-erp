@@ -308,14 +308,14 @@ describe("modules/purchase - Platform Hedging / LME Records, session (d): LME pr
   );
 
   it(
-    "an LME record can be added even after the purchase has been approved (resolved open question #6 - not gated by draft status)",
+    "an LME record can be added even after the purchase has been issued (resolved open question #6 - not gated by draft status)",
     async () => {
-      const tenant = await seedTenant("post-approval-lme");
+      const tenant = await seedTenant("post-issue-lme");
       const app = createApp();
       const authHeader = `Bearer ${tenant.accessToken}`;
       const purchaseId = await createDraftPurchase(app, authHeader, tenant);
 
-      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "approved" }).where(eq(purchases.id, purchaseId)));
+      await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "issued" }).where(eq(purchases.id, purchaseId)));
 
       const res = await request(app)
         .post(`/api/v1/purchases/${purchaseId}/lme-records`)
@@ -456,15 +456,15 @@ describe("modules/purchase - Platform Hedging / LME Records, session (d): LME pr
     );
 
     it(
-      "editing/removing an unused record is allowed even on an Approved purchase (not gated by the purchase's own status)",
+      "editing/removing an unused record is allowed even on an Issued purchase (not gated by the purchase's own status)",
       async () => {
-        const tenant = await seedTenant("lme-edit-post-approval");
+        const tenant = await seedTenant("lme-edit-post-issue");
         const app = createApp();
         const authHeader = `Bearer ${tenant.accessToken}`;
         const purchaseId = await createDraftPurchase(app, authHeader, tenant);
         const record = await addLmeRecord(app, authHeader, purchaseId, tenant);
 
-        await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "approved" }).where(eq(purchases.id, purchaseId)));
+        await withTenantSchema(tenant.schemaName, (tx) => tx.update(purchases).set({ status: "issued" }).where(eq(purchases.id, purchaseId)));
 
         const editRes = await request(app)
           .patch(`/api/v1/purchases/${purchaseId}/lme-records/${record.id}`)

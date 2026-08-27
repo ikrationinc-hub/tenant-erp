@@ -47,8 +47,8 @@ export const endpoints = {
   activateBroker: (id: string) => `/brokers/${id}/activate`,
   deactivateBroker: (id: string) => `/brokers/${id}/deactivate`,
   purchases: "/purchases",
-  approvePurchase: (id: string) => `/purchases/${id}/approve`,
-  postPurchase: (id: string) => `/purchases/${id}/post`,
+  issuePurchase: (id: string) => `/purchases/${id}/issue`,
+  cancelPurchase: (id: string) => `/purchases/${id}/cancel`,
   purchaseItems: (purchaseId: string) => `/purchases/${purchaseId}/items`,
   purchaseItem: (purchaseId: string, itemId: string) => `/purchases/${purchaseId}/items/${itemId}`,
   purchaseAllocations: (purchaseId: string) => `/purchases/${purchaseId}/allocations`,
@@ -61,6 +61,19 @@ export const endpoints = {
   purchaseInvoices: (purchaseId: string) => `/purchases/${purchaseId}/invoices`,
   purchaseInvoice: (purchaseId: string, invoiceId: string) => `/purchases/${purchaseId}/invoices/${invoiceId}`,
   approvePurchaseInvoice: (purchaseId: string, invoiceId: string) => `/purchases/${purchaseId}/invoices/${invoiceId}/approve`,
+  purchaseReceipts: (purchaseId: string) => `/purchases/${purchaseId}/receipts`,
+  confirmPurchaseReceipt: (purchaseId: string, receiptId: string) => `/purchases/${purchaseId}/receipts/${receiptId}/confirm`,
+  // PL-4: the standalone, cross-purchase "Purchase Receipts"/"Purchase
+  // Bills" list screens - own top-level paths (app.ts mounts these as
+  // separate routers), not nested under /purchases/:id.
+  allPurchaseReceipts: "/purchase-receipts",
+  allPurchaseBills: "/purchase-bills",
+  // PL-5: Payment - never nested under /purchases/:id at all (it's scoped
+  // to a supplier, potentially settling bills across several purchases in
+  // one record), its own top-level path from the start.
+  payments: "/payments",
+  payment: (id: string) => `/payments/${id}`,
+  outstandingBillsForSupplier: (supplierId: string) => `/payments/outstanding-bills/${supplierId}`,
   uploadAttachment: (entity: string, entityId: string, fieldKey: string) =>
     `/attachments/${entity}/${entityId}/${fieldKey}`,
   attachmentDownloadUrl: (id: string) => `/attachments/${id}/download-url`,

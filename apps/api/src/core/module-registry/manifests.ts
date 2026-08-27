@@ -245,15 +245,38 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       permissionEntry("purchase", "po", "create", "Create a purchase order"),
       permissionEntry("purchase", "po", "read", "View purchase orders"),
       permissionEntry("purchase", "po", "update", "Edit a draft purchase order"),
-      permissionEntry("purchase", "po", "approve", "Approve a purchase order"),
-      permissionEntry("purchase", "po", "post", "Post an approved purchase order"),
+      // PL-3: "approve"/"post" are gone - issue commits the PO to the
+      // supplier (Draft -> Issued); cancel kills an unfulfilled one
+      // (Draft/Issued -> Cancelled). "Closed" has no permission of its
+      // own - it's derived and automatic, never user-invoked.
+      permissionEntry("purchase", "po", "issue", "Issue a purchase order to the supplier"),
+      permissionEntry("purchase", "po", "cancel", "Cancel a purchase order before it's fulfilled"),
       permissionEntry("purchase", "po", "delete", "Delete a draft purchase order"),
-      // Prompt 22: the supplier invoice's own lifecycle - not po.* (a
-      // separate document, separate permission surface, even though it
-      // lives in the same "purchase" module).
-      permissionEntry("purchase", "invoice", "create", "Create a supplier invoice against a purchase"),
-      permissionEntry("purchase", "invoice", "update", "Edit a draft supplier invoice"),
-      permissionEntry("purchase", "invoice", "approve", "Approve a supplier invoice - this is what moves stock"),
+      // Prompt 22, renamed PL-2 to the Bill (purchase_bills - CLAUDE.md's
+      // Vocabulary section, superseded by PL-1/ADR 0016 for stock; the
+      // financial lifecycle itself is unchanged). Not po.* - a separate
+      // document, separate permission surface. Keys kept as
+      // purchase.invoice.* deliberately - the REST surface (/invoices) is
+      // unrenamed until PL-4's coordinated cutover.
+      permissionEntry("purchase", "invoice", "create", "Create a bill against a purchase"),
+      permissionEntry("purchase", "invoice", "update", "Edit a draft bill"),
+      permissionEntry("purchase", "invoice", "approve", "Approve a bill"),
+      // PL-1: the Purchase Receipt - its own lifecycle, own permission
+      // surface. Confirm is what moves stock now, not bill approval.
+      permissionEntry("purchase", "receipt", "create", "Create a purchase receipt against a purchase order"),
+      permissionEntry("purchase", "receipt", "confirm", "Confirm a purchase receipt - this is what moves stock"),
+      // PL-5: Payment, the 4th and final lifecycle document - its own
+      // permission surface. Action is "record", not "create" - money
+      // actually leaving the company deserves the same Manager-tier bar
+      // as issue/approve/confirm (seed-roles.ts), not the Officer-tier
+      // "create" bucket every other day-to-day data-entry permission
+      // falls into; a distinct action name is what lets the role-tier
+      // filter (keyed purely by action string) single this one out
+      // without also promoting PO/bill creation to Manager. No
+      // "approve"/"confirm" - a payment is a single atomic event recorded
+      // once (no draft state); read reuses purchase.po.read (PL-4's own
+      // precedent for the Receipts/Bills list screens).
+      permissionEntry("purchase", "payment", "record", "Record a payment against one or more bills"),
     ],
     dependsOn: ["auth", "roles", "masters", "suppliers", "storage"],
     migrations: [
@@ -262,6 +285,11 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       "0017_serious_ricochet",
       "0018_loose_mastermind",
       "0019_lucky_sleeper",
+      "0030_early_magik",
+      "0031_pl2_bill_rename",
+      "0032_pl3_po_lifecycle",
+      "0033_nebulous_franklin_storm",
+      "0034_nosy_earthquake",
     ],
   },
   {

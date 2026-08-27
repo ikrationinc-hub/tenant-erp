@@ -13,6 +13,7 @@ import { useHasPermission } from "../../core/permissions/use-permissions";
 import { StatusTag } from "../../core/status-tag/StatusTag";
 import { INVOICE_STATUS_COLORS, PURCHASE_STATUS_COLORS } from "../../core/status-tag/status-colors";
 import { PURCHASE_LIST_PATH } from "./PurchaseListScreen";
+import { PurchaseFulfilmentActions, PurchaseFulfilmentDrawer, PurchaseFulfilmentStrip } from "./PurchaseFulfilmentPanels";
 
 const MULTI_UPLOAD_ATTACHMENT_KEYS = new Set(["otherDocuments", "otherDocuments2"]);
 
@@ -71,7 +72,6 @@ const SHIPMENT_KEYS = new Set([
 ]);
 
 const ATTACHMENT_KEYS = new Set([
-  "invoice",
   "billOfLading",
   "packingList",
   "certificateOfOrigin",
@@ -98,7 +98,7 @@ function splitHeaderPayload(values: Record<string, unknown>): Record<string, unk
 
 interface PurchaseAggregate {
   id: string;
-  status: "draft" | "approved" | "posted";
+  status: "draft" | "issued" | "closed" | "cancelled";
   [key: string]: unknown;
 }
 
@@ -127,7 +127,8 @@ function pricingField(pricing: unknown, key: string): unknown {
  * their own add-only sub-panel over the real per-sub-resource endpoints
  * (purchase.routes.ts never accepted a single giant nested create - FR-104
  * says items are added, not declared upfront); Costs (G) is a single
- * upsert form. Posted (rule 8) renders every one of these read-only.
+ * upsert form. PL-3: Closed/Cancelled (rule 8's terminal states) render
+ * every one of these read-only.
  */
 export function PurchaseDetailScreen({
   mode,
@@ -140,6 +141,7 @@ export function PurchaseDetailScreen({
   const queryClient = useQueryClient();
   const { message } = AntApp.useApp();
   const customerLabels = useMasterLabels("customers");
+  const [fulfilmentDrawer, setFulfilmentDrawer] = useState<"receive" | "bill" | null>(null);
   // A Viewer (read-only role, missing purchase.po.create/update) was
   // getting an editable Header/Shipment form and Additional Cost form on
   // any non-posted purchase - the mode/readOnly calculations below only
@@ -183,17 +185,18 @@ export function PurchaseDetailScreen({
     refresh();
   }
 
-  async function handleApprove(): Promise<void> {
-    await apiFetch(endpoints.approvePurchase(purchaseId ?? ""), { method: "PATCH" });
-    // Prompt 22: approving the PO no longer moves stock - it's intent
-    // only. Stock moves when a supplier invoice against it is approved.
-    void message.success("Purchase approved");
+  async function handleIssue(): Promise<void> {
+    await apiFetch(endpoints.issuePurchase(purchaseId ?? ""), { method: "PATCH" });
+    // PL-3: issuing the PO moves no stock and settles no liability - it's
+    // intent only. Stock moves when a receipt is confirmed; the liability
+    // is recorded when a bill is approved.
+    void message.success("Purchase issued");
     refresh();
   }
 
-  async function handlePost(): Promise<void> {
-    await apiFetch(endpoints.postPurchase(purchaseId ?? ""), { method: "PATCH" });
-    void message.success("Purchase posted");
+  async function handleCancel(): Promise<void> {
+    await apiFetch(endpoints.cancelPurchase(purchaseId ?? ""), { method: "PATCH" });
+    void message.success("Purchase cancelled");
     refresh();
   }
 
@@ -206,14 +209,19 @@ export function PurchaseDetailScreen({
 
   const purchase = purchaseQuery.data;
   const status = purchase?.status;
-  const posted = status === "posted";
-  const approved = status === "approved";
-  // Header/Items/Costs/Customer Allocation all call assertDraft server-side
-  // (purchase.service.ts) - they lock the moment a purchase is Approved,
-  // not just once it's Posted. LME Records and Hedges are the deliberate
-  // exception (purchase-lme.service.ts/purchase-hedges.service.ts never
-  // call assertDraft - open question #6's LME-after-approval flow), so
-  // those two panels stay gated on `posted` alone, further down.
+  // PL-3: Closed/Cancelled are the terminal, immutable states (rule 8) -
+  // "Posted" is gone, replaced by these two derived/manual terminal
+  // states. Header/Costs/Customer Allocation all call assertDraft
+  // server-side (purchase.service.ts) - they lock the moment a purchase
+  // is Issued, not just once it reaches a terminal state. Items,
+  // LME Records, and Hedges are the deliberate exception - items stay
+  // editable through Issued (assertItemsEditable), and LME/Hedges are
+  // never gated by draft at all (open question #6) - all three lock only
+  // once the purchase reaches Closed or Cancelled, further down.
+  const closed = status === "closed";
+  const cancelled = status === "cancelled";
+  const terminal = closed || cancelled;
+  const issued = status === "issued";
   const draft = status === "draft";
   const hasItems = rowsOf(purchase?.items).length > 0;
   // Prompt 21 item 2: under "lme" pricing, item rate comes from the LME
@@ -243,41 +251,60 @@ export function PurchaseDetailScreen({
         </Space>
         {mode === "edit" && purchaseId && (
           <Space>
-            {status === "draft" && (
-              <Can permission="purchase.po.approve">
-                {/* UX nicety only - the server rejects an item-less approve regardless (core/workflow/guards.ts's requireAtLeastOneValidLine), this just avoids a round trip to say so. */}
-                <Tooltip title={hasItems ? undefined : "Add at least one item before approving"}>
-                  <Button disabled={!hasItems} onClick={() => void handleApprove()}>
-                    Approve
+            {draft && (
+              <Can permission="purchase.po.issue">
+                {/* UX nicety only - the server rejects an item-less issue regardless (core/workflow/guards.ts's requireAtLeastOneValidLine), this just avoids a round trip to say so. */}
+                <Tooltip title={hasItems ? undefined : "Add at least one item before issuing"}>
+                  <Button type="primary" disabled={!hasItems} onClick={() => void handleIssue()}>
+                    Issue
                   </Button>
                 </Tooltip>
               </Can>
             )}
-            {status === "approved" && (
-              <Can permission="purchase.po.post">
-                <Button type="primary" onClick={() => void handlePost()}>
-                  Post
-                </Button>
+            <PurchaseFulfilmentActions
+              issued={issued}
+              receivedStatus={asDisplayString(purchase?.receivedStatus)}
+              billedStatus={asDisplayString(purchase?.billedStatus)}
+              onReceive={() => setFulfilmentDrawer("receive")}
+              onBill={() => setFulfilmentDrawer("bill")}
+            />
+            {(draft || issued) && (
+              <Can permission="purchase.po.cancel">
+                <Popconfirm title="Cancel this purchase order?" okText="Cancel PO" cancelText="Back" onConfirm={() => void handleCancel()}>
+                  <Button danger>Cancel</Button>
+                </Popconfirm>
               </Can>
             )}
           </Space>
         )}
       </Space>
 
-      {approved && (
+      {mode === "edit" && purchase && !draft && (
+        <Card size="small">
+          <PurchaseFulfilmentStrip
+            status={asDisplayString(purchase.status)}
+            receivedStatus={asDisplayString(purchase.receivedStatus)}
+            billedStatus={asDisplayString(purchase.billedStatus)}
+            paidStatus={asDisplayString(purchase.paidStatus)}
+          />
+        </Card>
+      )}
+
+      {issued && (
         <Alert
           type="info"
           showIcon
-          message="This purchase is approved. Header, costs, and customer allocation are now locked. Items can still be edited - a change here sends any approved supplier invoice back to Draft, requiring re-approval to move stock again. LME pricing and hedging can still be recorded until it's posted."
+          message="This purchase is issued. Header, costs, and customer allocation are now locked. Items stay editable until the purchase closes. It closes automatically once fully received and fully billed - Receive and Bill from the panels below to move it forward."
         />
       )}
-      {posted && (
+      {closed && (
         <Alert
-          type="info"
+          type="success"
           showIcon
-          message="This purchase is posted and immutable. Corrections require a reversal and re-entry."
+          message="This purchase is closed - fully received and fully billed. It is now immutable; corrections require a reversal and re-entry."
         />
       )}
+      {cancelled && <Alert type="warning" showIcon message="This purchase was cancelled before it was fulfilled. It is now immutable." />}
 
       {/* No wrapping Card/title here (Prompt 23) - purchase/header's own
           field-definitions response is grouped into real sections (Purchase
@@ -305,10 +332,10 @@ export function PurchaseDetailScreen({
               message="This is an LME purchase. Add an LME record below before adding items - the item rate is derived from it."
             />
           )}
-          {/* Prompt 22 Part 4: items stay editable through Approved (assertItemsEditable server-side blocks only Posted) - a stock-relevant edit here (add, or a real quantity change) sends any approved invoice back to Draft. */}
+          {/* PL-3: items stay editable through Issued - assertItemsEditable server-side blocks only once the purchase reaches a terminal state (Closed or Cancelled), or once any receipt exists against it. */}
           <PurchaseItemsPanel
             purchaseId={purchaseId}
-            readOnly={posted}
+            readOnly={terminal}
             onAdded={refresh}
             items={rowsOf(purchase.items)}
             isLmePricing={isLmePricing}
@@ -355,7 +382,7 @@ export function PurchaseDetailScreen({
               addPermission="purchase.po.create"
               editPermission="purchase.po.update"
               deletePermission="purchase.po.update"
-              readOnly={posted}
+              readOnly={terminal}
               // Not gated by the purchase's own status (purchase-lme.service.ts's
               // deliberate design - a price can get fixed even after Approved/
               // Posted); only a per-row "already used by an item" lock applies.
@@ -374,7 +401,17 @@ export function PurchaseDetailScreen({
               ]}
             />
           )}
-          <PurchaseHedgesPanel purchaseId={purchaseId} readOnly={posted} onAdded={refresh} hedges={rowsOf(purchase.hedges)} />
+          <PurchaseHedgesPanel purchaseId={purchaseId} readOnly={terminal} onAdded={refresh} hedges={rowsOf(purchase.hedges)} />
+          <PurchaseFulfilmentDrawer
+            drawer={fulfilmentDrawer}
+            purchaseId={purchaseId}
+            items={rowsOf(purchase.items)}
+            onClose={() => setFulfilmentDrawer(null)}
+            onDone={() => {
+              setFulfilmentDrawer(null);
+              refresh();
+            }}
+          />
         </>
       )}
     </Space>
@@ -528,13 +565,37 @@ function InvoiceVarianceTag({ varianceUsd, variancePct }: { varianceUsd: unknown
 }
 
 /**
- * Prompt 22: THE document that actually moves stock (Part 3) - approving
- * a purchase order no longer does. `purchaseDraft` gates the Approve
- * action: purchase-invoices.service.ts's own guard rejects approving an
- * invoice while its purchase is still Draft, so the button is disabled
- * (with an explanatory tooltip) rather than round-tripping a 409 the
- * user can't act on differently anyway.
+ * PL-1/PL-2/PL-3/PL-4: this is the Bill (still called "invoice" on the
+ * wire - see ADR 0017) - a purely financial document, neither issuing
+ * nor cancelling a PO moves stock; only confirming a Purchase Receipt
+ * does. PL-4: creation moved to the PO's own "Convert to Bill" action
+ * (PurchaseFulfilmentPanels.tsx), prefilled with each item's un-billed
+ * quantity - this panel is now list + Edit (draft only) + Approve only,
+ * no create drawer of its own, so there's exactly one way to create a
+ * bill rather than two divergent ones (a bare "Add Invoice" with no item
+ * lines, and the new prefilled flow). `purchaseDraft` gates the Approve
+ * action: purchase-bills.service.ts's own guard rejects approving a bill
+ * while its purchase is still Draft, so the button is disabled (with an
+ * explanatory tooltip) rather than round-tripping a 409 the user can't
+ * act on differently anyway.
  */
+/** PL-4: bills are no longer single-per-purchase (partial billing), so the Document column resolves each row's own attachment independently rather than the old panel-wide "the one invoice's" query. */
+function BillDocumentLink({ invoiceId }: { invoiceId: string }): ReactElement {
+  const attachmentsQuery = useQuery({
+    queryKey: ["attachments", "purchase_invoice", invoiceId],
+    queryFn: () =>
+      apiFetch(withQuery(endpoints.attachments, { entity: "purchase_invoice", entityId: invoiceId }), {}, {
+        schema: listAttachmentsResponseSchema,
+      }),
+    enabled: Boolean(invoiceId),
+  });
+  const fileAttachment = attachmentsQuery.data?.items.find((item) => item.fieldKey === "invoiceFile");
+  if (!fileAttachment) {
+    return <Typography.Text type="secondary">No file</Typography.Text>;
+  }
+  return <Typography.Link onClick={() => void openAttachmentDownload(fileAttachment.id)}>{fileAttachment.filename}</Typography.Link>;
+}
+
 function PurchaseInvoicesPanel({
   purchaseId,
   purchaseDraft,
@@ -546,44 +607,30 @@ function PurchaseInvoicesPanel({
   onChanged: () => void;
   invoices: Record<string, unknown>[];
 }): ReactElement {
-  const [drawer, setDrawer] = useState<{ mode: "create" } | { mode: "edit"; invoice: Record<string, unknown> } | null>(null);
+  const [editDrawer, setEditDrawer] = useState<Record<string, unknown> | null>(null);
   const { message } = AntApp.useApp();
   const queryClient = useQueryClient();
-  const canCreateInvoice = useHasPermission("purchase.invoice.create");
   const canApproveInvoice = useHasPermission("purchase.invoice.approve");
   const hasDraftInvoice = invoices.some((invoice) => invoice.status === "draft");
 
-  // Single-invoice-by-default (ALLOW_PARTIAL_INVOICING is off server-side,
-  // Prompt 22): there's at most one row today, so one attachments query
-  // covers both the table's own "Document" column AND the edit drawer's
-  // initialValues - same attachmentInitialValues() grouping the header
-  // form already relies on to show a previously-uploaded file after a
-  // reload (FileUpload/MultiUpload fields only round-trip what their own
-  // onChange has set locally; without re-fetching GET /attachments, a
-  // freshly reopened form has no way to know a file was ever uploaded).
-  const invoiceId = invoices[0]?.id;
-  const invoiceIdString = typeof invoiceId === "string" ? invoiceId : "";
+  // Multiple bills can exist per purchase (partial billing) - each
+  // resolves its own invoiceFile attachment lazily via the Edit drawer's
+  // own initialValues/uploadContext (the table's Document column only
+  // needs to know whether ANY bill has one, keyed per-row below).
+  const editInvoiceId = typeof editDrawer?.id === "string" ? editDrawer.id : "";
   const invoiceAttachmentsQuery = useQuery({
-    queryKey: ["attachments", "purchase_invoice", invoiceIdString],
+    queryKey: ["attachments", "purchase_invoice", editInvoiceId],
     queryFn: () =>
-      apiFetch(withQuery(endpoints.attachments, { entity: "purchase_invoice", entityId: invoiceIdString }), {}, {
+      apiFetch(withQuery(endpoints.attachments, { entity: "purchase_invoice", entityId: editInvoiceId }), {}, {
         schema: listAttachmentsResponseSchema,
       }),
-    enabled: Boolean(invoiceIdString),
+    enabled: Boolean(editInvoiceId),
   });
-  const invoiceFileAttachment = invoiceAttachmentsQuery.data?.items.find((item) => item.fieldKey === "invoiceFile");
-
-  async function handleCreate(values: Record<string, unknown>): Promise<void> {
-    await apiFetch(endpoints.purchaseInvoices(purchaseId), { method: "POST", body: values });
-    void message.success("Supplier invoice created");
-    setDrawer(null);
-    onChanged();
-  }
 
   async function handleEdit(invoiceId: string, values: Record<string, unknown>): Promise<void> {
     await apiFetch(endpoints.purchaseInvoice(purchaseId, invoiceId), { method: "PATCH", body: values });
-    void message.success("Supplier invoice updated");
-    setDrawer(null);
+    void message.success("Bill updated");
+    setEditDrawer(null);
     // A file selected during this edit already uploaded live (FileUploadField's
     // own customRequest, independent of this PATCH) - refetch so the table's
     // Document column and the drawer's own initial values pick it up without
@@ -594,34 +641,18 @@ function PurchaseInvoicesPanel({
 
   async function handleApprove(invoiceId: string): Promise<void> {
     await apiFetch(endpoints.approvePurchaseInvoice(purchaseId, invoiceId), { method: "PATCH" });
-    void message.success("Supplier invoice approved - stock updated");
+    void message.success("Bill approved");
     onChanged();
   }
 
   return (
-    <Card
-      title="Supplier Invoices"
-      size="small"
-      extra={
-        <Can permission="purchase.invoice.create">
-          <Button onClick={() => setDrawer({ mode: "create" })}>Add Invoice</Button>
-        </Can>
-      }
-    >
-      {invoices.length === 0 && canCreateInvoice && (
-        <Alert
-          type="info"
-          showIcon
-          style={{ marginBottom: 12 }}
-          message="Add a supplier invoice below to move this purchase's stock into inventory - the purchase order alone never does."
-        />
-      )}
+    <Card title="Bills" size="small">
       {invoices.length > 0 && hasDraftInvoice && canApproveInvoice && (
         <Alert
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          message="A supplier invoice has been added - approve it below to move its items into inventory."
+          message="A bill has been added - approve it below to record the liability."
         />
       )}
       <Table
@@ -629,10 +660,10 @@ function PurchaseInvoicesPanel({
         rowKey="id"
         pagination={false}
         size="small"
-        locale={{ emptyText: "No supplier invoices yet - a purchase order is intent only until one is received, uploaded, and approved." }}
+        locale={{ emptyText: "No bills yet - use \"Convert to Bill\" above once this purchase is issued." }}
         columns={[
-          { title: "Invoice #", dataIndex: "invoiceNumber" },
-          { title: "Supplier Ref", dataIndex: "supplierInvoiceNo" },
+          { title: "Bill #", dataIndex: "invoiceNumber" },
+          { title: "Supplier Invoice No.", dataIndex: "supplierInvoiceNo" },
           { title: "Invoice Date", dataIndex: "invoiceDate" },
           { title: "Amount (USD)", dataIndex: "invoiceAmountUsd", render: (value: unknown) => asDisplayString(value) || "—" },
           {
@@ -648,14 +679,7 @@ function PurchaseInvoicesPanel({
           {
             title: "Document",
             key: "document",
-            render: (): ReactNode =>
-              invoiceFileAttachment ? (
-                <Typography.Link onClick={() => void openAttachmentDownload(invoiceFileAttachment.id)}>
-                  {invoiceFileAttachment.filename}
-                </Typography.Link>
-              ) : (
-                <Typography.Text type="secondary">No file</Typography.Text>
-              ),
+            render: (_value, row): ReactNode => <BillDocumentLink invoiceId={String(row.id)} />,
           },
           {
             title: "",
@@ -664,12 +688,12 @@ function PurchaseInvoicesPanel({
               row.status === "draft" ? (
                 <Space>
                   <Can permission="purchase.invoice.update">
-                    <Button size="small" onClick={() => setDrawer({ mode: "edit", invoice: row })}>
+                    <Button size="small" onClick={() => setEditDrawer(row)}>
                       Edit
                     </Button>
                   </Can>
                   <Can permission="purchase.invoice.approve">
-                    <Tooltip title={purchaseDraft ? "Approve the purchase order first" : undefined}>
+                    <Tooltip title={purchaseDraft ? "Issue the purchase order first" : undefined}>
                       <Button size="small" type="primary" disabled={purchaseDraft} onClick={() => void handleApprove(String(row.id))}>
                         Approve
                       </Button>
@@ -680,28 +704,15 @@ function PurchaseInvoicesPanel({
           },
         ]}
       />
-      <Drawer
-        title={drawer?.mode === "edit" ? "Edit Supplier Invoice" : "Add Supplier Invoice"}
-        open={drawer !== null}
-        onClose={() => setDrawer(null)}
-        width={420}
-        destroyOnHidden
-      >
-        {drawer?.mode === "create" && (
-          // invoiceFile hidden here: uploadContext needs a real invoice id,
-          // which doesn't exist until this create actually completes -
-          // same reasoning as the purchase header's own attachment fields
-          // needing purchaseId first. Upload the file from Edit instead.
-          <SchemaForm module="purchase" entity="invoice" mode="create" onSubmit={handleCreate} hiddenFields={["invoiceFile"]} />
-        )}
-        {drawer?.mode === "edit" && (
+      <Drawer title="Edit Bill" open={editDrawer !== null} onClose={() => setEditDrawer(null)} width={420} destroyOnHidden>
+        {editDrawer && (
           <SchemaForm
             module="purchase"
             entity="invoice"
             mode="edit"
-            initialValues={{ ...drawer.invoice, ...attachmentInitialValues(invoiceAttachmentsQuery.data?.items ?? []) }}
-            onSubmit={(values) => handleEdit(String(drawer.invoice.id), values)}
-            uploadContext={{ entity: "purchase_invoice", entityId: String(drawer.invoice.id) }}
+            initialValues={{ ...editDrawer, ...attachmentInitialValues(invoiceAttachmentsQuery.data?.items ?? []) }}
+            onSubmit={(values) => handleEdit(String(editDrawer.id), values)}
+            uploadContext={{ entity: "purchase_invoice", entityId: String(editDrawer.id) }}
           />
         )}
       </Drawer>
@@ -834,7 +845,7 @@ function PurchaseSubResourceList({
   /** Omit to leave this sub-resource add-only (no Delete button rendered). */
   deletePermission?: string;
   readOnly: boolean;
-  /** Gates Edit/Delete separately from Add - defaults to `readOnly` (Allocation's own gating, draft-only, applies to both). LME passes `false` here: its own edit/delete lock is per-row (rowLocked), not tied to the purchase's status at all - matching purchase-lme.service.ts's own "not gated by draft/approved/posted" design. */
+  /** Gates Edit/Delete separately from Add - defaults to `readOnly` (Allocation's own gating, draft-only, applies to both). LME passes `false` here: its own edit/delete lock is per-row (rowLocked), not tied to the purchase's status at all - matching purchase-lme.service.ts's own "not gated by the purchase's own status" design. */
   editDeleteReadOnly?: boolean;
   /** Per-row lock reason (shown as a disabled-button tooltip) independent of editDeleteReadOnly - e.g. an LME record already consumed by an item. */
   rowLocked?: (row: Record<string, unknown>) => string | undefined;

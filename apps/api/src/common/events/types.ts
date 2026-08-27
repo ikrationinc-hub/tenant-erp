@@ -16,13 +16,10 @@ export interface PurchaseApprovedEvent {
 }
 
 /**
- * Prompt 22: stock now moves here, not on purchase.approved (kept above
- * for any future subscriber, but modules/inventory no longer listens to
- * it). `items` is always the purchase's CURRENT item list at the moment
- * of invoice approval - true whether this is a first approval or a
- * re-approval after a stock-relevant edit; the subscriber reconciles
- * against whatever was previously moved for THIS invoiceId, so the
- * publisher never needs to know or care which case it is.
+ * Superseded by ReceiptConfirmedEvent below (PL-1/ADR 0016) - kept only
+ * because historical Prompt-22-era stock_movements rows still carry a
+ * purchaseInvoiceId that resolves through this shape; no publisher emits
+ * "invoice.approved" and no subscriber listens for it anymore.
  */
 export interface InvoiceApprovedEvent {
   invoiceId: string;
@@ -34,7 +31,25 @@ export interface InvoiceApprovedEvent {
   items: Array<{ purchaseItemId: string; itemId: string; gradeId: string | null; quantity: string; uomId: string }>;
 }
 
+/**
+ * PL-1: THE stock-writing trigger. `items` is this ONE receipt's own
+ * lines (not the purchase's current items, unlike the superseded
+ * invoice.approved shape) - a receipt is immutable once confirmed
+ * (rule 8), so there is no reconciliation/re-approval case to represent
+ * here, only a single first-and-only write.
+ */
+export interface ReceiptConfirmedEvent {
+  receiptId: string;
+  purchaseId: string;
+  companyId: string;
+  branchId: string | null;
+  warehouseId: string;
+  confirmedBy: string;
+  items: Array<{ purchaseItemId: string; itemId: string; gradeId: string | null; quantity: string; uomId: string }>;
+}
+
 export interface EventMap {
   "purchase.approved": PurchaseApprovedEvent;
   "invoice.approved": InvoiceApprovedEvent;
+  "receipt.confirmed": ReceiptConfirmedEvent;
 }

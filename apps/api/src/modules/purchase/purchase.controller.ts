@@ -57,22 +57,22 @@ export async function update(req: Request, res: Response, next: NextFunction): P
   }
 }
 
-export async function approve(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function issue(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const ctx = requireContext();
     const { id } = purchaseIdParamsSchema.parse(req.params);
-    const row = await purchaseService.approve(ctx, id);
+    const row = await purchaseService.issue(ctx, id);
     res.status(200).json(row);
   } catch (error) {
     next(error);
   }
 }
 
-export async function post(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function cancel(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const ctx = requireContext();
     const { id } = purchaseIdParamsSchema.parse(req.params);
-    const row = await purchaseService.post(ctx, id);
+    const row = await purchaseService.cancel(ctx, id);
     res.status(200).json(row);
   } catch (error) {
     next(error);
