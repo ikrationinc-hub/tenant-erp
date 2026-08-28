@@ -48,7 +48,7 @@ function drawer() {
 describe("MasterScreen - the generic proof (one component, real masters CRUD)", () => {
   it("lists seeded rows with columns from field-definitions", async () => {
     signIn();
-    renderApp({ initialEntries: ["/masters/countries"] });
+    renderApp({ initialEntries: ["/settings/masters/countries"] });
 
     expect(await screen.findByRole("heading", { name: "Countries" }, ASYNC)).toBeInTheDocument();
     expect(await screen.findByText("Countries 1", {}, ASYNC)).toBeInTheDocument();
@@ -59,7 +59,7 @@ describe("MasterScreen - the generic proof (one component, real masters CRUD)", 
   it("search narrows to matching rows via the server, not the client", async () => {
     signIn();
     const user = userEvent.setup();
-    renderApp({ initialEntries: ["/masters/countries"] });
+    renderApp({ initialEntries: ["/settings/masters/countries"] });
 
     await screen.findByText("Countries 1", {}, ASYNC);
     await user.type(screen.getByLabelText("Search"), "Countries 2{enter}");
@@ -71,7 +71,7 @@ describe("MasterScreen - the generic proof (one component, real masters CRUD)", 
   it("creates a new record via the drawer and it appears in the list", async () => {
     signIn();
     const user = userEvent.setup();
-    renderApp({ initialEntries: ["/masters/countries"] });
+    renderApp({ initialEntries: ["/settings/masters/countries"] });
 
     await screen.findByText("Countries 1", {}, ASYNC);
     // findByRole (not getByRole): permission-gated (<Can/>) behind its own async fetch.
@@ -89,7 +89,7 @@ describe("MasterScreen - the generic proof (one component, real masters CRUD)", 
   it("edits an existing record - the drawer round-trips it as initialValues", async () => {
     signIn();
     const user = userEvent.setup();
-    renderApp({ initialEntries: ["/masters/countries"] });
+    renderApp({ initialEntries: ["/settings/masters/countries"] });
 
     await screen.findByText("Countries 3", {}, ASYNC);
     await user.click(within(rowFor("Countries 3")).getByRole("button", { name: "Edit" }));
@@ -106,7 +106,7 @@ describe("MasterScreen - the generic proof (one component, real masters CRUD)", 
   it("deactivates and reactivates a record - real PATCH .../:id/(de)activate, list refreshes after each", async () => {
     signIn();
     const user = userEvent.setup();
-    renderApp({ initialEntries: ["/masters/countries"] });
+    renderApp({ initialEntries: ["/settings/masters/countries"] });
 
     await screen.findByText("Countries 1", {}, ASYNC);
 
@@ -128,7 +128,7 @@ describe("MasterScreen - the generic proof (one component, real masters CRUD)", 
 
   it("renders a second, unrelated master through the exact same route/component - proving genericity", async () => {
     signIn();
-    renderApp({ initialEntries: ["/masters/uom"] });
+    renderApp({ initialEntries: ["/settings/masters/uom"] });
 
     expect(await screen.findByRole("heading", { name: "Units of Measure" }, ASYNC)).toBeInTheDocument();
     expect(await screen.findByText("Units of Measure 1", {}, ASYNC)).toBeInTheDocument();

@@ -1,14 +1,19 @@
 import type { ReactElement } from "react";
 import { useNavigate } from "react-router-dom";
-import { Avatar, Dropdown, Space, Typography } from "antd";
-import { UserOutlined } from "@ant-design/icons";
+import { Avatar, Button, Dropdown, Space, Typography } from "antd";
+import { SettingOutlined, UserOutlined } from "@ant-design/icons";
 import { useLogoutMutation } from "../../modules/auth/api";
 import { queryClient } from "../../core/api/query-client";
 import { useAppStore } from "../../core/store/app-store";
 import { steelCobalt } from "../../theme/palette";
 import { CompanyBranchSwitcher } from "./CompanyBranchSwitcher";
 
-export function HeaderBar(): ReactElement {
+export interface HeaderBarProps {
+  /** Shows the Settings gear (top-right, Zoho-style) - only the operate AppShell passes this; SettingsShell already has its own "Close Settings" control and reuses HeaderBar for the company switcher/user menu only. */
+  showSettingsEntry?: boolean;
+}
+
+export function HeaderBar({ showSettingsEntry = false }: HeaderBarProps): ReactElement {
   const navigate = useNavigate();
   const user = useAppStore((s) => s.user);
   const clearAuth = useAppStore((s) => s.clearAuth);
@@ -27,6 +32,14 @@ export function HeaderBar(): ReactElement {
   return (
     <Space size="middle">
       <CompanyBranchSwitcher />
+      {showSettingsEntry && (
+        <Button
+          type="text"
+          icon={<SettingOutlined />}
+          aria-label="Settings"
+          onClick={() => void navigate("/settings")}
+        />
+      )}
       <Dropdown
         menu={{
           items: [{ key: "logout", label: "Log out", onClick: () => void handleLogout() }],

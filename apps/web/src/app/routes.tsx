@@ -5,8 +5,11 @@ import { ForcedPasswordChangePage } from "../modules/auth/ForcedPasswordChangePa
 import { RequireAuth } from "./guards/RequireAuth";
 import { RequireFullScope } from "./guards/RequireFullScope";
 import { AppShell } from "./layout/AppShell";
+import { SettingsShell } from "./layout/SettingsShell";
 import { BootstrapStatus } from "./BootstrapStatus";
+import { LegacyRedirect, LegacyMastersRedirect } from "./LegacyRedirects";
 import { DynamicRoutes } from "../core/navigation/DynamicRoutes";
+import { SettingsLauncher } from "../modules/settings/SettingsLauncher";
 import { resolveMasterScreen } from "../modules/masters/master-registry";
 import { resolveAdminScreen } from "../modules/admin/admin-registry";
 import { resolveSupplierScreen } from "../modules/suppliers/supplier-registry";
@@ -15,6 +18,24 @@ import { resolvePurchaseScreen, resolvePurchaseReceiptsScreen, resolvePurchaseBi
 import { resolveInventoryScreen } from "../modules/inventory/inventory-registry";
 import { SchemaFormDevPage } from "./dev/SchemaFormDevPage";
 import { SchemaTableDevPage } from "./dev/SchemaTableDevPage";
+
+/**
+ * Bookmarked pre-restructure paths -> their new /settings/* home (task
+ * acceptance: "old routes redirect, no 404s"). Config screens' ROUTES moved
+ * under /settings; the screens/components/permissions themselves did not.
+ */
+const LEGACY_SETTINGS_REDIRECTS: Record<string, string> = {
+  "/companies": "/settings/companies",
+  "/branches": "/settings/branches",
+  "/users": "/settings/users",
+  "/roles": "/settings/roles",
+  "/admin/field-definitions": "/settings/field-definitions",
+};
+
+const legacyRedirectRoutes: RouteObject[] = Object.entries(LEGACY_SETTINGS_REDIRECTS).map(([from, to]) => ({
+  path: from,
+  element: <LegacyRedirect to={to} />,
+}));
 
 /** Storybook-free renderer checks (FE-3, FE-4) - never shipped in a production build. */
 const devRoutes: RouteObject[] = import.meta.env.DEV
@@ -42,17 +63,34 @@ export const routes: RouteObject[] = [
         element: <RequireFullScope />,
         children: [
           {
-            path: "/",
-            element: <AppShell />,
+            path: "/settings",
+            element: <SettingsShell />,
             children: [
-              { index: true, element: <BootstrapStatus /> },
+              { index: true, element: <SettingsLauncher /> },
               {
                 path: "*",
                 element: (
                   <DynamicRoutes
                     resolveScreen={(entry, pathname) =>
-                      resolveMasterScreen(entry, pathname) ??
-                      resolveAdminScreen(entry, pathname) ??
+                      resolveMasterScreen(entry, pathname) ?? resolveAdminScreen(entry, pathname)
+                    }
+                  />
+                ),
+              },
+            ],
+          },
+          {
+            path: "/",
+            element: <AppShell />,
+            children: [
+              { index: true, element: <BootstrapStatus /> },
+              ...legacyRedirectRoutes,
+              { path: "/masters/*", element: <LegacyMastersRedirect /> },
+              {
+                path: "*",
+                element: (
+                  <DynamicRoutes
+                    resolveScreen={(entry, pathname) =>
                       resolveSupplierScreen(entry, pathname) ??
                       resolveBrokerScreen(entry, pathname) ??
                       resolvePurchaseScreen(entry, pathname) ??

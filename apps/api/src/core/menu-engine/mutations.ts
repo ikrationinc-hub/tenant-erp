@@ -22,6 +22,9 @@ export interface CreateMenuInput {
   requiredPermission?: string;
   moduleKey?: string;
   isVisible?: boolean;
+  section?: "operate" | "settings";
+  launcherSection?: string;
+  launcherGroup?: string;
   createdBy: string;
 }
 
@@ -50,6 +53,9 @@ export async function createMenu(input: CreateMenuInput): Promise<typeof menus.$
       parentId: input.parentId ?? null,
       requiredPermission: input.requiredPermission ?? null,
       moduleKey: input.moduleKey ?? null,
+      section: input.section ?? "operate",
+      launcherSection: input.launcherSection ?? null,
+      launcherGroup: input.launcherGroup ?? null,
     };
     const [upserted] = await tx
       .insert(menus)
@@ -65,6 +71,9 @@ export async function createMenu(input: CreateMenuInput): Promise<typeof menus.$
           parentId: values.parentId,
           requiredPermission: values.requiredPermission,
           moduleKey: values.moduleKey,
+          section: values.section,
+          launcherSection: values.launcherSection,
+          launcherGroup: values.launcherGroup,
           updatedBy: input.createdBy,
           updatedAt: new Date(),
         },

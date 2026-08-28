@@ -246,6 +246,20 @@
       "when": 1787746889113,
       "tag": "0034_nosy_earthquake",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1787835062586,
+      "tag": "0035_smiling_madelyne_pryor",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1787892633175,
+      "tag": "0036_nifty_stone_men",
+      "breakpoints": true
     }
   ]
 }

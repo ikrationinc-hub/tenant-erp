@@ -7,6 +7,8 @@ export interface SeedMenuTreeInput {
   createdBy: string;
 }
 
+type MenuSection = "operate" | "settings";
+
 interface DefaultMenuItem {
   key: string;
   label: string;
@@ -14,8 +16,44 @@ interface DefaultMenuItem {
   icon?: string;
   requiredPermission?: string;
   moduleKey?: string;
+  /** Which nav shell this renders in - main sidebar ("operate") or the Settings area ("settings"). Defaults to "operate" if omitted (see seedNode). A parent's section is independent of its children's - "masters" itself has no path and never renders as a clickable node, only its children matter. */
+  section?: MenuSection;
+  /** Settings launcher grouping only (apps/web's SettingsLauncher) - the top-level heading (launcherSection) and card (launcherGroup) this node's link appears under. Never set on an "operate" node; never affects routing, permissions, or the settings sub-nav tree, which both ignore these two fields entirely. */
+  launcherSection?: string;
+  launcherGroup?: string;
   children?: DefaultMenuItem[];
 }
+
+/**
+ * Sub-groups masters within the launcher's "Masters" card into topical
+ * clusters (Geography/Commercial/Trading/Logistics), independent of
+ * MASTER_MODULES' own ordering - purely a launcher presentation concern,
+ * not a change to the masters registry, the settings sub-nav tree (which
+ * still shows one flat "Masters" submenu), or any master's route/entity.
+ * A master's urlSegment not listed here falls back to "Logistics" so a
+ * newly added master never disappears from the launcher, just lands in a
+ * reasonable default bucket until this map is updated for it.
+ */
+const MASTER_LAUNCHER_GROUPS: Record<string, string> = {
+  countries: "Geography",
+  cities: "Geography",
+  ports: "Geography",
+  currencies: "Commercial",
+  "payment-terms": "Commercial",
+  incoterms: "Commercial",
+  uom: "Commercial",
+  "lme-exchanges": "Trading",
+  "hedge-platforms": "Trading",
+  divisions: "Trading",
+  "supplier-types": "Trading",
+  warehouses: "Logistics",
+  vessels: "Logistics",
+  "transport-modes": "Logistics",
+  containers: "Logistics",
+  items: "Logistics",
+  "item-grades": "Logistics",
+  customers: "Logistics",
+};
 
 /**
  * The masters children are GENERATED from core/masters/registry.ts's
@@ -34,8 +72,11 @@ function buildMastersChildren(): DefaultMenuItem[] {
   return MASTER_MODULES.map((module) => ({
     key: `masters.${module.urlSegment}`,
     label: module.label,
-    path: `/masters/${module.urlSegment}`,
+    path: `/settings/masters/${module.urlSegment}`,
     requiredPermission: `masters.${module.entity}.read`,
+    section: "settings",
+    launcherSection: "Master Data",
+    launcherGroup: MASTER_LAUNCHER_GROUPS[module.urlSegment] ?? "Logistics",
   }));
 }
 
@@ -55,46 +96,6 @@ function buildMastersChildren(): DefaultMenuItem[] {
 const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
   { key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard" },
   {
-    key: "companies",
-    label: "Companies",
-    path: "/companies",
-    icon: "bank",
-    moduleKey: "admin",
-    requiredPermission: "admin.company.read",
-  },
-  {
-    key: "branches",
-    label: "Branches",
-    path: "/branches",
-    icon: "apartment",
-    moduleKey: "admin",
-    requiredPermission: "admin.branch.read",
-  },
-  {
-    key: "users",
-    label: "Users",
-    path: "/users",
-    icon: "users",
-    moduleKey: "users",
-    requiredPermission: "users.user.read",
-  },
-  {
-    key: "roles",
-    label: "Roles",
-    path: "/roles",
-    icon: "shield",
-    moduleKey: "roles",
-    requiredPermission: "admin.role.read",
-  },
-  {
-    key: "field-definitions",
-    label: "Field Definitions",
-    path: "/admin/field-definitions",
-    icon: "form",
-    moduleKey: "field-definitions",
-    requiredPermission: "admin.field.manage",
-  },
-  {
     key: "suppliers",
     label: "Suppliers",
     path: "/suppliers",
@@ -109,13 +110,6 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     icon: "contacts",
     moduleKey: "brokers",
     requiredPermission: "brokers.broker.read",
-  },
-  {
-    key: "masters",
-    label: "Masters",
-    icon: "database",
-    moduleKey: "masters",
-    children: buildMastersChildren(),
   },
   {
     key: "purchase",
@@ -164,6 +158,83 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     moduleKey: "inventory",
     requiredPermission: "inventory.stock.read",
   },
+  // --- Settings (configure) - Zoho-style split: everything below here is
+  // reached via the header gear, not the main sidebar. See
+  // docs/PROMPT-settings-restructure.md.
+  {
+    key: "companies",
+    label: "Companies",
+    path: "/settings/companies",
+    icon: "bank",
+    moduleKey: "admin",
+    requiredPermission: "admin.company.read",
+    section: "settings",
+    launcherSection: "Organization Settings",
+    launcherGroup: "Organization",
+  },
+  {
+    key: "branches",
+    label: "Branches",
+    path: "/settings/branches",
+    icon: "apartment",
+    moduleKey: "admin",
+    requiredPermission: "admin.branch.read",
+    section: "settings",
+    launcherSection: "Organization Settings",
+    launcherGroup: "Organization",
+  },
+  {
+    key: "users",
+    label: "Users",
+    path: "/settings/users",
+    icon: "users",
+    moduleKey: "users",
+    requiredPermission: "users.user.read",
+    section: "settings",
+    launcherSection: "Organization Settings",
+    launcherGroup: "Users & Roles",
+  },
+  {
+    key: "roles",
+    label: "Roles",
+    path: "/settings/roles",
+    icon: "shield",
+    moduleKey: "roles",
+    requiredPermission: "admin.role.read",
+    section: "settings",
+    launcherSection: "Organization Settings",
+    launcherGroup: "Users & Roles",
+  },
+  {
+    key: "field-definitions",
+    label: "Field Definitions",
+    path: "/settings/field-definitions",
+    icon: "form",
+    moduleKey: "field-definitions",
+    requiredPermission: "admin.field.manage",
+    section: "settings",
+    launcherSection: "Organization Settings",
+    launcherGroup: "Setup & Configuration",
+  },
+  {
+    key: "number-series",
+    label: "Number Series",
+    path: "/settings/number-series",
+    icon: "ordered-list",
+    moduleKey: "admin",
+    requiredPermission: "admin.company.read",
+    section: "settings",
+    launcherSection: "Organization Settings",
+    launcherGroup: "Setup & Configuration",
+  },
+  {
+    key: "masters",
+    label: "Masters",
+    icon: "database",
+    moduleKey: "masters",
+    section: "settings",
+    children: buildMastersChildren(),
+  },
 ];
 
 async function seedNode(
@@ -184,6 +255,9 @@ async function seedNode(
     ...(parentId !== undefined ? { parentId } : {}),
     ...(node.requiredPermission !== undefined ? { requiredPermission: node.requiredPermission } : {}),
     ...(node.moduleKey !== undefined ? { moduleKey: node.moduleKey } : {}),
+    ...(node.launcherSection !== undefined ? { launcherSection: node.launcherSection } : {}),
+    ...(node.launcherGroup !== undefined ? { launcherGroup: node.launcherGroup } : {}),
+    section: node.section ?? "operate",
   });
 
   const children = node.children ?? [];

@@ -30,16 +30,67 @@ function mockMenus(tree: MenuTreeResponse): void {
   server.use(http.get(`${API_BASE}${endpoints.menus}`, () => HttpResponse.json(tree)));
 }
 
+/**
+ * findByRole("menuitem", { name }) intermittently fails to match here - the
+ * icon span sitting inside the <li role="menuitem"> appears to confuse
+ * testing-library's accessible-name computation for AntD's Menu markup.
+ * Targeting the title span directly (what the label actually renders into)
+ * is reliable; the label text alone is ambiguous whenever both the main
+ * sidebar/settings sub-nav and the launcher's card links show the same
+ * label at once.
+ */
+async function clickMenuItem(user: ReturnType<typeof userEvent.setup>, label: string): Promise<void> {
+  await user.click(await screen.findByText(label, { selector: ".ant-menu-title-content" }, ASYNC));
+}
+
 describe("navigation", () => {
-  it("renders the menu tree from a mocked /menus fixture", async () => {
+  it("main sidebar shows only operate items - Purchase daily-work, not Settings config screens", async () => {
     signIn();
     renderApp({ initialEntries: ["/"] });
 
     expect(await screen.findByText("Dashboard")).toBeInTheDocument();
-    expect(screen.getByText("Users")).toBeInTheDocument();
-    expect(screen.getByText("Roles")).toBeInTheDocument();
-    expect(screen.getByText("Masters")).toBeInTheDocument();
     expect(screen.getByText("Purchase")).toBeInTheDocument();
+    expect(screen.getByText("Suppliers")).toBeInTheDocument();
+    expect(screen.getByText("Brokers")).toBeInTheDocument();
+    // Users/Roles/Masters are "settings" section nodes - they render in
+    // SettingsNav under /settings, not the main sidebar.
+    expect(screen.queryByText("Users")).not.toBeInTheDocument();
+    expect(screen.queryByText("Roles")).not.toBeInTheDocument();
+    expect(screen.queryByText("Masters")).not.toBeInTheDocument();
+  });
+
+  it("Settings sub-nav shows only configure items - reached via the header gear", async () => {
+    signIn();
+    const user = userEvent.setup();
+    renderApp({ initialEntries: ["/"] });
+
+    await user.click(await screen.findByRole("button", { name: "Settings" }, ASYNC));
+
+    expect(await screen.findAllByText("All Settings", {}, ASYNC)).not.toHaveLength(0);
+    // The sub-nav's own menu items - queried by their title span, not plain
+    // text, since "Users"/"Roles"/"Masters" also appear as launcher card
+    // links on the same screen.
+    expect(await screen.findByText("Users", { selector: ".ant-menu-title-content" }, ASYNC)).toBeInTheDocument();
+    expect(screen.getByText("Roles", { selector: ".ant-menu-title-content" })).toBeInTheDocument();
+    expect(screen.getByText("Masters", { selector: ".ant-menu-title-content" })).toBeInTheDocument();
+    // Purchase/Suppliers/Brokers are operate-section nodes, absent from
+    // the settings sub-nav entirely (no ambiguity risk for these).
+    expect(screen.queryByText("Purchase")).not.toBeInTheDocument();
+    expect(screen.queryByText("Suppliers")).not.toBeInTheDocument();
+  });
+
+  it("Close Settings returns to the operate app", async () => {
+    signIn();
+    const user = userEvent.setup();
+    renderApp({ initialEntries: ["/"] });
+
+    await user.click(await screen.findByRole("button", { name: "Settings" }, ASYNC));
+    await screen.findAllByText("All Settings", {}, ASYNC);
+
+    await user.click(await screen.findByText("Close Settings", {}, ASYNC));
+
+    expect(await screen.findByText("Purchase", {}, ASYNC)).toBeInTheDocument();
+    expect(screen.queryByText("All Settings")).not.toBeInTheDocument();
   });
 
   it("a menu item the user lacks permission for is absent", async () => {
@@ -54,6 +105,9 @@ describe("navigation", () => {
             path: "/dashboard",
             icon: "dashboard",
             sortOrder: 1,
+            section: "operate",
+            launcherSection: null,
+            launcherGroup: null,
             children: [],
           },
           // "Roles" deliberately omitted - resolve.ts already excludes it
@@ -103,14 +157,15 @@ describe("navigation", () => {
   );
 
   it(
-    "Divisions is reachable by clicking Masters, then Divisions",
+    "Divisions is reachable via Settings gear -> Masters -> Divisions",
     async () => {
       signIn();
       const user = userEvent.setup();
       renderApp({ initialEntries: ["/"] });
 
-      await user.click(await screen.findByText("Masters", {}, ASYNC));
-      await user.click(await screen.findByText("Divisions", {}, ASYNC));
+      await user.click(await screen.findByRole("button", { name: "Settings" }, ASYNC));
+      await clickMenuItem(user, "Masters");
+      await clickMenuItem(user, "Divisions");
 
       expect(await screen.findByRole("heading", { name: "Divisions" }, ASYNC)).toBeInTheDocument();
     },
@@ -118,14 +173,15 @@ describe("navigation", () => {
   );
 
   it(
-    "Containers is reachable by clicking Masters, then Containers",
+    "Containers is reachable via Settings gear -> Masters -> Containers",
     async () => {
       signIn();
       const user = userEvent.setup();
       renderApp({ initialEntries: ["/"] });
 
-      await user.click(await screen.findByText("Masters", {}, ASYNC));
-      await user.click(await screen.findByText("Containers", {}, ASYNC));
+      await user.click(await screen.findByRole("button", { name: "Settings" }, ASYNC));
+      await clickMenuItem(user, "Masters");
+      await clickMenuItem(user, "Containers");
 
       expect(await screen.findByRole("heading", { name: "Containers" }, ASYNC)).toBeInTheDocument();
     },

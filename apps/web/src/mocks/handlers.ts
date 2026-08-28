@@ -157,54 +157,57 @@ const mockFieldDefinitionModules = fieldDefinitionModulesResponseSchema.parse({
   ],
 });
 
-/** Mirrors the shape (not the exact ids) of apps/api/src/core/provisioning/seed-menu-tree.ts's default tenant tree - already permission/module-filtered, per resolve.ts, so the mock represents what a fully-privileged demo admin would receive. */
+/**
+ * Sub-groups masters within the launcher's "Masters" card - mirrors
+ * seed-menu-tree.ts's own MASTER_LAUNCHER_GROUPS map. A master's
+ * urlSegment not listed here falls back to "Logistics", same as the
+ * backend, so a newly added master never disappears from the launcher.
+ */
+const MASTER_LAUNCHER_GROUPS: Record<string, string> = {
+  countries: "Geography",
+  cities: "Geography",
+  ports: "Geography",
+  currencies: "Commercial",
+  "payment-terms": "Commercial",
+  incoterms: "Commercial",
+  uom: "Commercial",
+  "lme-exchanges": "Trading",
+  "hedge-platforms": "Trading",
+  divisions: "Trading",
+  "supplier-types": "Trading",
+  warehouses: "Logistics",
+  vessels: "Logistics",
+  "transport-modes": "Logistics",
+  containers: "Logistics",
+  items: "Logistics",
+  "item-grades": "Logistics",
+  customers: "Logistics",
+};
+
+/**
+ * Mirrors the shape (not the exact ids) of apps/api/src/core/provisioning/
+ * seed-menu-tree.ts's default tenant tree - already permission/module-
+ * filtered, per resolve.ts, so the mock represents what a fully-privileged
+ * demo admin would receive. `section` ("operate" | "settings") and the
+ * `launcherSection`/`launcherGroup` pair must stay in lockstep with
+ * seed-menu-tree.ts's own tagging - the recurring drift bug CLAUDE.md
+ * flags, now with three more fields to keep in sync.
+ */
 const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
   menus: [
-    { id: "m-dashboard", key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard", sortOrder: 1, children: [] },
-    { id: "m-companies", key: "companies", label: "Companies", path: "/companies", icon: "bank", sortOrder: 2, children: [] },
-    { id: "m-branches", key: "branches", label: "Branches", path: "/branches", icon: "apartment", sortOrder: 3, children: [] },
-    { id: "m-users", key: "users", label: "Users", path: "/users", icon: "users", sortOrder: 4, children: [] },
-    { id: "m-roles", key: "roles", label: "Roles", path: "/roles", icon: "shield", sortOrder: 5, children: [] },
-    {
-      id: "m-field-definitions",
-      key: "field-definitions",
-      label: "Field Definitions",
-      path: "/admin/field-definitions",
-      icon: "form",
-      sortOrder: 6,
-      children: [],
-    },
-    { id: "m-suppliers", key: "suppliers", label: "Suppliers", path: "/suppliers", icon: "shop", sortOrder: 7, children: [] },
-    { id: "m-brokers", key: "brokers", label: "Brokers", path: "/brokers", icon: "contacts", sortOrder: 8, children: [] },
-    {
-      id: "m-masters",
-      key: "masters",
-      label: "Masters",
-      path: null,
-      icon: "database",
-      sortOrder: 9,
-      // Generated from the same registry MasterScreen resolves against
-      // (modules/masters/master-registry.tsx) - the real backend seeds one
-      // menu row per master the same way (core/provisioning/
-      // seed-menu-tree.ts), so this mock stays honest about what "15
-      // masters, one component" actually needs to render.
-      children: MASTER_REGISTRY.map((master, index) => ({
-        id: `m-masters-${master.urlSegment}`,
-        key: `masters.${master.urlSegment}`,
-        label: master.label,
-        path: `/masters/${master.urlSegment}`,
-        icon: null,
-        sortOrder: index + 1,
-        children: [],
-      })),
-    },
+    { id: "m-dashboard", key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard", sortOrder: 1, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
+    { id: "m-suppliers", key: "suppliers", label: "Suppliers", path: "/suppliers", icon: "shop", sortOrder: 2, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
+    { id: "m-brokers", key: "brokers", label: "Brokers", path: "/brokers", icon: "contacts", sortOrder: 3, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
     {
       id: "m-purchase",
       key: "purchase",
       label: "Purchase",
       path: null,
       icon: "shopping-cart",
-      sortOrder: 10,
+      sortOrder: 4,
+      section: "operate",
+      launcherSection: null,
+      launcherGroup: null,
       children: [
         {
           id: "m-purchase-orders",
@@ -213,6 +216,9 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
           path: "/purchase/orders",
           icon: null,
           sortOrder: 1,
+          section: "operate",
+          launcherSection: null,
+          launcherGroup: null,
           children: [],
         },
         // PL-4: Zoho's own "Purchase Receives" and "Bills" nav items -
@@ -225,6 +231,9 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
           path: "/purchase/receipts",
           icon: null,
           sortOrder: 2,
+          section: "operate",
+          launcherSection: null,
+          launcherGroup: null,
           children: [],
         },
         {
@@ -234,6 +243,9 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
           path: "/purchase/bills",
           icon: null,
           sortOrder: 3,
+          section: "operate",
+          launcherSection: null,
+          launcherGroup: null,
           children: [],
         },
         // PL-5: Zoho's own "Payments Made" nav item - must stay in
@@ -246,11 +258,116 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
           path: "/purchase/payments",
           icon: null,
           sortOrder: 4,
+          section: "operate",
+          launcherSection: null,
+          launcherGroup: null,
           children: [],
         },
       ],
     },
-    { id: "m-inventory", key: "inventory", label: "Inventory", path: "/inventory", icon: "inbox", sortOrder: 11, children: [] },
+    { id: "m-inventory", key: "inventory", label: "Inventory", path: "/inventory", icon: "inbox", sortOrder: 5, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
+    // --- Settings (configure) - reached via the header gear, not the main
+    // sidebar. See docs/PROMPT-settings-restructure.md.
+    {
+      id: "m-companies",
+      key: "companies",
+      label: "Companies",
+      path: "/settings/companies",
+      icon: "bank",
+      sortOrder: 6,
+      section: "settings",
+      launcherSection: "Organization Settings",
+      launcherGroup: "Organization",
+      children: [],
+    },
+    {
+      id: "m-branches",
+      key: "branches",
+      label: "Branches",
+      path: "/settings/branches",
+      icon: "apartment",
+      sortOrder: 7,
+      section: "settings",
+      launcherSection: "Organization Settings",
+      launcherGroup: "Organization",
+      children: [],
+    },
+    {
+      id: "m-users",
+      key: "users",
+      label: "Users",
+      path: "/settings/users",
+      icon: "users",
+      sortOrder: 8,
+      section: "settings",
+      launcherSection: "Organization Settings",
+      launcherGroup: "Users & Roles",
+      children: [],
+    },
+    {
+      id: "m-roles",
+      key: "roles",
+      label: "Roles",
+      path: "/settings/roles",
+      icon: "shield",
+      sortOrder: 9,
+      section: "settings",
+      launcherSection: "Organization Settings",
+      launcherGroup: "Users & Roles",
+      children: [],
+    },
+    {
+      id: "m-field-definitions",
+      key: "field-definitions",
+      label: "Field Definitions",
+      path: "/settings/field-definitions",
+      icon: "form",
+      sortOrder: 10,
+      section: "settings",
+      launcherSection: "Organization Settings",
+      launcherGroup: "Setup & Configuration",
+      children: [],
+    },
+    {
+      id: "m-number-series",
+      key: "number-series",
+      label: "Number Series",
+      path: "/settings/number-series",
+      icon: "ordered-list",
+      sortOrder: 11,
+      section: "settings",
+      launcherSection: "Organization Settings",
+      launcherGroup: "Setup & Configuration",
+      children: [],
+    },
+    {
+      id: "m-masters",
+      key: "masters",
+      label: "Masters",
+      path: null,
+      icon: "database",
+      sortOrder: 12,
+      section: "settings",
+      launcherSection: null,
+      launcherGroup: null,
+      // Generated from the same registry MasterScreen resolves against
+      // (modules/masters/master-registry.tsx) - the real backend seeds one
+      // menu row per master the same way (core/provisioning/
+      // seed-menu-tree.ts), so this mock stays honest about what "15
+      // masters, one component" actually needs to render.
+      children: MASTER_REGISTRY.map((master, index) => ({
+        id: `m-masters-${master.urlSegment}`,
+        key: `masters.${master.urlSegment}`,
+        label: master.label,
+        path: `/settings/masters/${master.urlSegment}`,
+        icon: null,
+        sortOrder: index + 1,
+        section: "settings",
+        launcherSection: "Master Data",
+        launcherGroup: MASTER_LAUNCHER_GROUPS[master.urlSegment] ?? "Logistics",
+        children: [],
+      })),
+    },
   ],
 });
 

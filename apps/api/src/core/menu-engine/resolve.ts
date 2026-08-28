@@ -8,6 +8,8 @@ import { getRoleVersion } from "../rbac/cache.js";
 import { resolve } from "../rbac/resolve.js";
 import { getCachedMenuTree, getMenuVersion, setCachedMenuTree } from "./cache.js";
 
+export type MenuSection = "operate" | "settings";
+
 export interface MenuNode {
   id: string;
   key: string;
@@ -15,6 +17,9 @@ export interface MenuNode {
   path: string | null;
   icon: string | null;
   sortOrder: number;
+  section: MenuSection;
+  launcherSection: string | null;
+  launcherGroup: string | null;
   children: MenuNode[];
 }
 
@@ -54,6 +59,9 @@ function toNode(row: MenuRow): MenuNode {
     path: row.path,
     icon: row.icon,
     sortOrder: row.sortOrder,
+    section: row.section as MenuSection,
+    launcherSection: row.launcherSection,
+    launcherGroup: row.launcherGroup,
     children: [],
   };
 }

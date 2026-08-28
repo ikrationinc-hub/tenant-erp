@@ -8,7 +8,9 @@ import {
   DatabaseOutlined,
   FormOutlined,
   InboxOutlined,
+  OrderedListOutlined,
   SafetyOutlined,
+  SettingOutlined,
   ShopOutlined,
   ShoppingCartOutlined,
   TeamOutlined,
@@ -27,6 +29,8 @@ const ICONS: Record<string, ComponentType> = {
   form: FormOutlined,
   contacts: ContactsOutlined,
   inbox: InboxOutlined,
+  "ordered-list": OrderedListOutlined,
+  setting: SettingOutlined,
 };
 
 export function resolveMenuIcon(iconKey: string | null): ComponentType {

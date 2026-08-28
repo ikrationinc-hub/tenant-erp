@@ -16,11 +16,11 @@ import { FieldDefinitionsScreen } from "./FieldDefinitionsScreen";
  * first).
  */
 const ADMIN_SCREENS: Record<string, () => ReactElement | null> = {
-  "/companies": () => <CompanyScreen />,
-  "/branches": () => <BranchScreen />,
-  "/users": () => <UserManagementScreen />,
-  "/roles": () => <RoleListScreen />,
-  "/admin/field-definitions": () => <FieldDefinitionsScreen />,
+  "/settings/companies": () => <CompanyScreen />,
+  "/settings/branches": () => <BranchScreen />,
+  "/settings/users": () => <UserManagementScreen />,
+  "/settings/roles": () => <RoleListScreen />,
+  "/settings/field-definitions": () => <FieldDefinitionsScreen />,
 };
 
 export function resolveAdminScreen(entry: FlatMenuEntry, pathname: string): ReactElement | null {

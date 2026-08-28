@@ -22,20 +22,29 @@ function toAntItems(nodes: MenuNode[]): AntMenuItems {
   });
 }
 
-/** Renders GET /menus into an AntD Menu - tree, icons, sort_order/parent_id nesting all already resolved server-side (frontend rule 2: no hardcoded route array anywhere here). Filtered to the "operate" section only - "settings" nodes render in SettingsNav instead. */
-export function NavigationMenu(): ReactElement {
+/**
+ * The Settings area's own sub-nav sidebar (Zoho's "All Settings" second
+ * screenshot) - same GET /menus tree as the main NavigationMenu, filtered to
+ * `section === "settings"` instead of "operate", and the SAME dark gunmetal
+ * visual treatment (className "nav-menu" for the selected-rail indicator;
+ * the dark color scheme itself comes from AntD's Sider->Menu theme context,
+ * same as NavigationMenu - see SettingsShell's Sider theme="dark"). Two
+ * components rather than one parametrized one only because they filter to
+ * different tree sections and live in different Siders, not because they
+ * should look different - this is still one app, one nav language.
+ */
+export function SettingsNav(): ReactElement {
   const { data } = useMenuTree();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const tree = useMemo(() => (data?.menus ?? []).filter((node) => node.section === "operate"), [data]);
+  const tree = useMemo(() => (data?.menus ?? []).filter((node) => node.section === "settings"), [data]);
   const items = useMemo(() => toAntItems(tree), [tree]);
 
   const trail = findBreadcrumbTrail(tree, location.pathname);
   const openKeys = trail ? trail.slice(0, -1).map((node) => node.path ?? node.key) : [];
 
   function handleClick(info: { key: string }): void {
-    // A group header's key is its menu `key` (e.g. "masters"), not a route - only a real path is navigable.
     if (info.key.startsWith("/")) {
       void navigate(info.key);
     }
@@ -43,7 +52,7 @@ export function NavigationMenu(): ReactElement {
 
   return (
     <Menu
-      className="nav-menu"
+      className="nav-menu settings-nav-menu"
       mode="inline"
       items={items}
       selectedKeys={[location.pathname]}
