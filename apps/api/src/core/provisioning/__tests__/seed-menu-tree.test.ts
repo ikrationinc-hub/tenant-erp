@@ -31,11 +31,11 @@ const TEST_TIMEOUT_MS = 120_000;
  */
 const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/dashboard",
-  "/companies",
-  "/branches",
-  "/users",
-  "/roles",
-  "/admin/field-definitions",
+  "/settings/companies",
+  "/settings/branches",
+  "/settings/users",
+  "/settings/roles",
+  "/settings/field-definitions",
   "/suppliers",
   "/brokers",
   "/purchase/orders",
@@ -43,9 +43,14 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/purchase/bills",
   "/purchase/payments",
   "/inventory",
-  ...MASTER_MODULES.filter((module) => module.entity !== "customer").map((module) => `/masters/${module.urlSegment}`),
+  ...MASTER_MODULES.filter((module) => module.entity !== "customer").map(
+    (module) => `/settings/masters/${module.urlSegment}`,
+  ),
 ]);
-const KNOWN_PENDING_FRONTEND_EXCEPTIONS = new Set(["/masters/customers"]);
+// number-series is a deliberate placeholder slot (no frontend screen yet,
+// per docs/PROMPT-settings-restructure.md's Number Series decision) -
+// PlaceholderScreen renders it, same treatment /masters/customers got below.
+const KNOWN_PENDING_FRONTEND_EXCEPTIONS = new Set(["/settings/masters/customers", "/settings/number-series"]);
 
 interface FlatMenuRow {
   path: string | null;
@@ -128,18 +133,18 @@ describe("core/provisioning/seed-menu-tree - the seeded default navigation", () 
 
       // Every screen this task named must actually be there - no exceptions.
       for (const required of [
-        "/companies",
-        "/branches",
-        "/users",
-        "/roles",
-        "/admin/field-definitions",
+        "/settings/companies",
+        "/settings/branches",
+        "/settings/users",
+        "/settings/roles",
+        "/settings/field-definitions",
         "/suppliers",
         "/purchase/orders",
         "/purchase/receipts",
         "/purchase/bills",
         "/purchase/payments",
         "/inventory",
-        ...MASTER_MODULES.map((module) => `/masters/${module.urlSegment}`),
+        ...MASTER_MODULES.map((module) => `/settings/masters/${module.urlSegment}`),
       ]) {
         expect(leafPaths).toContain(required);
       }

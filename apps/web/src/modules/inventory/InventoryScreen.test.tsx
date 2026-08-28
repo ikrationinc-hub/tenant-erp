@@ -153,7 +153,7 @@ describe("Inventory (Stock Ledger)", () => {
         http.get(`${API_BASE}${endpoints.menus}`, () =>
           HttpResponse.json({
             menus: [
-              { id: "m-dashboard", key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard", sortOrder: 1, children: [] },
+              { id: "m-dashboard", key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard", sortOrder: 1, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
               // "Inventory" deliberately omitted - resolve.ts already excludes it server-side without inventory.stock.read.
             ],
           }),

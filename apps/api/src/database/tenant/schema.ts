@@ -591,6 +591,14 @@ export const menus = pgTable(
     requiredPermission: text("required_permission"),
     moduleKey: text("module_key"),
     isVisible: boolean("is_visible").notNull().default(true),
+    // Navigation shell only ("operate" main sidebar vs "settings" area) -
+    // not a permission gate. See packages/contracts/src/menus.ts.
+    section: text("section").notNull().default("operate"),
+    // Settings launcher grouping only - which heading/card this node's
+    // link appears under on the launcher page. Null for every "operate"
+    // node. Never gates visibility or affects the settings sub-nav tree.
+    launcherSection: text("launcher_section"),
+    launcherGroup: text("launcher_group"),
     ...auditColumns(),
   },
   (table) => [

@@ -79,7 +79,7 @@ export function AppShell(): ReactElement {
           }}
         >
           <Typography.Text strong>Ikration ERP</Typography.Text>
-          <HeaderBar />
+          <HeaderBar showSettingsEntry />
         </Header>
         {/* height (not minHeight) + overflowY makes Content its own scroll
             region, distinct from the page/document - a bounded scroll

@@ -40,7 +40,7 @@ export const MASTER_REGISTRY: MasterRegistryEntry[] = [
   { entity: "container", urlSegment: "containers", label: "Containers" },
 ];
 
-const MASTERS_PATH_PREFIX = "/masters/";
+const MASTERS_PATH_PREFIX = "/settings/masters/";
 
 function findMasterByPath(path: string): MasterRegistryEntry | undefined {
   if (!path.startsWith(MASTERS_PATH_PREFIX)) {

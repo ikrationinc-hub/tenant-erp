@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ikration — Settings Restructure Prototype</title>
+<style>
+  :root{
+    --navy:#1e2a3a; --navy-dark:#18222f; --navy-hover:#2a3a4f;
+    --accent:#3b5bdb; --accent-hover:#324ec0;
+    --teal:#0ca678; --teal-bg:#e6f7f1;
+    --amber:#f59f00; --red:#e03131;
+    --ink:#1f2937; --muted:#6b7280; --faint:#9ca3af;
+    --line:#e5e7eb; --bg:#f4f6f8; --card:#ffffff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);background:var(--bg);font-size:14px;line-height:1.5}
+  .app{display:flex;height:100vh;overflow:hidden}
+
+  /* ---- Sidebar ---- */
+  .sidebar{width:230px;background:var(--navy);color:#cbd5e1;display:flex;flex-direction:column;flex-shrink:0;transition:width .2s}
+  .sidebar-head{height:56px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 18px;color:#fff;font-weight:700;font-size:16px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .sidebar-head .collapse{color:#8ea1b8;cursor:pointer;font-size:15px}
+  .nav{padding:10px 0;overflow-y:auto;flex:1}
+  .nav-section-label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#5f7286;
+    padding:14px 20px 6px;font-weight:600}
+  .nav-item{display:flex;align-items:center;gap:11px;padding:10px 20px;color:#cbd5e1;cursor:pointer;
+    font-size:13.5px;border-left:3px solid transparent;user-select:none}
+  .nav-item:hover{background:var(--navy-hover);color:#fff}
+  .nav-item.active{background:var(--navy-dark);color:#fff;border-left-color:var(--accent)}
+  .nav-item .ico{width:16px;text-align:center;opacity:.85;font-size:14px}
+  .nav-item .chev{margin-left:auto;font-size:10px;opacity:.6;transition:transform .15s}
+  .nav-item.open .chev{transform:rotate(180deg)}
+  .nav-sub{display:none;background:rgba(0,0,0,.15)}
+  .nav-sub.show{display:block}
+  .nav-sub .nav-item{padding-left:44px;font-size:13px}
+
+  /* ---- Main ---- */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;
+    padding:0 22px;gap:16px;flex-shrink:0}
+  .topbar .brand{font-weight:700;font-size:14px;color:var(--ink)}
+  .topbar .spacer{flex:1}
+  .pill-select{border:1px solid var(--line);border-radius:6px;padding:5px 12px;font-size:13px;color:var(--muted);
+    background:#fff;display:flex;align-items:center;gap:6px;cursor:pointer}
+  .pill-select.disabled{color:var(--faint);background:#fafbfc}
+  .gear{width:34px;height:34px;border-radius:7px;border:1px solid var(--line);background:#fff;display:flex;
+    align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:var(--muted)}
+  .gear:hover{background:var(--bg);color:var(--accent);border-color:var(--accent)}
+  .gear.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .user-chip{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:var(--ink)}
+  .avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;
+    align-items:center;justify-content:center;font-size:12px;font-weight:700}
+
+  .content{flex:1;overflow-y:auto;padding:26px 28px}
+
+  /* ---- Page bits ---- */
+  .page-title{font-size:22px;font-weight:700;color:var(--ink)}
+  .page-sub{color:var(--faint);font-size:13px;margin-top:2px}
+  .page-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px}
+  .btn{border:none;border-radius:7px;padding:9px 16px;font-size:13.5px;font-weight:600;cursor:pointer}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent-hover)}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+
+  .kpis{display:flex;gap:14px;margin-bottom:18px}
+  .kpi{background:#fff;border:1px solid var(--line);border-left:3px solid var(--faint);border-radius:8px;
+    padding:12px 18px;min-width:120px}
+  .kpi.b-blue{border-left-color:var(--accent)}
+  .kpi.b-amber{border-left-color:var(--amber)}
+  .kpi.b-teal{border-left-color:var(--teal)}
+  .kpi.b-red{border-left-color:var(--red)}
+  .kpi .k-label{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .kpi .k-val{font-size:26px;font-weight:700;margin-top:3px}
+
+  .filters{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .filters input,.filters select{border:1px solid var(--line);border-radius:6px;padding:8px 11px;font-size:13px;
+    background:#fff;color:var(--ink);min-width:130px}
+
+  .card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+    font-weight:600;padding:12px 16px;border-bottom:1px solid var(--line);background:#fafbfc}
+  td{padding:13px 16px;border-bottom:1px solid #f1f3f5;font-size:13.5px}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#fafcff}
+  .mono{font-family:"SF Mono",Menlo,monospace;font-size:12.5px}
+  .link{color:var(--accent);cursor:pointer;font-weight:500}
+  .link.danger{color:var(--red)}
+
+  .tag{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600}
+  .tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  .tag-green{background:var(--teal-bg);color:var(--teal)}
+  .tag-gray{background:#f1f3f5;color:var(--muted)}
+  .tag-amber{background:#fff4e0;color:var(--amber)}
+
+  .placeholder{background:#fff;border:1px solid var(--line);border-radius:8px;padding:40px}
+  .placeholder h2{font-size:20px;margin-bottom:6px}
+  .placeholder p{color:var(--faint)}
+
+  /* ---- Settings launcher ---- */
+  .settings-wrap{max-width:1150px;margin:0 auto}
+  .settings-search{width:100%;max-width:520px;margin:0 auto 26px;display:block;border:1px solid var(--line);
+    border-radius:8px;padding:11px 16px;font-size:14px}
+  .settings-group{margin-bottom:30px}
+  .settings-group-title{font-size:16px;font-weight:700;color:var(--ink);margin-bottom:14px}
+  .settings-cols{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .settings-col{background:#fff;border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .settings-col-head{display:flex;align-items:center;gap:9px;font-weight:700;font-size:14px;margin-bottom:12px;
+    padding-bottom:10px;border-bottom:1px solid #f1f3f5}
+  .settings-col-head .sico{width:26px;height:26px;border-radius:6px;background:var(--teal-bg);color:var(--teal);
+    display:flex;align-items:center;justify-content:center;font-size:13px}
+  .settings-link{display:block;padding:6px 0;color:#42506a;font-size:13.5px;cursor:pointer}
+  .settings-link:hover{color:var(--accent)}
+
+  /* ---- Settings inner (sub-nav) ---- */
+  .settings-inner{display:flex;gap:0;height:100%}
+  .settings-nav{width:230px;flex-shrink:0;border-right:1px solid var(--line);padding-right:0;background:#fff}
+  .settings-nav-sec{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);
+    font-weight:600;padding:16px 18px 6px}
+  .settings-nav-item{padding:9px 18px;font-size:13.5px;color:#42506a;cursor:pointer;border-left:3px solid transparent}
+  .settings-nav-item:hover{background:var(--bg);color:var(--accent)}
+  .settings-nav-item.active{background:#eef2ff;color:var(--accent);border-left-color:var(--accent);font-weight:600}
+  .settings-body{flex:1;padding:0 0 0 26px}
+
+  .settings-topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;
+    padding:0 22px;gap:14px;flex-shrink:0}
+  .settings-topbar .st-title{font-weight:700}
+  .settings-topbar .st-sub{color:var(--faint);font-size:12px}
+  .close-settings{margin-left:auto;background:#fff;border:1px solid var(--line);border-radius:7px;padding:7px 14px;
+    font-size:13px;font-weight:600;color:var(--red);cursor:pointer;display:flex;align-items:center;gap:6px}
+  .close-settings:hover{background:#fff5f5}
+
+  .hidden{display:none !important}
+  .note{background:#eef2ff;border:1px solid #dbe2ff;border-radius:8px;padding:10px 14px;font-size:12.5px;
+    color:#3b4a6b;margin-bottom:18px}
+  .note b{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- ============ OPERATE APP ============ -->
+<div class="app" id="operateApp">
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <span>Ikration</span>
+      <span class="collapse">&#9776;</span>
+    </div>
+    <nav class="nav" id="mainNav">
+      <div class="nav-item active" data-page="dashboard"><span class="ico">&#9673;</span> Dashboard</div>
+
+      <div class="nav-item" data-page="po"><span class="ico">&#128722;</span> Purchase <span class="chev">&#9662;</span></div>
+      <div class="nav-sub" id="sub-purchase">
+        <div class="nav-item" data-page="po"><span class="ico">&#9636;</span> Purchase Orders</div>
+        <div class="nav-item" data-page="blank"><span class="ico">&#9636;</span> Purchase Receipts</div>
+        <div class="nav-item" data-page="blank"><span class="ico">&#9636;</span> Purchase Bills</div>
+        <div class="nav-item" data-page="blank"><span class="ico">&#9636;</span> Payments Made</div>
+      </div>
+
+      <div class="nav-item" data-page="blank"><span class="ico">&#128230;</span> Inventory</div>
+      <div class="nav-item" data-page="blank"><span class="ico">&#128203;</span> Contracts</div>
+      <div class="nav-item" data-page="blank"><span class="ico">&#128200;</span> Reports</div>
+
+      <div class="nav-section-label">Records</div>
+      <div class="nav-item" data-page="blank"><span class="ico">&#127970;</span> Suppliers</div>
+      <div class="nav-item" data-page="blank"><span class="ico">&#128100;</span> Customers</div>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <span class="brand">Ikration ERP</span>
+      <span class="spacer"></span>
+      <span class="pill-select">Cloud &#9662;</span>
+      <span class="pill-select disabled">Branch &#9662;</span>
+      <span class="gear" id="gearBtn" title="Settings">&#9881;</span>
+      <span class="user-chip"><span class="avatar">M</span> Mustali</span>
+    </div>
+
+    <div class="content" id="operateContent">
+      <!-- Dashboard -->
+      <div data-panel="dashboard">
+        <div class="note">This prototype shows the <b>operate / configure split</b>. The main sidebar now holds
+          only daily-work screens. Click the <b>&#9881; gear</b> (top-right) to see the Settings area where
+          Masters, Users, Roles, Field Definitions etc. now live.</div>
+        <div class="page-head"><div><div class="page-title">Dashboard</div>
+          <div class="page-sub">Welcome back, Mustali</div></div></div>
+        <div class="kpis">
+          <div class="kpi b-blue"><div class="k-label">Open POs</div><div class="k-val">1</div></div>
+          <div class="kpi b-amber"><div class="k-label">To Receive</div><div class="k-val">4</div></div>
+          <div class="kpi b-teal"><div class="k-label">In Stock (items)</div><div class="k-val">9</div></div>
+          <div class="kpi b-red"><div class="k-label">Below Reorder</div><div class="k-val">0</div></div>
+        </div>
+        <div class="placeholder"><h2>Dashboard widgets</h2>
+          <p>Charts and activity feed render here. The point of this prototype is the navigation, not the widgets.</p></div>
+      </div>
+
+      <!-- Purchase Orders -->
+      <div data-panel="po" class="hidden">
+        <div class="page-head">
+          <div><div class="page-title">Purchase Orders</div><div class="page-sub">2 orders</div></div>
+          <button class="btn btn-primary">+ New Purchase</button>
+        </div>
+        <div class="kpis">
+          <div class="kpi b-blue"><div class="k-label">Total</div><div class="k-val">2</div></div>
+          <div class="kpi"><div class="k-label">Draft</div><div class="k-val">1</div></div>
+          <div class="kpi b-blue"><div class="k-label">Issued</div><div class="k-val">0</div></div>
+          <div class="kpi b-teal"><div class="k-label">Closed</div><div class="k-val">1</div></div>
+          <div class="kpi b-red"><div class="k-label">Cancelled</div><div class="k-val">0</div></div>
+        </div>
+        <div class="filters">
+          <input placeholder="Search">
+          <select><option>Status</option></select>
+          <select><option>Received</option></select>
+          <select><option>Billed</option></select>
+          <select><option>Division</option></select>
+          <select><option>Supplier</option></select>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>Purchase Number</th><th>Status</th><th>Division</th><th>Purchase Date</th>
+              <th>Supplier</th><th>Received</th><th>Billed</th><th>Actions</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">PO-2026-0001</td><td><span class="tag tag-green">Closed</span></td><td>&mdash;</td>
+                <td class="mono">2026-07-29</td><td>Test</td><td><span class="tag tag-green">Fully Received</span></td>
+                <td><span class="tag tag-green">Fully Billed</span></td><td><span class="link">Open</span></td></tr>
+              <tr><td class="mono">PO-2026-0002</td><td><span class="tag tag-gray">Draft</span></td><td>Container</td>
+                <td class="mono">2026-08-13</td><td>Test</td><td><span class="tag tag-gray">Not Received</span></td>
+                <td><span class="tag tag-gray">Not Billed</span></td><td><span class="link">Open</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Generic blank -->
+      <div data-panel="blank" class="hidden">
+        <div class="placeholder"><h2>Screen reachable</h2>
+          <p>This operate screen renders here. In the real app it's the existing component &mdash; unchanged by the restructure.</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SETTINGS APP ============ -->
+<div class="app hidden" id="settingsApp">
+  <div class="main">
+    <div class="settings-topbar">
+      <span class="st-title">All Settings</span><span class="st-sub">Ikration &middot; Cloud</span>
+      <button class="close-settings" id="closeSettings">Close Settings &#10005;</button>
+    </div>
+
+    <div class="settings-inner">
+      <!-- sub-nav -->
+      <div class="settings-nav">
+        <div class="settings-nav-sec">Organization</div>
+        <div class="settings-nav-item" data-set="launcher">All Settings</div>
+        <div class="settings-nav-item" data-set="companies">Companies &amp; Branches</div>
+        <div class="settings-nav-item active" data-set="users">Users</div>
+        <div class="settings-nav-item" data-set="roles">Roles &amp; Permissions</div>
+        <div class="settings-nav-sec">Configuration</div>
+        <div class="settings-nav-item" data-set="masters">Masters</div>
+        <div class="settings-nav-item" data-set="fields">Field Definitions</div>
+        <div class="settings-nav-item" data-set="numbering">Number Series</div>
+      </div>
+
+      <!-- body -->
+      <div class="content" style="flex:1">
+        <div class="settings-body">
+
+          <!-- Launcher -->
+          <div data-set-panel="launcher" class="hidden">
+            <div class="settings-wrap">
+              <input class="settings-search" placeholder="&#128269;  Search settings">
+              <div class="settings-group">
+                <div class="settings-group-title">Organization Settings</div>
+                <div class="settings-cols">
+                  <div class="settings-col">
+                    <div class="settings-col-head"><span class="sico">&#127970;</span> Organization</div>
+                    <span class="settings-link" data-jump="companies">Companies</span>
+                    <span class="settings-link" data-jump="companies">Branches</span>
+                    <span class="settings-link">Profile</span>
+                  </div>
+                  <div class="settings-col">
+                    <div class="settings-col-head"><span class="sico">&#128101;</span> Users &amp; Roles</div>
+                    <span class="settings-link" data-jump="users">Users</span>
+                    <span class="settings-link" data-jump="roles">Roles</span>
+                    <span class="settings-link" data-jump="roles">Field Permissions</span>
+                  </div>
+                  <div class="settings-col">
+                    <div class="settings-col-head"><span class="sico">&#9881;</span> Setup</div>
+                    <span class="settings-link" data-jump="numbering">Number Series</span>
+                    <span class="settings-link" data-jump="fields">Field Definitions</span>
+                  </div>
+                  <div class="settings-col">
+                    <div class="settings-col-head"><span class="sico">&#128231;</span> Notifications</div>
+                    <span class="settings-link">Email Templates</span>
+                    <span class="settings-link">SMS</span>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-group">
+                <div class="settings-group-title">Master Data</div>
+                <div class="settings-cols">
+                  <div class="settings-col">
+                    <div class="settings-col-head"><span class="sico">&#127758;</span> Geography</div>
+                    <span class="settings-link" data-jump="masters">Countries</span>
+                    <span class="settings-link" data-jump="masters">Cities</span>
+                    <span class="settings-link" data-jump="masters">Ports</span>
+                  </div>
+                  <div class="settings-col">
+                    <div class="settings-col-head"><span class="sico">&#128176;</span> Commercial</div>
+                    <span class="settings-link" data-jump="masters">Currencies</span>
+                    <span class="settings-link" data-jump="masters">Payment Terms</span>
+                    <span class="settings-link" data-jump="masters">Incoterms</span>
+                  </div>
+                  <div class="settings-col">
+                    <div class="settings-col-head"><span class="sico">&#9878;</span> Trading</div>
+                    <span class="settings-link" data-jump="masters">LME Exchanges</span>
+                    <span class="settings-link" data-jump="masters">Hedge Platforms</span>
+                    <span class="settings-link" data-jump="masters">Divisions</span>
+                    <span class="settings-link" data-jump="masters">Brokers</span>
+                  </div>
+                  <div class="settings-col">
+                    <div class="settings-col-head"><span class="sico">&#128230;</span> Logistics</div>
+                    <span class="settings-link" data-jump="masters">Warehouses</span>
+                    <span class="settings-link" data-jump="masters">Vessels</span>
+                    <span class="settings-link" data-jump="masters">Containers</span>
+                    <span class="settings-link" data-jump="masters">UOM</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Users (settings) -->
+          <div data-set-panel="users">
+            <div class="page-head"><div><div class="page-title">Users</div>
+              <div class="page-sub">Manage who can access Ikration</div></div>
+              <div style="display:flex;gap:10px">
+                <button class="btn btn-ghost">Provision (no email)</button>
+                <button class="btn btn-primary">+ Invite User</button>
+              </div></div>
+            <div class="filters"><input placeholder="Search"><select><option>Status</option></select>
+              <select><option>Role</option></select></div>
+            <div class="card"><table>
+              <thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead>
+              <tbody>
+                <tr><td>Husain m</td><td>mi.intego@gmail.com</td><td class="mono">1234567891</td>
+                  <td><span class="tag tag-green">Active</span></td><td class="mono">2026-08-08</td>
+                  <td><span class="link danger">Suspend</span> &nbsp; <span class="link">Edit roles</span></td></tr>
+                <tr><td>Mohammad</td><td>mkatwara791@gmail.com</td><td class="mono">1234567890</td>
+                  <td><span class="tag tag-green">Active</span></td><td>&mdash;</td>
+                  <td><span class="link danger">Suspend</span> &nbsp; <span class="link">Edit roles</span></td></tr>
+                <tr><td>Mustali</td><td>mustalichunawala@gmail.com</td><td>&mdash;</td>
+                  <td><span class="tag tag-green">Active</span></td><td class="mono">2026-08-20</td>
+                  <td><span class="link danger">Suspend</span> &nbsp; <span class="link">Edit roles</span></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+
+          <!-- Masters (settings) -->
+          <div data-set-panel="masters" class="hidden">
+            <div class="page-head"><div><div class="page-title">Currencies</div>
+              <div class="page-sub">Master &middot; pick any master from the left or the launcher</div></div>
+              <button class="btn btn-primary">+ New Currency</button></div>
+            <div class="card"><table>
+              <thead><tr><th>Code</th><th>Name</th><th>Symbol</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">USD</td><td>US Dollar</td><td>$</td><td><span class="tag tag-green">Active</span></td>
+                  <td><span class="link">Edit</span> &nbsp; <span class="link danger">Deactivate</span></td></tr>
+                <tr><td class="mono">AED</td><td>UAE Dirham</td><td>&#1583;.&#1573;</td><td><span class="tag tag-green">Active</span></td>
+                  <td><span class="link">Edit</span> &nbsp; <span class="link danger">Deactivate</span></td></tr>
+                <tr><td class="mono">EUR</td><td>Euro</td><td>&euro;</td><td><span class="tag tag-gray">Inactive</span></td>
+                  <td><span class="link">Edit</span> &nbsp; <span class="link">Activate</span></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+
+          <!-- Roles (settings) -->
+          <div data-set-panel="roles" class="hidden">
+            <div class="page-head"><div><div class="page-title">Roles &amp; Permissions</div>
+              <div class="page-sub">Module permissions and field-level rights</div></div>
+              <button class="btn btn-primary">+ New Role</button></div>
+            <div class="card"><table>
+              <thead><tr><th>Role</th><th>Users</th><th>Type</th><th>Actions</th></tr></thead>
+              <tbody>
+                <tr><td>Admin</td><td>2</td><td><span class="tag tag-amber">System</span></td>
+                  <td><span class="link">Permissions</span> &nbsp; <span class="link">Field rights</span></td></tr>
+                <tr><td>Purchase Officer</td><td>1</td><td><span class="tag tag-gray">Custom</span></td>
+                  <td><span class="link">Permissions</span> &nbsp; <span class="link">Field rights</span></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+
+          <!-- Field Definitions (settings) -->
+          <div data-set-panel="fields" class="hidden">
+            <div class="page-head"><div><div class="page-title">Field Definitions</div>
+              <div class="page-sub">Rename, hide, reorder fields &mdash; no deploy needed</div></div>
+              <select style="padding:8px 11px;border:1px solid var(--line);border-radius:6px"><option>Purchase &rsaquo; Pricing</option></select></div>
+            <div class="card"><table>
+              <thead><tr><th>Field</th><th>Label (editable)</th><th>Tier</th><th>Visible</th><th>Mandatory</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">other_charges_1</td><td>Clearing Charges</td><td><span class="tag tag-gray">Tier 2</span></td><td>&#10004;</td><td>&mdash;</td></tr>
+                <tr><td class="mono">purchase_rate_usd</td><td>Purchase Rate (USD)</td><td><span class="tag tag-amber">Tier 1</span></td><td>&#10004;</td><td>&#10004;</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+
+          <!-- Companies / Numbering placeholders -->
+          <div data-set-panel="companies" class="hidden">
+            <div class="page-head"><div><div class="page-title">Companies &amp; Branches</div>
+              <div class="page-sub">Legal entities and their branches</div></div>
+              <button class="btn btn-primary">+ New Company</button></div>
+            <div class="placeholder"><h2>Companies list</h2><p>Existing screen &mdash; now lives under Settings.</p></div>
+          </div>
+          <div data-set-panel="numbering" class="hidden">
+            <div class="page-head"><div><div class="page-title">Number Series</div>
+              <div class="page-sub">Document numbering per company &amp; fiscal year</div></div></div>
+            <div class="placeholder"><h2>Number series config</h2><p>Gapless series for PO, Receipt, Bill, Contract&hellip;</p></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // operate nav
+  var mainNav = document.getElementById('mainNav');
+  var opContent = document.getElementById('operateContent');
+  mainNav.addEventListener('click', function(e){
+    var item = e.target.closest('.nav-item'); if(!item) return;
+    // expandable groups
+    if(item.querySelector('.chev')){
+      var sub = document.getElementById('sub-purchase');
+      item.classList.toggle('open'); sub.classList.toggle('show');
+    }
+    var page = item.getAttribute('data-page'); if(!page) return;
+    mainNav.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active')});
+    item.classList.add('active');
+    opContent.querySelectorAll('[data-panel]').forEach(function(p){p.classList.add('hidden')});
+    var panel = opContent.querySelector('[data-panel="'+page+'"]');
+    if(panel) panel.classList.remove('hidden');
+  });
+
+  // enter / leave settings
+  var operateApp=document.getElementById('operateApp'), settingsApp=document.getElementById('settingsApp');
+  document.getElementById('gearBtn').addEventListener('click',function(){
+    operateApp.classList.add('hidden'); settingsApp.classList.remove('hidden');
+    showSet('launcher');
+  });
+  document.getElementById('closeSettings').addEventListener('click',function(){
+    settingsApp.classList.add('hidden'); operateApp.classList.remove('hidden');
+  });
+
+  // settings sub-nav
+  function showSet(key){
+    document.querySelectorAll('[data-set-panel]').forEach(function(p){p.classList.add('hidden')});
+    var panel=document.querySelector('[data-set-panel="'+key+'"]'); if(panel) panel.classList.remove('hidden');
+    document.querySelectorAll('.settings-nav-item').forEach(function(n){
+      n.classList.toggle('active', n.getAttribute('data-set')===key);
+    });
+  }
+  document.querySelectorAll('.settings-nav-item').forEach(function(n){
+    n.addEventListener('click',function(){showSet(n.getAttribute('data-set'))});
+  });
+  // launcher links jump to a section
+  document.addEventListener('click',function(e){
+    var j=e.target.closest('[data-jump]'); if(!j) return;
+    showSet(j.getAttribute('data-jump'));
+  });
+</script>
+</body>
+</html>

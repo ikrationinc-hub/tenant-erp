@@ -1,0 +1,1 @@
+ALTER TABLE "menus" ADD COLUMN "section" text DEFAULT 'operate' NOT NULL;

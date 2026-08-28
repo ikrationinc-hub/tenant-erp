@@ -173,13 +173,14 @@ describe("FieldDefinitionsScreen", () => {
   );
 
   it(
-    "the menu item is reachable by clicking, not just typing the URL",
+    "the menu item is reachable via the Settings gear, not just typing the URL",
     async () => {
       signIn();
       const user = userEvent.setup();
       renderApp({ initialEntries: ["/"] });
 
-      await user.click(await screen.findByText("Field Definitions", {}, ASYNC));
+      await user.click(await screen.findByRole("button", { name: "Settings" }, ASYNC));
+      await user.click(await screen.findByText("Field Definitions", { selector: ".ant-menu-title-content" }, ASYNC));
 
       expect(await screen.findByRole("combobox", { name: "Module / entity" }, ASYNC)).toBeInTheDocument();
     },
@@ -197,7 +198,7 @@ describe("FieldDefinitionsScreen", () => {
         http.get(`${API_BASE}${endpoints.menus}`, () =>
           HttpResponse.json({
             menus: [
-              { id: "m-dashboard", key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard", sortOrder: 1, children: [] },
+              { id: "m-dashboard", key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard", sortOrder: 1, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
               // "Field Definitions" deliberately omitted - resolve.ts
               // already excludes it server-side without admin.field.manage.
             ],
@@ -209,7 +210,7 @@ describe("FieldDefinitionsScreen", () => {
       await screen.findByText("Dashboard", {}, ASYNC);
       expect(screen.queryByText("Field Definitions")).not.toBeInTheDocument();
 
-      renderApp({ initialEntries: ["/admin/field-definitions"] });
+      renderApp({ initialEntries: ["/settings/field-definitions"] });
       expect(await screen.findByText("404", {}, ASYNC)).toBeInTheDocument();
     },
     30000,
