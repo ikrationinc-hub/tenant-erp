@@ -131,7 +131,7 @@ export const fieldDefinitionSchema = z.object({
   defaultValue: z.unknown().nullable().optional(),
   /** Dropdown only - a role picker etc. renders as a multi-select and stores an array, not a single string. No backend equivalent yet; set only by apps/web's own admin screens (modules/admin). */
   multiple: z.boolean().optional(),
-  /** Lookup only - lets the field's Select create a new row in the referenced master inline when nothing matches (core/schema-form/field-types/LookupField.tsx), instead of requiring pre-registration. Code-declared, never company-overridable. */
+  /** Lookup only - lets the field's Select create a new row in the referenced master inline when nothing matches (core/schema-form/field-types/LookupField.tsx), instead of requiring pre-registration. Company-overridable via PATCH /field-definitions/:id, same as label/isVisible/isMandatory. */
   allowCreate: z.boolean().optional(),
   optionsSource: optionsSourceSchema.nullable().optional(),
   visibilityCondition: visibilityConditionSchema.nullable().optional(),
@@ -189,7 +189,7 @@ export type FieldDefinitionModulesResponse = z.infer<typeof fieldDefinitionModul
 
 /**
  * Mirrors apps/api's updateFieldDefinitionSchema exactly - label,
- * isVisible, isMandatory, sortOrder ONLY. field_key/data_type/module/
+ * isVisible, isMandatory, sortOrder, and allowCreate. field_key/data_type/module/
  * entity/tier are never in this shape at all (CLAUDE.md: "data_type is
  * NEVER overridable") - sending them is a 422 on the way in, not
  * something this type could even represent.
@@ -200,6 +200,7 @@ export const updateFieldDefinitionRequestSchema = z
     isVisible: z.boolean().optional(),
     isMandatory: z.boolean().optional(),
     sortOrder: z.number().int().optional(),
+    allowCreate: z.boolean().optional(),
   })
   .strict();
 export type UpdateFieldDefinitionRequest = z.infer<typeof updateFieldDefinitionRequestSchema>;

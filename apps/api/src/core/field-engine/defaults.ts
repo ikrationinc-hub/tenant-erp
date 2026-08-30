@@ -731,6 +731,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     fieldKey: "buyerId",
     section: "purchaseInfo",
     label: "Buyer",
+    fieldType: "Lookup",
     dataType: "select",
     isVisible: true,
     isMandatory: true,
@@ -738,6 +739,7 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
     isSystem: false,
     sortOrder: 4,
     optionsSource: "companies",
+    allowCreate: true,
   },
   {
     module: "purchase",

@@ -11,11 +11,12 @@ export interface UpdateFieldDefinitionInput {
   id: string;
   companyId: string;
   schemaName: string;
-  /** Only label/is_visible/is_mandatory/sort_order (task item 3) - field_key, tier, and data_type are structurally absent from this type, not merely optional, so there's no code path that could even attempt to set them. */
+  /** Only label/is_visible/is_mandatory/sort_order/allow_create (task item 3) - field_key, tier, and data_type are structurally absent from this type, not merely optional, so there's no code path that could even attempt to set them. */
   label?: string;
   isVisible?: boolean;
   isMandatory?: boolean;
   sortOrder?: number;
+  allowCreate?: boolean;
   updatedBy: string;
 }
 
@@ -31,6 +32,13 @@ export interface UpdateFieldDefinitionInput {
  * - data_type is never in this function's input type at all - "never
  *   overridable" is structural, not a runtime check that could be
  *   forgotten.
+ *
+ * No server-side field-type guard on allowCreate: this will happily
+ * persist allowCreate: true on a non-Lookup field (e.g. a Textbox) -
+ * that's deliberate (CLAUDE.md's "field permissions are UX, not
+ * security" applies the same way here), since only LookupField.tsx ever
+ * reads it and enforcing "Lookup only" is FieldDefinitionsScreen.tsx's
+ * (the admin UI's) job, not this mutation's.
  *
  * "Emit a field_definition.changed event -> invalidate cache" (task item
  * 5): this codebase has no event bus anywhere (role_version/menu_version
@@ -66,6 +74,7 @@ export async function updateFieldDefinition(input: UpdateFieldDefinitionInput): 
         ...(input.isVisible !== undefined ? { isVisible: input.isVisible } : {}),
         ...(input.isMandatory !== undefined ? { isMandatory: input.isMandatory } : {}),
         ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+        ...(input.allowCreate !== undefined ? { allowCreate: input.allowCreate } : {}),
         updatedBy: input.updatedBy,
         updatedAt: new Date(),
         version: existing.version + 1,
@@ -87,8 +96,15 @@ export async function updateFieldDefinition(input: UpdateFieldDefinitionInput): 
         isVisible: existing.isVisible,
         isMandatory: existing.isMandatory,
         sortOrder: existing.sortOrder,
+        allowCreate: existing.allowCreate,
       },
-      after: { label: row.label, isVisible: row.isVisible, isMandatory: row.isMandatory, sortOrder: row.sortOrder },
+      after: {
+        label: row.label,
+        isVisible: row.isVisible,
+        isMandatory: row.isMandatory,
+        sortOrder: row.sortOrder,
+        allowCreate: row.allowCreate,
+      },
     });
 
     return row;

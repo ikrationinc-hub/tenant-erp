@@ -260,6 +260,13 @@
       "when": 1787892633175,
       "tag": "0036_nifty_stone_men",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788007306507,
+      "tag": "0037_ordinary_ulik",
+      "breakpoints": true
     }
   ]
 }

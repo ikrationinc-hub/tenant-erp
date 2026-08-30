@@ -255,6 +255,28 @@ describe("modules/companies - tenant-admin API surface", () => {
   );
 
   it(
+    "creates a minimal company with only name, fiscalYearStartMonth, and timezone (quick-add)",
+    async () => {
+      const tenant = await seedTenant("quick-add");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+
+      const res = await request(app)
+        .post("/api/v1/companies")
+        .set("Authorization", authHeader)
+        .send({ name: "Acme Holdings Ltd", fiscalYearStartMonth: 1, timezone: "UTC" });
+
+      expect(res.status).toBe(201);
+      const created = asCompany(res);
+      expect(created.name).toBe("Acme Holdings Ltd");
+      expect(created.countryId).toBeNull();
+      expect(created.currencyId).toBeNull();
+      expect(created.status).toBe("active");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "rejects requests without admin.company.read/create",
     async () => {
       const tenant = await seedTenant("forbidden", []);

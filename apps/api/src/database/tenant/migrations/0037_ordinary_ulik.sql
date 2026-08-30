@@ -1,0 +1,1 @@
+ALTER TABLE "field_definitions" ADD COLUMN "allow_create" boolean DEFAULT false NOT NULL;

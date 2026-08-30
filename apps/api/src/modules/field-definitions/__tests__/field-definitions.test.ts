@@ -32,6 +32,7 @@ const effectiveFieldSchema = z.object({
   sortOrder: z.number().int().optional(),
   optionsSource: z.union([z.string(), staticOptionsSourceSchema]).optional(),
   fieldType: z.string().optional(),
+  allowCreate: z.boolean().optional(),
 });
 
 const getFieldDefinitionsResponseSchema = z.object({
@@ -311,6 +312,34 @@ describe("field-definitions HTTP module", () => {
       expect(updated?.isVisible).toBe(false);
       expect(updated?.isMandatory).toBe(true);
       expect(updated?.sortOrder).toBe(99);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "PATCH updates allowCreate on a field",
+    async () => {
+      const admin = await seedTenantWithAdmin("fd-allow-create", [
+        "field_definitions.field.read",
+        "admin.field.manage",
+      ]);
+      const app = createApp();
+      const authHeader = `Bearer ${admin.accessToken}`;
+
+      const before = await fetchFields(admin, "purchase", "header");
+      const containerId = before.find((f) => f.fieldKey === "containerId");
+      if (!containerId?.id) {
+        throw new Error("expected containerId to have a real provisioned id");
+      }
+
+      const patchRes = await request(app)
+        .patch(`/api/v1/field-definitions/${containerId.id}`)
+        .set("Authorization", authHeader)
+        .send({ allowCreate: true });
+      expect(patchRes.status).toBe(200);
+
+      const after = await fetchFields(admin, "purchase", "header");
+      expect(after.find((f) => f.fieldKey === "containerId")?.allowCreate).toBe(true);
     },
     TEST_TIMEOUT_MS,
   );

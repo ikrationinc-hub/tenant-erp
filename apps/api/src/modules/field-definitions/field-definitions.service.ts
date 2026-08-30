@@ -63,5 +63,6 @@ export async function updateFieldDefinition(
     ...(input.isVisible !== undefined ? { isVisible: input.isVisible } : {}),
     ...(input.isMandatory !== undefined ? { isMandatory: input.isMandatory } : {}),
     ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+    ...(input.allowCreate !== undefined ? { allowCreate: input.allowCreate } : {}),
   });
 }

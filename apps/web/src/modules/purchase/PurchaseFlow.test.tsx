@@ -107,6 +107,14 @@ async function createContainerInline(user: ReturnType<typeof userEvent.setup>, c
   await user.click(await screen.findByText(`+ Add "${containerNumber}"`, {}, ASYNC));
 }
 
+/** Buyer is a Lookup field with allowCreate whose target (companies) is NOT a generic master - this proves LookupField routes its create POST to /companies with a minimal payload instead of the generic /masters/companies + {code,name}. */
+async function createBuyerInline(user: ReturnType<typeof userEvent.setup>, buyerName: string): Promise<void> {
+  const combobox = await screen.findByRole("combobox", { name: "Buyer" }, ASYNC);
+  await user.click(combobox);
+  await user.type(combobox, buyerName);
+  await user.click(await screen.findByText(`+ Add "${buyerName}"`, {}, ASYNC));
+}
+
 // containerNumber must be unique per call: the mock containers list is
 // module-scoped and persists across tests within this file (only MSW
 // handler overrides get reset between tests, not the underlying mock
@@ -137,6 +145,30 @@ async function fillHeaderAndShipment(
   await selectOption(user, "Warehouse", "Jebel Ali Warehouse");
   await selectOption(user, "Incoterm", "Incoterms 1");
 }
+
+describe("Purchase - Buyer quick-add", () => {
+  it(
+    "creating a new Buyer inline adds a company and selects it without leaving the form",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/new`] });
+
+      await screen.findByLabelText("Purchase Date", {}, ASYNC);
+      await createBuyerInline(user, "Acme Holdings Ltd");
+
+      // A closed AntD Select keeps its dropdown option list in the DOM
+      // (display:none, not unmounted - see selectOption's own comment
+      // above), so once the new Buyer is selected "Acme Holdings Ltd"
+      // matches BOTH the visible selected-item span and that stale hidden
+      // copy - findAllByText + last match, not findByText, same reasoning
+      // as selectOption.
+      const matches = await screen.findAllByText("Acme Holdings Ltd", {}, ASYNC);
+      expect(matches.at(-1)).toBeInTheDocument();
+    },
+    ASYNC.timeout,
+  );
+});
 
 describe("Purchase - create, items, and workflow", () => {
   it(

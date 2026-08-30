@@ -147,6 +147,32 @@ describe("FieldDefinitionsScreen", () => {
   );
 
   it(
+    "Allow Create is editable on every field, and toggling it saves",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      renderApp({ routes: testRoutes, initialEntries: ["/"] });
+
+      await selectModuleEntity(user, "purchase / header");
+      await screen.findByDisplayValue("Container Number", {}, ASYNC);
+
+      // containerId (Lookup, allowCreate: true) - checked, not disabled.
+      expect(screen.getByLabelText("containerId - Allow Create")).not.toBeDisabled();
+      expect(screen.getByLabelText("containerId - Allow Create")).toBeChecked();
+
+      // branchId (Dropdown) - not disabled either; the toggle isn't restricted by field type.
+      expect(screen.getByLabelText("branchId - Allow Create")).not.toBeDisabled();
+
+      await user.click(screen.getByLabelText("containerId - Allow Create"));
+      await user.click(screen.getByRole("button", { name: "Save field definitions" }));
+
+      await screen.findByText("Field definitions saved", {}, ASYNC);
+      expect(screen.getByLabelText("containerId - Allow Create")).not.toBeChecked();
+    },
+    30000,
+  );
+
+  it(
     "editing a label and saving reflects in a SchemaForm elsewhere in the SAME session, no reload",
     async () => {
       signIn();

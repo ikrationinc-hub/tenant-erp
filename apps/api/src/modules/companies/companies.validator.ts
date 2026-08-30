@@ -16,8 +16,8 @@ export type CompaniesListQuery = z.infer<typeof companiesListQuerySchema>;
 export const createCompanySchema = z
   .object({
     name: z.string().min(1).max(200),
-    countryId: z.string().uuid(),
-    currencyId: z.string().uuid(),
+    countryId: z.string().uuid().optional(),
+    currencyId: z.string().uuid().optional(),
     fiscalYearStartMonth: z.coerce.number().int().min(1).max(12),
     timezone: z.string().min(1),
     taxRegistrationNo: z.string().min(1).optional(),

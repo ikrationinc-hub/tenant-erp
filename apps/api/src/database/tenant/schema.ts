@@ -784,6 +784,8 @@ export const fieldDefinitions = pgTable(
     sortOrder: integer("sort_order").notNull().default(0),
     /** System fields cannot be hidden or made optional (core/field-engine/mutations.ts enforces this on every PATCH) - e.g. a login identifier. */
     isSystem: boolean("is_system").notNull().default(false),
+    /** Lookup only, ignored otherwise - lets this field's "+ Add" quick-create the referenced record inline (core/schema-form/field-types/LookupField.tsx). Company-overridable, same tier as label/isVisible/isMandatory - not structural like dataType. */
+    allowCreate: boolean("allow_create").notNull().default(false),
     ...auditColumns(),
   },
   (table) => [

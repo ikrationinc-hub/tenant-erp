@@ -3,7 +3,7 @@ import type { EffectiveField } from "./types.js";
 /**
  * A form section's code-declared identity - label/description/sortOrder,
  * never a field_definitions row (same "code-declared, not company-
- * overridable" treatment as FieldDefault's own fieldType/allowCreate).
+ * overridable" treatment as FieldDefault's own fieldType).
  * Declared per (module, entity) in defaults.ts's SECTION_DEFAULTS; a field
  * opts in by setting its own `section` to one of these keys.
  */

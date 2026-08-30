@@ -23,6 +23,7 @@ function mergeRow(row: FieldDefinitionRow | undefined, fallback: EffectiveField)
     isMandatory: row.isMandatory,
     isEditable: row.isEditable,
     defaultValue: row.defaultValue ?? undefined,
+    allowCreate: row.allowCreate,
     // Falls back to the CODE default, not to undefined: the DB column is
     // a plain string, so it can only ever hold the bare "masters:x"/
     // "roles" convention, never the richer static-enum object form

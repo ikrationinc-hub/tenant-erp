@@ -179,6 +179,95 @@ describe("core/field-engine", () => {
   );
 
   it(
+    "re-seeding refreshes a field's allowCreate when its code default has changed",
+    async () => {
+      const seed = await seedTenantWithUser("field-allow-create-refresh");
+
+      await withTenantSchema(seed.tenant.schemaName, (tx) =>
+        tx
+          .update(fieldDefinitions)
+          .set({ allowCreate: true })
+          .where(
+            and(
+              eq(fieldDefinitions.companyId, seed.companyId),
+              eq(fieldDefinitions.module, "purchase"),
+              eq(fieldDefinitions.entity, "header"),
+              eq(fieldDefinitions.fieldKey, "supplierId"),
+            ),
+          ),
+      );
+
+      await seedDefaultFieldDefinitions({ schemaName: seed.tenant.schemaName, companyId: seed.companyId, createdBy: seed.userId });
+
+      const ctx = ctxFor(seed);
+      const fields = await resolveFieldDefinitions(ctx, "purchase", "header");
+      const supplierId = fields.find((f) => f.fieldKey === "supplierId");
+      expect(supplierId?.allowCreate).toBe(false);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    // Regression guard: neither the re-seed refresh test above (proves a
+    // stale row value gets reset back to the code default) nor
+    // field-definitions.test.ts's PATCH test (only asserts the value AFTER
+    // a manual PATCH) ever asserted that a freshly-provisioned tenant's
+    // initial seed actually carries a truthy code-declared allowCreate
+    // through to resolveFieldDefinitions. containerId is the one field
+    // with allowCreate: true in defaults.ts (its Lookup supports
+    // create-on-the-fly) - this closes that gap.
+    "a freshly-seeded tenant resolves purchase/header's containerId allowCreate as true from the code default",
+    async () => {
+      const seed = await seedTenantWithUser("field-allow-create-fresh-container");
+      const ctx = ctxFor(seed);
+      const fields = await resolveFieldDefinitions(ctx, "purchase", "header");
+      const containerId = fields.find((f) => f.fieldKey === "containerId");
+      expect(containerId?.allowCreate).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "buyerId resolves as a Lookup field with allowCreate",
+    async () => {
+      const seed = await seedTenantWithUser("field-buyer-lookup");
+      const ctx = ctxFor(seed);
+      const fields = await resolveFieldDefinitions(ctx, "purchase", "header");
+      const buyerId = fields.find((f) => f.fieldKey === "buyerId");
+      expect(buyerId?.fieldType).toBe("Lookup");
+      expect(buyerId?.allowCreate).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "a field_definitions row's allowCreate overrides the code default",
+    async () => {
+      const seed = await seedTenantWithUser("field-allow-create-override");
+
+      await withTenantSchema(seed.tenant.schemaName, (tx) =>
+        tx
+          .update(fieldDefinitions)
+          .set({ allowCreate: true })
+          .where(
+            and(
+              eq(fieldDefinitions.companyId, seed.companyId),
+              eq(fieldDefinitions.module, "purchase"),
+              eq(fieldDefinitions.entity, "header"),
+              eq(fieldDefinitions.fieldKey, "supplierId"),
+            ),
+          ),
+      );
+
+      const ctx = ctxFor(seed);
+      const fields = await resolveFieldDefinitions(ctx, "purchase", "header");
+      const supplierId = fields.find((f) => f.fieldKey === "supplierId");
+      expect(supplierId?.allowCreate).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "an is_system field cannot be hidden",
     async () => {
       const seed = await seedTenantWithUser("field-system-hide");

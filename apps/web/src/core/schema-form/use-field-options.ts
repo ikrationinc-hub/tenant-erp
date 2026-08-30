@@ -21,6 +21,42 @@ export function resolveOptionsEndpoint(master: string): string {
   return NON_MASTER_OPTIONS_ENDPOINTS[master] ?? endpoints.masterOptions(master);
 }
 
+export interface NonMasterCreateConfig {
+  endpoint: string;
+  buildPayload: (name: string) => Record<string, unknown>;
+}
+
+/** Non-master options sources whose "+ Add" quick-create (LookupField.tsx) needs a different endpoint/payload than the generic POST /masters/<key> + {code,name} - these aren't core/masters/registry.ts entries, they're their own modules (mirrors NON_MASTER_OPTIONS_ENDPOINTS above). Anything absent from this map keeps using the generic masters create path. */
+export const NON_MASTER_CREATE_ENDPOINTS: Record<string, NonMasterCreateConfig> = {
+  companies: {
+    endpoint: endpoints.companies,
+    buildPayload: (name) => ({ name, fiscalYearStartMonth: 1, timezone: "UTC" }),
+  },
+  branches: {
+    // Same {code, name} shape the generic masters fallback already sends -
+    // branches.validator.ts's createBranchSchema requires both, just at
+    // POST /branches instead of the nonexistent /masters/branches.
+    endpoint: endpoints.branches,
+    buildPayload: (name) => ({ code: name, name }),
+  },
+  brokers: {
+    // createBrokerSchema requires only `name` - unlike containers/branches,
+    // sending `code` here would 422 (.strict() rejects unknown fields).
+    endpoint: endpoints.brokers,
+    buildPayload: (name) => ({ name }),
+  },
+  roles: {
+    // createRoleSchema requires only `name`.
+    endpoint: endpoints.roles,
+    buildPayload: (name) => ({ name }),
+  },
+  // suppliers/users are deliberately NOT here: createSupplierSchema
+  // requires supplierTypeId/countryId/paymentTermId/currencyId beyond
+  // name, and inviting a user requires email/mobile/roles and actually
+  // sends an invitation - neither fits a single-text-box quick-add.
+  // Falling through to the generic path would just trade a 404 for a 422.
+};
+
 export interface FieldOptionsResult {
   options: MasterOption[];
   isLoading: boolean;

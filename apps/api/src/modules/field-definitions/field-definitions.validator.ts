@@ -18,6 +18,7 @@ export const updateFieldDefinitionSchema = z
     isVisible: z.boolean().optional(),
     isMandatory: z.boolean().optional(),
     sortOrder: z.number().int().optional(),
+    allowCreate: z.boolean().optional(),
   })
   .strict();
 export type UpdateFieldDefinitionRequestBody = z.infer<typeof updateFieldDefinitionSchema>;

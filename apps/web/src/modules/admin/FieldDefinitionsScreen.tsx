@@ -24,9 +24,11 @@ interface FieldRow {
   fieldKey: string;
   label: string;
   tier: number;
+  fieldType?: string | undefined;
   isVisible: boolean;
   isMandatory: boolean;
   isSystem: boolean;
+  allowCreate: boolean;
   sortOrder: number;
 }
 
@@ -46,9 +48,11 @@ function toRows(schema: FieldDefinitionsResponse): FieldRow[] {
       fieldKey: field.fieldKey,
       label: field.label,
       tier: typeof field.tier === "number" ? field.tier : 2,
+      fieldType: field.fieldType,
       isVisible: field.isVisible ?? true,
       isMandatory: field.isMandatory,
       isSystem: field.isSystem,
+      allowCreate: field.allowCreate ?? false,
       sortOrder: field.sortOrder,
     }))
     .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -135,7 +139,7 @@ function FieldDefinitionsScreenContent(): ReactElement {
     setOriginalRows(next);
   }, [fieldDefsQuery.data]);
 
-  function updateRow(fieldKey: string, patch: Partial<Pick<FieldRow, "label" | "isVisible" | "isMandatory">>): void {
+  function updateRow(fieldKey: string, patch: Partial<Pick<FieldRow, "label" | "isVisible" | "isMandatory" | "allowCreate">>): void {
     setRows((current) => current.map((row) => (row.fieldKey === fieldKey ? { ...row, ...patch } : row)));
   }
 
@@ -171,7 +175,8 @@ function FieldDefinitionsScreenContent(): ReactElement {
         original.label !== row.label ||
         original.isVisible !== row.isVisible ||
         original.isMandatory !== row.isMandatory ||
-        original.sortOrder !== row.sortOrder
+        original.sortOrder !== row.sortOrder ||
+        original.allowCreate !== row.allowCreate
       );
     });
     if (changed.length === 0) {
@@ -206,6 +211,7 @@ function FieldDefinitionsScreenContent(): ReactElement {
               isVisible: row.isVisible,
               isMandatory: row.isMandatory,
               sortOrder: row.sortOrder,
+              allowCreate: row.allowCreate,
             },
           }),
         ),
@@ -293,6 +299,17 @@ function FieldDefinitionsScreenContent(): ReactElement {
                       onChange={(event) => updateRow(row.fieldKey, { isMandatory: event.target.checked })}
                     />
                   ),
+              },
+              {
+                key: "allowCreate",
+                title: "Allow Create",
+                render: (_value: unknown, row: FieldRow) => (
+                  <Checkbox
+                    aria-label={`${row.fieldKey} - Allow Create`}
+                    checked={row.allowCreate}
+                    onChange={(event) => updateRow(row.fieldKey, { allowCreate: event.target.checked })}
+                  />
+                ),
               },
               {
                 key: "sortOrder",
