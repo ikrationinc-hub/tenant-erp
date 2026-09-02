@@ -17,7 +17,8 @@
     "check:tenant-boundary": "node scripts/check-search-path-boundary.mjs",
     "migrate:tenants": "tsx --env-file=../../.env scripts/migrate-tenants.ts",
     "seed:platform-admin": "tsx --env-file=../../.env scripts/seed-platform-admin.ts",
-    "seed:dev": "tsx --env-file=../../.env scripts/seed-dev.ts"
+    "seed:dev": "tsx --env-file=../../.env scripts/seed-dev.ts",
+    "resync-menu-tree": "tsx --env-file=../../.env scripts/resync-menu-tree.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1090.0",

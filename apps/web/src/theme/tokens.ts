@@ -86,6 +86,11 @@ export const themeTokens: ThemeConfig = {
       subMenuItemSelectedColor: sider.selectedText,
       subMenuItemBg: sider.bg,
       groupTitleColor: sider.textSecondary,
+      // The collapsed-rail flyout (hover a top-level icon that has
+      // children) is painted from this token, not itemBg - without it,
+      // it fell back to colorBgElevated (white), so itemColor's
+      // near-white text became invisible against it.
+      popupBg: sider.bg,
     },
     Button: {
       primaryShadow: "none",

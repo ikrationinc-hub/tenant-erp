@@ -122,6 +122,7 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
         key: "purchase.orders",
         label: "Purchase Orders",
         path: "/purchase/orders",
+        icon: "file-text",
         requiredPermission: "purchase.po.read",
       },
       // PL-4: Zoho's own "Purchase Receives" and "Bills" nav items -
@@ -132,12 +133,14 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
         key: "purchase.receipts",
         label: "Purchase Receipts",
         path: "/purchase/receipts",
+        icon: "file-done",
         requiredPermission: "purchase.po.read",
       },
       {
         key: "purchase.bills",
         label: "Purchase Bills",
         path: "/purchase/bills",
+        icon: "account-book",
         requiredPermission: "purchase.po.read",
       },
       // PL-5: Zoho's own "Payments Made" nav item - reusing
@@ -146,6 +149,7 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
         key: "purchase.payments",
         label: "Payments Made",
         path: "/purchase/payments",
+        icon: "dollar",
         requiredPermission: "purchase.po.read",
       },
     ],

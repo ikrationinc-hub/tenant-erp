@@ -122,6 +122,35 @@ body {
   display: none;
 }
 
+/* Collapsed-rail submenu affordance: AntD renders a submenu arrow for
+   every SubMenu, but deliberately hides it (opacity: 0) once the Sider
+   collapses to icon-only, since the flyout is normally hover-discovered -
+   a rail icon that opens a flyout otherwise looks identical to a plain
+   link. Un-hiding AntD's own arrow (rather than adding a custom one) gets
+   its position/color for free, but its *shape* still needs an override:
+   AntD's inline-mode arrow is drawn as the accordion down-chevron (⌄), not
+   the right-chevron (›) it uses for vertical/popup submenus elsewhere.
+   Rotating the whole container (rather than redrawing the two bars below)
+   was tried first and fought AntD's own top:50%/translateY(-50%)
+   vertical-centering math, landing visibly off-center - redrawing the
+   bars with AntD's own *default* (non-inline) right-chevron transform
+   values instead leaves that centering completely untouched.
+   inset-inline-end is pulled in from AntD's default (16px from the row's
+   right edge, which lands ~2px from the centered icon in this narrow
+   72px collapsed row) to open up a real gap.
+   !important throughout: this competes with AntD's own cssinjs rules for
+   the same elements and this is the one place that must win outright. */
+.ant-layout-sider-collapsed .nav-menu .ant-menu-submenu-arrow {
+  opacity: 1 !important;
+  inset-inline-end: 6px !important;
+}
+.ant-layout-sider-collapsed .nav-menu .ant-menu-submenu-arrow::before {
+  transform: rotate(45deg) translateY(-2.5px) !important;
+}
+.ant-layout-sider-collapsed .nav-menu .ant-menu-submenu-arrow::after {
+  transform: rotate(-45deg) translateY(2.5px) !important;
+}
+
 /* Dense table headers (Session 4): small-caps-style tracked labels rather
    than AntD's default sentence-case - AntD's Table component tokens have
    no text-transform/letter-spacing concept, so this is CSS-only. Applies

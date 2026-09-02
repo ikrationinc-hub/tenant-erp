@@ -1,11 +1,15 @@
 import type { ComponentType } from "react";
 import {
+  AccountBookOutlined,
   ApartmentOutlined,
   AppstoreOutlined,
   BankOutlined,
   ContactsOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  DollarOutlined,
+  FileDoneOutlined,
+  FileTextOutlined,
   FormOutlined,
   InboxOutlined,
   OrderedListOutlined,
@@ -31,6 +35,10 @@ const ICONS: Record<string, ComponentType> = {
   inbox: InboxOutlined,
   "ordered-list": OrderedListOutlined,
   setting: SettingOutlined,
+  "file-text": FileTextOutlined,
+  "file-done": FileDoneOutlined,
+  "account-book": AccountBookOutlined,
+  dollar: DollarOutlined,
 };
 
 export function resolveMenuIcon(iconKey: string | null): ComponentType {
