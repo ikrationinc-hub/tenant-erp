@@ -50,11 +50,34 @@ export const NON_MASTER_CREATE_ENDPOINTS: Record<string, NonMasterCreateConfig> 
     endpoint: endpoints.roles,
     buildPayload: (name) => ({ name }),
   },
-  // suppliers/users are deliberately NOT here: createSupplierSchema
-  // requires supplierTypeId/countryId/paymentTermId/currencyId beyond
-  // name, and inviting a user requires email/mobile/roles and actually
-  // sends an invitation - neither fits a single-text-box quick-add.
-  // Falling through to the generic path would just trade a 404 for a 422.
+  // users is deliberately NOT here: inviting a user requires email/mobile/
+  // roles and actually sends an invitation - it doesn't fit a quick-add of
+  // any shape (text box or form modal), quick or otherwise.
+};
+
+export interface LookupCreateFormConfig {
+  module: string;
+  entity: string;
+  endpoint: string;
+}
+
+/**
+ * Non-master sources that need MORE than a name to create - unlike
+ * NON_MASTER_CREATE_ENDPOINTS's single-text-box "+ Add", these open the
+ * target entity's own real create form (SchemaForm, e.g. the same one
+ * /suppliers uses) in a modal (LookupField.tsx's LookupCreateModal), so
+ * the required fields are actually collected from the user instead of
+ * being guessed/fabricated. A masterKey belongs in exactly one of this
+ * map or NON_MASTER_CREATE_ENDPOINTS, never both.
+ */
+export const LOOKUP_CREATE_FORMS: Record<string, LookupCreateFormConfig> = {
+  suppliers: {
+    // createSupplierSchema requires supplierTypeId/countryId/paymentTermId/
+    // currencyId beyond name - no single default is honest for those.
+    module: "suppliers",
+    entity: "supplier",
+    endpoint: endpoints.suppliers,
+  },
 };
 
 export interface FieldOptionsResult {

@@ -2,19 +2,61 @@ import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useController } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
-import { App, Select } from "antd";
+import { App, Drawer, Select } from "antd";
 import type { FieldComponentProps } from "./types";
 import { FieldShell } from "./FieldShell";
 import { ReadOnlyValue } from "./ReadOnlyValue";
 import { asString, asStringArray } from "./field-value-utils";
-import { NON_MASTER_CREATE_ENDPOINTS, useFieldOptions } from "../use-field-options";
+import { LOOKUP_CREATE_FORMS, NON_MASTER_CREATE_ENDPOINTS, useFieldOptions } from "../use-field-options";
 import { useDebouncedValue } from "../use-debounced-value";
 import { apiFetch } from "../../api/client";
+import { SchemaForm } from "../SchemaForm";
 
 const CREATE_OPTION_VALUE = "__schema_form_create_new__";
 
 function labelFor(options: { value: string; label: string }[], value: string): string {
   return options.find((option) => option.value === value)?.label ?? value;
+}
+
+/**
+ * For a masterKey in LOOKUP_CREATE_FORMS (e.g. Supplier) - opens that
+ * entity's own real create form instead of a single text box, since a
+ * name alone can't satisfy its other required fields. Reuses SchemaForm
+ * exactly like its own screen does (e.g. SupplierScreen.tsx's
+ * CreateSupplierForm, which opens the same way - a right-side Drawer, not
+ * a centered Modal, matching every other create/edit form in this app);
+ * the sub-table editors (contacts/banks) that screen bolts on are
+ * deliberately skipped here - both are optional on createSupplierSchema,
+ * and a PO-entry quick-add only needs the record to exist, not to be
+ * fully fleshed out.
+ */
+function LookupCreateDrawer({
+  module,
+  entity,
+  endpoint,
+  label,
+  initialName,
+  onCreated,
+  onClose,
+}: {
+  module: string;
+  entity: string;
+  endpoint: string;
+  label: string;
+  initialName: string;
+  onCreated: (id: string) => void;
+  onClose: () => void;
+}): ReactElement {
+  async function handleSubmit(values: Record<string, unknown>): Promise<void> {
+    const created = await apiFetch<{ id: string }>(endpoint, { method: "POST", body: values });
+    onCreated(created.id);
+  }
+
+  return (
+    <Drawer title={`New ${label}`} open onClose={onClose} width={560} destroyOnHidden>
+      <SchemaForm module={module} entity={entity} mode="create" initialValues={{ name: initialName }} onSubmit={handleSubmit} />
+    </Drawer>
+  );
 }
 
 /**
@@ -30,11 +72,14 @@ function labelFor(options: { value: string; label: string }[], value: string): s
  *
  * `allowCreate: true` (purchase/header's containerId and buyerId, or any
  * future field a company admin flags in Settings -> Field Definitions)
- * additionally offers "+ Add" when nothing matches, posting to
- * `NON_MASTER_CREATE_ENDPOINTS[masterKey]` when the source isn't a real
- * masters-registry entry (e.g. companies), or the generic
- * `/masters/${masterKey}` + `{code, name}` otherwise. Create is single-
- * select only - no field combines `multiple` with `allowCreate` today.
+ * additionally offers "+ Add" when nothing matches. Three ways that can be
+ * fulfilled, resolved by masterKey: a masterKey in LOOKUP_CREATE_FORMS
+ * (e.g. suppliers) opens that entity's real create form in a modal
+ * (LookupCreateModal below); a masterKey in NON_MASTER_CREATE_ENDPOINTS
+ * (e.g. companies, branches) posts a single guessed field's worth of data
+ * to that entity's own endpoint; anything else falls back to the generic
+ * `/masters/${masterKey}` + `{code, name}`. Create is single-select only -
+ * no field combines `multiple` with `allowCreate` today.
  */
 export function LookupField({ field, control, readOnly }: FieldComponentProps): ReactElement {
   const { field: rhf, fieldState } = useController({ name: field.fieldKey, control });
@@ -44,6 +89,7 @@ export function LookupField({ field, control, readOnly }: FieldComponentProps): 
   const { options, isLoading, parentValue, parentReady } = useFieldOptions(field, control, debouncedSearch);
   const queryClient = useQueryClient();
   const [isCreating, setIsCreating] = useState(false);
+  const [createModalName, setCreateModalName] = useState<string | null>(null);
 
   const dependsOn = field.optionsSource?.dependsOn;
   const previousParentValue = useRef(parentValue);
@@ -65,6 +111,7 @@ export function LookupField({ field, control, readOnly }: FieldComponentProps): 
   const masterKey = field.optionsSource?.type === "master" ? (field.optionsSource.master ?? "") : "";
   const isMasterSource = masterKey.length > 0;
   const trimmedSearch = searchInput.trim();
+  const createForm = LOOKUP_CREATE_FORMS[masterKey];
   const canOfferCreate =
     !field.multiple &&
     Boolean(field.allowCreate) &&
@@ -83,9 +130,19 @@ export function LookupField({ field, control, readOnly }: FieldComponentProps): 
     : (input: string, option?: { label?: string }): boolean =>
         (option?.label ?? "").toLowerCase().includes(input.toLowerCase());
 
+  async function selectCreatedOption(id: string): Promise<void> {
+    await queryClient.invalidateQueries({ queryKey: ["field-options", masterKey] });
+    rhf.onChange(id);
+    setSearchInput("");
+  }
+
   async function handleChange(value: string): Promise<void> {
     if (value !== CREATE_OPTION_VALUE) {
       rhf.onChange(value);
+      return;
+    }
+    if (createForm) {
+      setCreateModalName(trimmedSearch);
       return;
     }
     setIsCreating(true);
@@ -94,9 +151,7 @@ export function LookupField({ field, control, readOnly }: FieldComponentProps): 
       const endpoint = createConfig ? createConfig.endpoint : `/masters/${masterKey}`;
       const body = createConfig ? createConfig.buildPayload(trimmedSearch) : { code: trimmedSearch, name: trimmedSearch };
       const created = await apiFetch<{ id: string }>(endpoint, { method: "POST", body });
-      await queryClient.invalidateQueries({ queryKey: ["field-options", masterKey] });
-      rhf.onChange(created.id);
-      setSearchInput("");
+      await selectCreatedOption(created.id);
     } catch (error) {
       void message.error(error instanceof Error ? error.message : "Could not create this option");
     } finally {
@@ -160,6 +215,19 @@ export function LookupField({ field, control, readOnly }: FieldComponentProps): 
           allowClear
           placeholder={placeholder}
           notFoundContent={isLoading ? "Searching…" : "No matches"}
+        />
+      )}
+      {createForm && createModalName !== null && (
+        <LookupCreateDrawer
+          module={createForm.module}
+          entity={createForm.entity}
+          endpoint={createForm.endpoint}
+          label={field.label}
+          initialName={createModalName}
+          onCreated={(id) => {
+            void selectCreatedOption(id).then(() => setCreateModalName(null));
+          }}
+          onClose={() => setCreateModalName(null)}
         />
       )}
     </FieldShell>

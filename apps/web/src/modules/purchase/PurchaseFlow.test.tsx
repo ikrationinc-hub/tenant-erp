@@ -170,6 +170,61 @@ describe("Purchase - Buyer quick-add", () => {
   );
 });
 
+describe("Purchase - Supplier quick-add (rich entity, opens the real create form)", () => {
+  it(
+    "creating a new Supplier inline opens its real create form and selects it once saved",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/new`] });
+
+      await screen.findByLabelText("Purchase Date", {}, ASYNC);
+
+      // Supplier needs more than a name (supplierTypeId/countryId/
+      // paymentTermId/currencyId are all mandatory on createSupplierSchema),
+      // so "+ Add" must open Supplier's own real create form (SchemaForm,
+      // module="suppliers" entity="supplier") in a modal instead of the
+      // single-text-box path Buyer/Container use.
+      const combobox = await screen.findByRole("combobox", { name: "Supplier" }, ASYNC);
+      await user.click(combobox);
+      await user.type(combobox, "Acme Metals Co");
+      await user.click(await screen.findByText('+ Add "Acme Metals Co"', {}, ASYNC));
+
+      const dialog = within(await screen.findByRole("dialog", {}, ASYNC));
+      // The typed search text pre-fills the modal's own Name field - the
+      // user isn't asked to retype what they already typed.
+      expect(await dialog.findByDisplayValue("Acme Metals Co", {}, ASYNC)).toBeInTheDocument();
+
+      await user.click(dialog.getByRole("combobox", { name: "Supplier Type" }));
+      await user.click((await screen.findAllByText("Supplier Types 1", {}, ASYNC)).at(-1) ?? screen.getByText("Supplier Types 1"));
+
+      await user.click(dialog.getByRole("combobox", { name: "Country" }));
+      await user.click(
+        (await screen.findAllByText("United Arab Emirates", {}, ASYNC)).at(-1) ?? screen.getByText("United Arab Emirates"),
+      );
+
+      await user.click(dialog.getByRole("combobox", { name: "Payment Terms" }));
+      await user.click((await screen.findAllByText("Payment Terms 1", {}, ASYNC)).at(-1) ?? screen.getByText("Payment Terms 1"));
+
+      await user.click(dialog.getByRole("combobox", { name: "Default Currency" }));
+      await user.click((await screen.findAllByText("UAE Dirham", {}, ASYNC)).at(-1) ?? screen.getByText("UAE Dirham"));
+
+      await user.click(dialog.getByRole("button", { name: "Save" }));
+
+      // The modal closes on success (LookupCreateModal has no error state
+      // to get stuck on here - all four mandatory fields were filled).
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), ASYNC);
+
+      // The newly created supplier becomes the Purchase form's selected
+      // Supplier - same "select the freshly-created row" contract as
+      // Buyer/Container's own quick-add.
+      const matches = await screen.findAllByText("Acme Metals Co", {}, ASYNC);
+      expect(matches.at(-1)).toBeInTheDocument();
+    },
+    ASYNC.timeout,
+  );
+});
+
 describe("Purchase - create, items, and workflow", () => {
   it(
     "creates a purchase, adds an item with server-computed pricing, then Issue -> Cancel makes it read-only",

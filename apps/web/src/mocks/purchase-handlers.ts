@@ -19,7 +19,13 @@ const HEADER_FIELDS = fieldDefinitionsResponseSchema.parse({
     { id: "fd-header-purchase-date", fieldKey: "purchaseDate", label: "Purchase Date", dataType: "date", isMandatory: true, isEditable: true, isSystem: true, sortOrder: 2 },
     { id: "fd-header-branch-id", fieldKey: "branchId", label: "Branch", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 3, optionsSource: "branches" },
     { id: "fd-header-buyer-id", fieldKey: "buyerId", label: "Buyer", fieldType: "Lookup", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 4, optionsSource: "companies", allowCreate: true },
-    { id: "fd-header-supplier-id", fieldKey: "supplierId", label: "Supplier", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 5, optionsSource: "suppliers" },
+    // allowCreate: true here simulates a company admin having toggled it on
+    // in Settings -> Field Definitions (core/field-engine/defaults.ts's own
+    // code default for supplierId does NOT set this - it's a per-company
+    // override, same as any other field, not a shipped default), to
+    // exercise LookupField's LOOKUP_CREATE_FORMS modal path (Supplier needs
+    // more than a name, unlike Buyer/Container's single-text-box create).
+    { id: "fd-header-supplier-id", fieldKey: "supplierId", label: "Supplier", dataType: "select", isMandatory: true, isEditable: true, isSystem: false, sortOrder: 5, optionsSource: "suppliers", allowCreate: true },
     {
       id: "fd-header-pricing-type",
       fieldKey: "pricingType",
