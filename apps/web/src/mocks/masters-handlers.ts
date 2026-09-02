@@ -78,6 +78,30 @@ function fieldDefinitionsForMaster(entity: string): FieldDefinitionsResponse {
           },
         ]
       : []),
+    // Mirrors core/masters/registry.ts's itemCreateSchema - a required
+    // static enum (not master-backed, unlike cities.countryId above), the
+    // other real example of a master needing more than code+name+isActive.
+    ...(entity === "item"
+      ? [
+          {
+            fieldKey: "itemType",
+            label: "Item Type",
+            dataType: "select",
+            isMandatory: true,
+            isEditable: true,
+            isSystem: false,
+            sortOrder: 3,
+            optionsSource: {
+              type: "enum",
+              staticOptions: [
+                { value: "metals", label: "Metals" },
+                { value: "electronics", label: "Electronics" },
+                { value: "toys", label: "Toys" },
+              ],
+            },
+          },
+        ]
+      : []),
   ];
   return fieldDefinitionsResponseSchema.parse({ module: "masters", entity, fields });
 }

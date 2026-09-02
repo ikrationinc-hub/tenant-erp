@@ -65,10 +65,21 @@ export interface LookupCreateFormConfig {
  * Non-master sources that need MORE than a name to create - unlike
  * NON_MASTER_CREATE_ENDPOINTS's single-text-box "+ Add", these open the
  * target entity's own real create form (SchemaForm, e.g. the same one
- * /suppliers uses) in a modal (LookupField.tsx's LookupCreateModal), so
+ * /suppliers uses) in a drawer (LookupField.tsx's LookupCreateDrawer), so
  * the required fields are actually collected from the user instead of
  * being guessed/fabricated. A masterKey belongs in exactly one of this
- * map or NON_MASTER_CREATE_ENDPOINTS, never both.
+ * map, NON_MASTER_CREATE_ENDPOINTS, or neither (the generic masters
+ * fallback), never more than one.
+ *
+ * `cities` and `items` are core/masters/registry.ts masters (not their
+ * own module like suppliers), but the generic `{code, name}` fallback
+ * would 422 for both: core/masters/factory.ts's extraFieldDefaults makes
+ * cities.countryId and items.itemType required, unlike containers'
+ * optional containerType (which is why containerId's existing single-
+ * text-box "+ Add" still works). Their field-definitions module/entity is
+ * "masters"/"<singular entity>" (mirrors MasterScreen.tsx's own
+ * `/masters/${urlSegment}` POST target), same convention as any other
+ * generic master screen.
  */
 export const LOOKUP_CREATE_FORMS: Record<string, LookupCreateFormConfig> = {
   suppliers: {
@@ -77,6 +88,17 @@ export const LOOKUP_CREATE_FORMS: Record<string, LookupCreateFormConfig> = {
     module: "suppliers",
     entity: "supplier",
     endpoint: endpoints.suppliers,
+  },
+  cities: {
+    // Same POST target MasterScreen.tsx itself builds inline (`/masters/${urlSegment}`).
+    module: "masters",
+    entity: "city",
+    endpoint: "/masters/cities",
+  },
+  items: {
+    module: "masters",
+    entity: "item",
+    endpoint: "/masters/items",
   },
 };
 
