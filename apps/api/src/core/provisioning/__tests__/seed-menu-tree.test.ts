@@ -46,6 +46,13 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   // C-3a (docs/CONTRACT-MODULE-BUILD.md) - modules/contract/contract-
   // registry.tsx's ContractFieldSetupScreen.
   "/settings/contract/field-setup",
+  // C-3b - modules/contract/contract-registry.tsx's ContractsListScreen/
+  // ContractDetailScreen (operate), ClauseLibraryScreen and
+  // ContractTemplatesScreen (settings) - C-1's Clause Library screen was
+  // deliberately deferred until assembly existed to link to; it exists now.
+  "/contracts",
+  "/settings/contract/clauses",
+  "/settings/contract/templates",
   ...MASTER_MODULES.filter((module) => module.entity !== "customer").map(
     (module) => `/settings/masters/${module.urlSegment}`,
   ),
@@ -53,14 +60,7 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
 // number-series is a deliberate placeholder slot (no frontend screen yet,
 // per docs/PROMPT-settings-restructure.md's Number Series decision) -
 // PlaceholderScreen renders it, same treatment /masters/customers got below.
-// contract/clauses is C-1 (docs/CONTRACT-MODULE-BUILD.md): C-1 is
-// explicitly backend-only per the build order table - the Clause Library
-// screen itself is C-3b/C-4's job, once assembly exists to link to.
-const KNOWN_PENDING_FRONTEND_EXCEPTIONS = new Set([
-  "/settings/masters/customers",
-  "/settings/number-series",
-  "/settings/contract/clauses",
-]);
+const KNOWN_PENDING_FRONTEND_EXCEPTIONS = new Set(["/settings/masters/customers", "/settings/number-series"]);
 
 interface FlatMenuRow {
   path: string | null;

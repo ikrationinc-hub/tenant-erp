@@ -1,46 +1,63 @@
-import { readFile } from "node:fs/promises";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Worker, type Job } from "bullmq";
 import type { Redis } from "ioredis";
 import { CONTRACT_GENERATION_QUEUE_NAME } from "../queues/contract-generation.queue.js";
 import { generateDocument, type GenerateDocumentResult } from "../contract-generation/generate-document.js";
 import type { PlaceholderContext } from "../contract-generation/placeholder-resolver.js";
+import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 
+const s3Client = new S3Client({
+  endpoint: env.S3_ENDPOINT,
+  region: env.S3_REGION,
+  forcePathStyle: true,
+  credentials: { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY },
+});
+
+async function readObjectAsBuffer(bucket: string, key: string): Promise<Buffer> {
+  const result = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const chunks: Buffer[] = [];
+  for await (const chunk of result.Body as AsyncIterable<Buffer>) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 /**
- * C-2 item 4: the BullMQ job wrapping generateDocument's pipeline. Job data
- * carries a TEMPLATE FILE PATH, not the template bytes themselves - BullMQ
- * job data round-trips through Redis as JSON, so a multi-hundred-KB .docx
- * buffer has no business living there. C-3b (once a real contract_templates
- * table exists) will source this path from a template's own stored
- * location (S3) instead of the local filesystem this spike uses - the job
- * processor's own logic (resolve -> render -> convert -> store) does not
- * change either way.
+ * C-3b: the template's .docx bytes now come from S3 (the SAME bucket/
+ * client apps/api's core/storage uploads templates into via the existing
+ * attachments mechanism - contract-generation.service.ts on the API side
+ * looks up the template's attachment row and passes its storageKey
+ * through as job data), replacing C-2 spike's local-filesystem readFile.
+ * generateDocument itself needed ZERO changes for this - it already took
+ * a Buffer, decoupled from where it came from (see that file's own doc
+ * comment) - only this processor's own template-loading step changed.
  */
 export interface ContractGenerationJobData {
   tenantSchema: string;
   companyId: string;
-  clauseVersionId: string;
   clauseText: string;
-  templateFilePath: string;
+  templateStorageKey: string;
   context: PlaceholderContext;
   moneyTokens: string[];
   filenameBase: string;
+  storageScopeId: string;
 }
 
 export function createContractGenerationWorker(connection: Redis): Worker<ContractGenerationJobData, GenerateDocumentResult> {
   const worker = new Worker<ContractGenerationJobData, GenerateDocumentResult>(
     CONTRACT_GENERATION_QUEUE_NAME,
     async (job: Job<ContractGenerationJobData>) => {
-      const templateBuffer = await readFile(job.data.templateFilePath);
+      const templateBuffer = await readObjectAsBuffer(env.S3_BUCKET, job.data.templateStorageKey);
       return generateDocument({
         tenantSchema: job.data.tenantSchema,
         companyId: job.data.companyId,
-        clauseVersionId: job.data.clauseVersionId,
         clauseText: job.data.clauseText,
         templateBuffer,
         context: job.data.context,
         moneyTokens: job.data.moneyTokens,
         filenameBase: job.data.filenameBase,
+        storageScopeId: job.data.storageScopeId,
       });
     },
     { connection },

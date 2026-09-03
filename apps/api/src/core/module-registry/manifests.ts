@@ -313,14 +313,31 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       permissionEntry("contract", "clause", "version", "Add a new version to a clause"),
       permissionEntry("contract", "clause", "approve", "Approve a clause version"),
       permissionEntry("contract", "clause", "deactivate", "Deactivate a clause"),
+      // C-3b item 6 - "document" is the contract header's own entity name
+      // (distinct from "clause") so these fit the module.entity.action
+      // shape every other permission in this catalogue already uses; the
+      // prompt's own literal wording ("contract.create/edit/assemble/
+      // generate") names the CONCEPT, satisfied by this shape. "assemble"
+      // covers every assembly action (add/remove/reorder/edit-text/
+      // resnapshot) AND every workflow transition (approve/sign/close) -
+      // the prompt's own flat 4-permission list, not one permission per
+      // transition the way purchase.po.issue/cancel does it.
+      permissionEntry("contract", "document", "create", "Create a contract"),
+      permissionEntry("contract", "document", "edit", "Edit a draft contract's header fields"),
+      permissionEntry("contract", "document", "assemble", "Assemble a contract's clauses and transition its status"),
+      permissionEntry("contract", "document", "generate", "Generate a contract's Word/PDF documents"),
     ],
     // "masters": clauses.division_id FK into core/masters' divisions table
-    // (reused as-is from Purchase, per the build doc - not recreated).
+    // (reused as-is from Purchase, per the build doc - not recreated) -
+    // also contract_parties.customerId FK into core/masters' customers.
     // "field-definitions": C-3a's division-scoped contract fields extend
     // the field engine (field_definitions.division_id), which needs it
     // available before this module's own routes read from it.
-    dependsOn: ["auth", "roles", "masters", "field-definitions"],
-    migrations: ["0038_c1_clause_library", "0039_c3a_contract_fields"],
+    // "suppliers": contract_parties.supplierId FK, same reasoning.
+    // "storage": a contract template's uploaded .docx file goes through
+    // the existing attachments mechanism (contract-generation.service.ts).
+    dependsOn: ["auth", "roles", "masters", "field-definitions", "suppliers", "storage"],
+    migrations: ["0038_c1_clause_library", "0039_c3a_contract_fields", "0040_c3b_contract_document"],
   },
   {
     key: "inventory",

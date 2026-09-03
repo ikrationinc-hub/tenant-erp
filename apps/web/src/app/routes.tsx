@@ -100,7 +100,8 @@ export const routes: RouteObject[] = [
                       resolvePurchaseReceiptsScreen(entry, pathname) ??
                       resolvePurchaseBillsScreen(entry, pathname) ??
                       resolvePurchasePaymentsScreen(entry, pathname) ??
-                      resolveInventoryScreen(entry, pathname)
+                      resolveInventoryScreen(entry, pathname) ??
+                      resolveContractScreen(entry, pathname)
                     }
                   />
                 ),

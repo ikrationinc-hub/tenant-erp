@@ -40,3 +40,11 @@ export const USER_STATUS_COLORS: Record<string, string> = {
   active: semantic.success,
   suspended: semantic.error,
 };
+
+/** C-3b (docs/CONTRACT-MODULE-BUILD.md): Draft -> Approved -> Signed -> Closed. */
+export const CONTRACT_STATUS_COLORS: Record<string, string> = {
+  draft: slate[400],
+  approved: steelCobalt.base,
+  signed: semantic.success,
+  closed: slate[600],
+};

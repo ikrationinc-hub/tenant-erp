@@ -27,7 +27,8 @@ const s3Client = new S3Client({
 export interface StoreGeneratedDocumentInput {
   tenantSchema: string;
   companyId: string;
-  clauseVersionId: string;
+  /** clauseVersionId for C-2's single-clause spike, contractId for C-3b's whole-contract generation - either way, the key under which this generation run's own files are grouped. */
+  storageScopeId: string;
   filename: string;
   contentType: string;
   body: Buffer;
@@ -39,10 +40,10 @@ function sanitizeFilename(filename: string): string {
   return cleaned.length > 0 ? cleaned : "file";
 }
 
-/** tenant/company/contract-generation/clause_version_id/uuid-filename - same shaping convention as apps/api's buildStorageKey. */
+/** tenant/company/contract-generation/scope_id/uuid-filename - same shaping convention as apps/api's buildStorageKey. */
 function buildGeneratedDocumentKey(input: StoreGeneratedDocumentInput): string {
   const safeFilename = sanitizeFilename(input.filename);
-  return `${input.tenantSchema}/${input.companyId}/contract-generation/${input.clauseVersionId}/${randomUUID()}-${safeFilename}`;
+  return `${input.tenantSchema}/${input.companyId}/contract-generation/${input.storageScopeId}/${randomUUID()}-${safeFilename}`;
 }
 
 export async function storeGeneratedDocument(input: StoreGeneratedDocumentInput): Promise<string> {

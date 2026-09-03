@@ -281,6 +281,13 @@
       "when": 1788411264173,
       "tag": "0039_c3a_contract_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788416351242,
+      "tag": "0040_c3b_contract_document",
+      "breakpoints": true
     }
   ]
 }

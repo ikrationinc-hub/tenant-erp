@@ -7,6 +7,7 @@ import { closeDbPool } from "../../../config/db.js";
 import { closeRedis } from "../../../config/redis.js";
 import { signAccessToken } from "../../../core/auth/jwt.js";
 import { seedDefaultFieldDefinitions } from "../../../core/provisioning/seed-field-definitions.js";
+import { seedDefaultNumberSeries } from "../../../core/provisioning/seed-number-series.js";
 import { assignRoleToUser, createRole, grantPermissionToRole } from "../../../core/rbac/mutations.js";
 import { createTenantSchema } from "../../../core/tenant/provisioner.js";
 import { closeTenantDbPool, withTenantSchema } from "../../../database/get-db.js";
@@ -40,7 +41,19 @@ interface SeededTenant {
   metalDivisionId: string;
 }
 
-const ALL_PERMISSIONS = ["contract.clause.read", "contract.clause.create", "field_definitions.field.read", "admin.field.manage"];
+// C-3b renamed the contracts POST/PATCH routes' own permission from
+// contract.clause.create to contract.document.create/edit (item 6's real
+// permission surface) - this test creates a real contract via the API, so
+// it needs the new keys, not the clause-library ones it originally
+// (pre-C-3b) reused as a placeholder.
+const ALL_PERMISSIONS = [
+  "contract.clause.read",
+  "contract.clause.create",
+  "contract.document.create",
+  "contract.document.edit",
+  "field_definitions.field.read",
+  "admin.field.manage",
+];
 
 async function seedTenant(label: string): Promise<SeededTenant> {
   const unique = randomUUID().slice(0, 8);
@@ -77,6 +90,11 @@ async function seedTenant(label: string): Promise<SeededTenant> {
   });
 
   await seedDefaultFieldDefinitions({ schemaName: tenant.schemaName, companyId, createdBy: userId });
+  // C-3b: "values persist and reload" below now goes through the real
+  // POST /contracts endpoint, which mints a gapless contractNumber
+  // (docType "CONTRACT") - this tenant needs that series seeded, same as
+  // every other test that creates a real numbered document.
+  await seedDefaultNumberSeries({ schemaName: tenant.schemaName, companyId, createdBy: userId });
 
   const role = await createRole({ schemaName: tenant.schemaName, companyId, name: `${label}-role`, createdBy: userId });
   await assignRoleToUser(tenant.schemaName, companyId, userId, role.id, userId);
@@ -157,6 +175,10 @@ describe("contract field engine (C-3a)", () => {
         .post("/api/v1/contracts")
         .set("Authorization", authHeader)
         .send({
+          // C-3b made contractDate required (the full document's own
+          // header field, absent from C-3a's minimal proof-of-concept
+          // schema this test originally targeted).
+          contractDate: "2026-01-01",
           divisionId: tenant.scrapDivisionId,
           materialType: "Copper Scrap",
           weightKg: "1250.5",

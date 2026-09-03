@@ -86,9 +86,26 @@ export const endpoints = {
   inventoryMovements: "/inventory/movements",
   inventoryMovementsForBalance: (itemId: string, warehouseId: string) => `/inventory/movements/${itemId}/${warehouseId}`,
 
-  // --- C-3a (docs/CONTRACT-MODULE-BUILD.md): the minimal contract header ---
+  // --- C-3a/C-3b (docs/CONTRACT-MODULE-BUILD.md): the contract module -------
+  clauses: "/clauses",
+  clauseVersions: (clauseId: string) => `/clauses/${clauseId}/versions`,
+  approveClauseVersion: (clauseId: string, versionId: string) => `/clauses/${clauseId}/versions/${versionId}/approve`,
   contracts: "/contracts",
   contract: (id: string) => `/contracts/${id}`,
+  contractClauses: (id: string) => `/contracts/${id}/clauses`,
+  contractClause: (id: string, contractClauseId: string) => `/contracts/${id}/clauses/${contractClauseId}`,
+  reorderContractClauses: (id: string) => `/contracts/${id}/clauses/reorder`,
+  resnapshotContractClauses: (id: string) => `/contracts/${id}/clauses/resnapshot`,
+  contractPreview: (id: string) => `/contracts/${id}/preview`,
+  approveContract: (id: string) => `/contracts/${id}/approve`,
+  signContract: (id: string) => `/contracts/${id}/sign`,
+  closeContract: (id: string) => `/contracts/${id}/close`,
+  generateContract: (id: string) => `/contracts/${id}/generate`,
+  contractGenerationStatus: (id: string, jobId: string) => `/contracts/${id}/generate/${jobId}`,
+  contractTemplates: "/contract-templates",
+  contractTemplate: (id: string) => `/contract-templates/${id}`,
+  contractTemplateClauses: (id: string) => `/contract-templates/${id}/clauses`,
+  contractTemplateClause: (id: string, clauseId: string) => `/contract-templates/${id}/clauses/${clauseId}`,
 } as const;
 
 /** Appends a query string, skipping undefined values - `?tenantCode=` for an unset optional field is just noise. */

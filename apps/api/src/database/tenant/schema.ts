@@ -2157,19 +2157,94 @@ export const clauseVersionsRelations = relations(clauseVersions, ({ one }) => ({
   }),
 }));
 
-// --- C-3a (docs/CONTRACT-MODULE-BUILD.md Part 2): the contract header ------
-// Minimal on purpose - just enough real, typed columns for the division-
-// scoped field engine (field_definitions.divisionId above) to have
-// somewhere genuine to read/write values, proving Scrap's fields render
-// AND persist per division. The full contract document (templates,
-// clause assembly, snapshot, gapless contract_number via core/numbering)
-// is C-3b's job - this table WILL gain columns then, never lose these.
-//
-// materialType/weightKg/rateUsd/deliveryTerms are a PLACEHOLDER field set
-// (this prompt's own instruction: confirm the real Scrap list with the
-// user before seeding; not yet confirmed) - named after the prompt's own
-// example fields, not invented beyond them. Expect these column names to
-// change once the client's real field list is confirmed.
+// --- C-3b (docs/CONTRACT-MODULE-BUILD.md Part 2): templates ----------------
+// A template names a division + contract type and a default ORDERED clause
+// set - contract_template_clauses is the ordering; the template itself
+// carries no clause data. Division-scoped the same way clauses/contracts
+// already are (nullable = all divisions), reusing the exact convention
+// rather than inventing a new one.
+export const contractTemplates = pgTable(
+  "contract_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    divisionId: uuid("division_id").references(() => divisions.id, { onDelete: "restrict" }),
+    name: text("name").notNull(),
+    /** Free text for now (e.g. "Sale Contract", "Supply Agreement") - no contract-type MASTER exists yet and the spec doesn't name one; same "don't invent a master beyond what's asked" discipline as brokerCommissionType. */
+    contractType: text("contract_type").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns(),
+  },
+  (table) => [
+    index("contract_templates_division_id_idx").on(table.divisionId),
+    uniqueIndex("contract_templates_company_id_name_key").on(table.companyId, table.name).where(sql`${table.deletedAt} is null`),
+  ],
+);
+
+/** The template's own default clause set, in order - `isMandatory` here (not on `clauses`) since mandatory-ness is a TEMPLATE decision (this template requires this clause), not an intrinsic property of the clause itself; the same clause can be optional in one template and mandatory in another. */
+export const contractTemplateClauses = pgTable(
+  "contract_template_clauses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    templateId: uuid("template_id")
+      .notNull()
+      .references(() => contractTemplates.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    clauseId: uuid("clause_id")
+      .notNull()
+      .references(() => clauses.id, { onDelete: "restrict" }),
+    isMandatory: boolean("is_mandatory").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...auditColumns(),
+  },
+  (table) => [
+    index("contract_template_clauses_template_id_idx").on(table.templateId),
+    uniqueIndex("contract_template_clauses_template_id_clause_id_key")
+      .on(table.templateId, table.clauseId)
+      .where(sql`${table.deletedAt} is null`),
+  ],
+);
+
+export const contractTemplatesRelations = relations(contractTemplates, ({ one, many }) => ({
+  division: one(divisions, {
+    fields: [contractTemplates.divisionId],
+    references: [divisions.id],
+  }),
+  templateClauses: many(contractTemplateClauses),
+}));
+
+export const contractTemplateClausesRelations = relations(contractTemplateClauses, ({ one }) => ({
+  template: one(contractTemplates, {
+    fields: [contractTemplateClauses.templateId],
+    references: [contractTemplates.id],
+  }),
+  clause: one(clauses, {
+    fields: [contractTemplateClauses.clauseId],
+    references: [clauses.id],
+  }),
+}));
+
+// --- C-3b: the contract header, now the full document ----------------------
+// Extends C-3a's minimal header (materialType/weightKg/rateUsd/
+// deliveryTerms - still a placeholder Scrap field set, unchanged here) with
+// the real lifecycle: gapless contractNumber (core/numbering, docType
+// "CONTRACT"), status Draft/Approved/Signed/Closed, parent_contract_id +
+// revisionNumber (schema only, per this task's own scope decision - no
+// amendment WORKFLOW built yet, every contract created today is its own
+// root with parentContractId null and revisionNumber 1), and sourceType/
+// sourceId for the optional purchase/sale link (LINKED prefills commercial/
+// shipment fields but stays editable; STANDALONE is entered manually - both
+// paths write to the same real columns here, the link is only a
+// provenance pointer + a one-time prefill source, never a live foreign
+// read after creation).
+export const contractStatusEnum = pgEnum("contract_status", ["draft", "approved", "signed", "closed"]);
+export const contractSourceTypeEnum = pgEnum("contract_source_type", ["purchase", "sale"]);
+
 export const contracts = pgTable(
   "contracts",
   {
@@ -2180,18 +2255,164 @@ export const contracts = pgTable(
     branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
     /** Nullable, matching purchases.divisionId's own precedent - required going forward at the validator level for new contracts, never backfilled for old ones. This is also the value SchemaForm.tsx's divisionId prop reads back once a contract is loaded, so the same field set renders on reload as on create. */
     divisionId: uuid("division_id").references(() => divisions.id, { onDelete: "restrict" }),
+    /** Gapless (rule 7, core/numbering, docType "CONTRACT"). */
+    contractNumber: text("contract_number").notNull(),
+    contractDate: date("contract_date").notNull(),
+    status: contractStatusEnum("status").notNull().default("draft"),
+    templateId: uuid("template_id").references(() => contractTemplates.id, { onDelete: "restrict" }),
+    /** Self-FK - schema only for now (see this table's own doc comment above): every contract created by this build's endpoints has this NULL and revisionNumber 1. Reserved for a future amendment flow, not yet built. */
+    parentContractId: uuid("parent_contract_id").references((): AnyPgColumn => contracts.id, { onDelete: "restrict" }),
+    revisionNumber: integer("revision_number").notNull().default(1),
+    /** LINK or STANDALONE (Part 2) - both nullable, both null together = standalone. Never re-read live after the one-time prefill; a linked purchase's own later edits do NOT retroactively change this contract's already-copied commercial/shipment fields. */
+    sourceType: contractSourceTypeEnum("source_type"),
+    sourceId: uuid("source_id"),
     materialType: text("material_type"),
     weightKg: numeric("weight_kg", { precision: 18, scale: 6 }),
     rateUsd: numeric("rate_usd", { precision: 18, scale: 2 }),
     deliveryTerms: text("delivery_terms"),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "restrict" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    signedBy: uuid("signed_by").references(() => users.id, { onDelete: "restrict" }),
+    signedAt: timestamp("signed_at", { withTimezone: true }),
     ...auditColumns(),
   },
-  (table) => [index("contracts_division_id_idx").on(table.divisionId)],
+  (table) => [
+    index("contracts_division_id_idx").on(table.divisionId),
+    index("contracts_parent_contract_id_idx").on(table.parentContractId),
+    index("contracts_source_idx").on(table.sourceType, table.sourceId),
+    uniqueIndex("contracts_company_id_contract_number_key")
+      .on(table.companyId, table.contractNumber)
+      .where(sql`${table.deletedAt} is null`),
+  ],
 );
 
-export const contractsRelations = relations(contracts, ({ one }) => ({
+export const contractsRelations = relations(contracts, ({ one, many }) => ({
   division: one(divisions, {
     fields: [contracts.divisionId],
     references: [divisions.id],
+  }),
+  template: one(contractTemplates, {
+    fields: [contracts.templateId],
+    references: [contractTemplates.id],
+  }),
+  parties: many(contractParties),
+  contractClauses: many(contractClauses),
+}));
+
+/**
+ * Seller/buyer, resolved to Supplier/Customer masters (CLAUDE.md
+ * vocabulary - never "Vendor"), mirroring purchases.supplierId's direct-FK
+ * convention rather than a generic polymorphic party table (no precedent
+ * for that pattern anywhere in this schema, and it would cross the "every
+ * business table is company_id-scoped, never generic" grain). One row per
+ * party per contract (partyRole distinguishes seller from buyer) rather
+ * than two columns on `contracts` itself, since a broker-as-third-party or
+ * multiple buyers is easy headroom this shape leaves open without a
+ * migration, matching purchase_allocations' own "many, not a single
+ * column" precedent for a similar shape.
+ */
+export const contractPartyRoleEnum = pgEnum("contract_party_role", ["seller", "buyer"]);
+
+export const contractParties = pgTable(
+  "contract_parties",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contractId: uuid("contract_id")
+      .notNull()
+      .references(() => contracts.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    partyRole: contractPartyRoleEnum("party_role").notNull(),
+    supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "restrict" }),
+    customerId: uuid("customer_id").references(() => customers.id, { onDelete: "restrict" }),
+    ...auditColumns(),
+  },
+  (table) => [
+    index("contract_parties_contract_id_idx").on(table.contractId),
+    uniqueIndex("contract_parties_contract_id_party_role_key")
+      .on(table.contractId, table.partyRole)
+      .where(sql`${table.deletedAt} is null`),
+    check(
+      "contract_parties_exactly_one_party_check",
+      sql`(${table.supplierId} is not null)::int + (${table.customerId} is not null)::int = 1`,
+    ),
+  ],
+);
+
+export const contractPartiesRelations = relations(contractParties, ({ one }) => ({
+  contract: one(contracts, {
+    fields: [contractParties.contractId],
+    references: [contracts.id],
+  }),
+  supplier: one(suppliers, {
+    fields: [contractParties.supplierId],
+    references: [suppliers.id],
+  }),
+  customer: one(customers, {
+    fields: [contractParties.customerId],
+    references: [customers.id],
+  }),
+}));
+
+/**
+ * THE SNAPSHOT (Part 2's own emphasis). Frozen per-contract clause rows -
+ * clauseVersionId is the legal anchor, resolved ONCE at assembly time and
+ * never re-read from the live clause afterward. resolvedText is the
+ * placeholder-substituted text (C-2's resolvePlaceholders), computed at
+ * the SAME assembly moment - editing the clause library later (a new
+ * clause_versions row, even promoting a different version to Active) must
+ * never change what's stored here. Approved/Signed contracts: this table
+ * is never written to again for that contract. Draft: an explicit
+ * "update clauses to latest" action re-snapshots (new resolvedText/
+ * clauseVersionId per clause), never a silent background refresh.
+ */
+export const contractClauses = pgTable(
+  "contract_clauses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contractId: uuid("contract_id")
+      .notNull()
+      .references(() => contracts.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    clauseId: uuid("clause_id")
+      .notNull()
+      .references(() => clauses.id, { onDelete: "restrict" }),
+    /** The legal anchor - frozen forever once written for an Approved/Signed contract. Nullable only because a Draft's clause could theoretically be added before any version is Active yet (blocked at the service layer today - every clause has an Active version by the time it's addable - but the column itself doesn't assume that). */
+    clauseVersionId: uuid("clause_version_id").references(() => clauseVersions.id, { onDelete: "restrict" }),
+    /** Placeholder-substituted text, computed once at snapshot time (C-2's resolvePlaceholders) - resolve DISPLAY through this column, never the live clause_versions.clause_text. */
+    resolvedText: text("resolved_text").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    /** True if a clause_rules evaluation added this (C-4 - not built yet, always false today, column exists so C-4 doesn't need a migration). */
+    isFromRule: boolean("is_from_rule").notNull().default(false),
+    /** True once this contract's own copy of resolvedText has been hand-edited on THIS contract (assembly's "edit an editable clause's text" action) - the edit NEVER touches clauses/clause_versions, only this row. */
+    isEdited: boolean("is_edited").notNull().default(false),
+    /** From the template that was mandatory when assembled - blocks removal at the service layer even if the template itself later changes. */
+    isMandatory: boolean("is_mandatory").notNull().default(false),
+    snapshotTakenAt: timestamp("snapshot_taken_at", { withTimezone: true }).notNull().defaultNow(),
+    ...auditColumns(),
+  },
+  (table) => [
+    index("contract_clauses_contract_id_idx").on(table.contractId),
+    uniqueIndex("contract_clauses_contract_id_sort_order_key")
+      .on(table.contractId, table.sortOrder)
+      .where(sql`${table.deletedAt} is null`),
+  ],
+);
+
+export const contractClausesRelations = relations(contractClauses, ({ one }) => ({
+  contract: one(contracts, {
+    fields: [contractClauses.contractId],
+    references: [contracts.id],
+  }),
+  clause: one(clauses, {
+    fields: [contractClauses.clauseId],
+    references: [clauses.id],
+  }),
+  clauseVersion: one(clauseVersions, {
+    fields: [contractClauses.clauseVersionId],
+    references: [clauseVersions.id],
   }),
 }));

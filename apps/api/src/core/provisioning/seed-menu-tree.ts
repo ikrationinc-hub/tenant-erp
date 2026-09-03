@@ -162,6 +162,19 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     moduleKey: "inventory",
     requiredPermission: "inventory.stock.read",
   },
+  // C-3b (docs/CONTRACT-MODULE-BUILD.md): the actual contract document -
+  // main sidebar, not Settings, since creating/assembling a contract is a
+  // day-to-day operational task (same shelf as Purchase), unlike the
+  // Clause Library/Field Setup/Templates screens below, which are
+  // legitimately admin/setup content.
+  {
+    key: "contracts",
+    label: "Contracts",
+    path: "/contracts",
+    icon: "file-protect",
+    moduleKey: "contract",
+    requiredPermission: "contract.clause.read",
+  },
   // --- Settings (configure) - Zoho-style split: everything below here is
   // reached via the header gear, not the main sidebar. See
   // docs/PROMPT-settings-restructure.md.
@@ -272,6 +285,16 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
         path: "/settings/contract/field-setup",
         icon: "form",
         requiredPermission: "admin.field.manage",
+      },
+      // C-3b item 1: template management is master-style CRUD, admin/setup
+      // content - same shelf as Clause Library, not the operational
+      // "Contracts" node above.
+      {
+        key: "contract.templates",
+        label: "Templates",
+        path: "/settings/contract/templates",
+        icon: "file-protect",
+        requiredPermission: "contract.document.edit",
       },
     ],
   },

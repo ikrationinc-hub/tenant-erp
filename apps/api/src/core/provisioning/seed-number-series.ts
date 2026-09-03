@@ -48,6 +48,10 @@ const DEFAULT_SERIES: DefaultSeries[] = [
   // company-wide, no fiscal year, same reasoning as SUPPLIER/BROKER above
   // (a clause's identity isn't a fiscal document, it outlives any one year).
   { docType: "CLAUSE", prefixPattern: "CL-{0000}", padding: 4 },
+  // C-3b: the contract document itself IS a fiscal document (same {FY}
+  // pattern as PO/BILL/PURCHASE_RECEIPT/PAYMENT), numbered independently
+  // of any purchase it happens to be linked to.
+  { docType: "CONTRACT", prefixPattern: "CTR-{FY}-{0000}", padding: 4 },
 ];
 
 /** Idempotent: number_series' own (company, branch, doc_type, fiscal_year) unique constraint (nullsNotDistinct) makes a second insert for the same series a no-op via onConflictDoNothing - re-running provisioning never resets an in-flight counter. */
