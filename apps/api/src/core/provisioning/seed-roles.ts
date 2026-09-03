@@ -14,7 +14,12 @@ export type DefaultRoleName = (typeof DEFAULT_ROLE_NAMES)[number];
  * - Viewer: read-only, everywhere.
  * - Officer: Viewer + day-to-day data entry (create/update), never
  *   approve/delete/provision or anything role-related - an Officer
- *   manages records, not other people's access.
+ *   manages records, not other people's access. C-1's "version" (adding a
+ *   new clause_versions row) is the same tier as create/update - routine
+ *   legal-content editing, not a governance action; "approve"/"deactivate"
+ *   stay out of this tier (approve lands in Manager below, deactivate is
+ *   Admin-only by omission, same precedent as po.delete never being listed
+ *   in either filter).
  * - Manager: Officer + approve actions, role assignment, and the
  *   provisioning exception path (financial approvals and who's assigned
  *   which role are manager-level decisions). PL-1's "confirm" (a purchase
@@ -33,7 +38,7 @@ export type DefaultRoleName = (typeof DEFAULT_ROLE_NAMES)[number];
  */
 const ROLE_PERMISSION_FILTERS: Record<DefaultRoleName, (action: string) => boolean> = {
   Viewer: (action) => action === "read",
-  Officer: (action) => ["read", "create", "update"].includes(action),
+  Officer: (action) => ["read", "create", "update", "version"].includes(action),
   Manager: (action) => ["read", "create", "update", "approve", "confirm", "issue", "cancel", "record", "assign", "provision"].includes(action),
   Admin: () => true,
 };

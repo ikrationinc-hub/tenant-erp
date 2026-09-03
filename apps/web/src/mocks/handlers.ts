@@ -368,6 +368,34 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
         children: [],
       })),
     },
+    // C-1 (docs/CONTRACT-MODULE-BUILD.md) - must stay in lockstep with
+    // seed-menu-tree.ts's own "contract" node (the recurring drift bug
+    // CLAUDE.md flags).
+    {
+      id: "m-contract",
+      key: "contract",
+      label: "Contract",
+      path: null,
+      icon: "file-protect",
+      sortOrder: 13,
+      section: "settings",
+      launcherSection: "Organization Settings",
+      launcherGroup: "Setup & Configuration",
+      children: [
+        {
+          id: "m-contract-clauses",
+          key: "contract.clauses",
+          label: "Clause Library",
+          path: "/settings/contract/clauses",
+          icon: "file-protect",
+          sortOrder: 1,
+          section: "settings",
+          launcherSection: null,
+          launcherGroup: null,
+          children: [],
+        },
+      ],
+    },
   ],
 });
 
@@ -399,6 +427,11 @@ const mockPermissions: MyPermissionsResponse = myPermissionsResponseSchema.parse
     "purchase.receipt.create",
     "purchase.receipt.confirm",
     "purchase.payment.record",
+    "contract.clause.read",
+    "contract.clause.create",
+    "contract.clause.version",
+    "contract.clause.approve",
+    "contract.clause.deactivate",
     "inventory.stock.read",
     "suppliers.supplier.read",
     "suppliers.supplier.create",

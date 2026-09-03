@@ -2033,3 +2033,108 @@ export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
     references: [purchaseReceipts.id],
   }),
 }));
+
+// --- C-1 (docs/CONTRACT-MODULE-BUILD.md Parts 2-3): the versioned clause ---
+// library. `clauses` is stable identity - clause_code/division_id/category
+// never change after creation. `clause_versions` is append-only: editing a
+// clause's text is ALWAYS an INSERT of a new version row, never an UPDATE or
+// DELETE of clause_text on an existing one (CLAUDE.md rule 8's spirit -
+// falsifying what an already-signed contract's clause said would be a legal
+// problem, not just a data-integrity one). At most one version per clause_id
+// carries status='active' at any time - enforced by a partial unique index,
+// not just application logic, so a bug in the promotion transaction can
+// never silently leave two versions active at once.
+export const clauseCategoryEnum = pgEnum("clause_category", ["general_tc", "division_specific"]);
+export const clauseVersionStatusEnum = pgEnum("clause_version_status", [
+  "draft",
+  "approved",
+  "active",
+  "superseded",
+  "expired",
+]);
+
+export const clauses = pgTable(
+  "clauses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    /** Gapless (rule 7, core/numbering, docType "CLAUSE") - a clause's own permanent identity, distinct from any clause_version's own version_number. */
+    clauseCode: text("clause_code").notNull(),
+    clauseTitle: text("clause_title").notNull(),
+    /** Nullable = applies to all divisions (docs/CONTRACT-MODULE-BUILD.md Part 2) - same optional-FK convention as purchases.divisionId. */
+    divisionId: uuid("division_id").references(() => divisions.id, { onDelete: "restrict" }),
+    category: clauseCategoryEnum("category").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("clauses_company_id_clause_code_key")
+      .on(table.companyId, table.clauseCode)
+      .where(sql`${table.deletedAt} is null`),
+    index("clauses_division_id_idx").on(table.divisionId),
+  ],
+);
+
+/**
+ * Append-only. `changeReason` is required (docs/CONTRACT-MODULE-BUILD.md C-1
+ * item 3) - a version inserted without one is a validator-level rejection,
+ * not a DB constraint, since the reason is free text with no useful CHECK.
+ * `effectiveFrom` may be in the future (item 5) - a version sits in
+ * 'approved' until the scheduler (or the on-access fallback) promotes it to
+ * 'active' once effectiveFrom <= now(), at which point the prior 'active'
+ * version (if any) is flipped to 'superseded' with its own effectiveTo
+ * stamped to this version's effectiveFrom, atomically.
+ */
+export const clauseVersions = pgTable(
+  "clause_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    clauseId: uuid("clause_id")
+      .notNull()
+      .references(() => clauses.id, { onDelete: "restrict" }),
+    /** Auto-increment per clause_id (application-assigned inside the same transaction as the insert - not a DB identity column, since "per clause_id" isn't something a table-wide serial/identity can express). */
+    versionNumber: integer("version_number").notNull(),
+    /** Rich text, stored as HTML (see ADR 0020) - verbatim, including any {{placeholder}} tokens (substitution is C-2's job, not this table's). */
+    clauseText: text("clause_text").notNull(),
+    status: clauseVersionStatusEnum("status").notNull().default("draft"),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    changeReason: text("change_reason").notNull(),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "restrict" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (table) => [
+    index("clause_versions_clause_id_idx").on(table.clauseId),
+    uniqueIndex("clause_versions_clause_id_version_number_key").on(table.clauseId, table.versionNumber),
+    // THE one-active-rule, enforced at the DB level (not just in the
+    // promotion transaction's application logic): partial unique index on
+    // (clause_id) filtered to status='active' means a second concurrent
+    // promotion attempt for the same clause fails loudly (unique
+    // violation) instead of silently leaving two active versions.
+    uniqueIndex("clause_versions_one_active_per_clause")
+      .on(table.clauseId)
+      .where(sql`${table.status} = 'active'`),
+  ],
+);
+
+export const clausesRelations = relations(clauses, ({ one, many }) => ({
+  division: one(divisions, {
+    fields: [clauses.divisionId],
+    references: [divisions.id],
+  }),
+  versions: many(clauseVersions),
+}));
+
+export const clauseVersionsRelations = relations(clauseVersions, ({ one }) => ({
+  clause: one(clauses, {
+    fields: [clauseVersions.clauseId],
+    references: [clauses.id],
+  }),
+}));

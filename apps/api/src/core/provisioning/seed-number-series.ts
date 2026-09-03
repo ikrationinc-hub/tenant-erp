@@ -44,6 +44,10 @@ const DEFAULT_SERIES: DefaultSeries[] = [
   // PL-5: Payment, the 4th and final lifecycle document - its own fiscal
   // document, same {FY} pattern as PO/BILL/PURCHASE_RECEIPT.
   { docType: "PAYMENT", prefixPattern: "PAY-{FY}-{0000}", padding: 4 },
+  // C-1 (docs/CONTRACT-MODULE-BUILD.md): a clause's own permanent code -
+  // company-wide, no fiscal year, same reasoning as SUPPLIER/BROKER above
+  // (a clause's identity isn't a fiscal document, it outlives any one year).
+  { docType: "CLAUSE", prefixPattern: "CL-{0000}", padding: 4 },
 ];
 
 /** Idempotent: number_series' own (company, branch, doc_type, fiscal_year) unique constraint (nullsNotDistinct) makes a second insert for the same series a no-op via onConflictDoNothing - re-running provisioning never resets an in-flight counter. */

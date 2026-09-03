@@ -239,6 +239,29 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     section: "settings",
     children: buildMastersChildren(),
   },
+  // C-1 (docs/CONTRACT-MODULE-BUILD.md): the versioned clause library -
+  // Settings-side for now (legal/setup content, same shelf as Field
+  // Definitions/Masters), same as those every subsequent Contract-module
+  // screen (templates, the contract document itself) will likely join this
+  // node as its own child once C-3b/C-4 land.
+  {
+    key: "contract",
+    label: "Contract",
+    icon: "file-protect",
+    moduleKey: "contract",
+    section: "settings",
+    launcherSection: "Organization Settings",
+    launcherGroup: "Setup & Configuration",
+    children: [
+      {
+        key: "contract.clauses",
+        label: "Clause Library",
+        path: "/settings/contract/clauses",
+        icon: "file-protect",
+        requiredPermission: "contract.clause.read",
+      },
+    ],
+  },
 ];
 
 async function seedNode(

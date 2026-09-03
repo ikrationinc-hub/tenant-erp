@@ -1,5 +1,6 @@
 import { attachmentsRouter } from "../../modules/attachments/attachments.routes.js";
 import { authRouter } from "../../modules/auth/auth.routes.js";
+import { clausesRouter } from "../../modules/contract/contract.routes.js";
 import { companiesRouter } from "../../modules/companies/companies.routes.js";
 import { fieldDefinitionsRouter } from "../../modules/field-definitions/field-definitions.routes.js";
 import { healthRouter } from "../../modules/health/health.routes.js";
@@ -291,6 +292,32 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       "0033_nebulous_franklin_storm",
       "0034_nosy_earthquake",
     ],
+  },
+  {
+    key: "contract",
+    name: "Contract Management",
+    version: "1.0.0",
+    // C-1 (docs/CONTRACT-MODULE-BUILD.md): the versioned clause library -
+    // the first slice of the Contract module. Templates/assembly/rules
+    // engine land in C-3b/C-4; this manifest entry grows with them.
+    routes: clausesRouter,
+    permissions: [
+      // "read" isn't in the C-1 prompt's own explicit permission list
+      // (create/.version/.approve/.deactivate only), but GET /clauses and
+      // GET /clauses/:id/versions need SOME permission gate (rule 2's
+      // spirit: every endpoint is permission-checked, not just mutating
+      // ones) - same reasoning purchase.po.read exists alongside po.create/
+      // update/issue/cancel.
+      permissionEntry("contract", "clause", "read", "View clauses and their version history"),
+      permissionEntry("contract", "clause", "create", "Create a clause"),
+      permissionEntry("contract", "clause", "version", "Add a new version to a clause"),
+      permissionEntry("contract", "clause", "approve", "Approve a clause version"),
+      permissionEntry("contract", "clause", "deactivate", "Deactivate a clause"),
+    ],
+    // "masters": clauses.division_id FK into core/masters' divisions table
+    // (reused as-is from Purchase, per the build doc - not recreated).
+    dependsOn: ["auth", "roles", "masters"],
+    migrations: ["0038_c1_clause_library"],
   },
   {
     key: "inventory",

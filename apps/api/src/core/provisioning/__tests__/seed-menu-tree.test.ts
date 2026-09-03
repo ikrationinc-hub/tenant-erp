@@ -50,7 +50,14 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
 // number-series is a deliberate placeholder slot (no frontend screen yet,
 // per docs/PROMPT-settings-restructure.md's Number Series decision) -
 // PlaceholderScreen renders it, same treatment /masters/customers got below.
-const KNOWN_PENDING_FRONTEND_EXCEPTIONS = new Set(["/settings/masters/customers", "/settings/number-series"]);
+// contract/clauses is C-1 (docs/CONTRACT-MODULE-BUILD.md): C-1 is
+// explicitly backend-only per the build order table - the Clause Library
+// screen itself is C-3b/C-4's job, once assembly exists to link to.
+const KNOWN_PENDING_FRONTEND_EXCEPTIONS = new Set([
+  "/settings/masters/customers",
+  "/settings/number-series",
+  "/settings/contract/clauses",
+]);
 
 interface FlatMenuRow {
   path: string | null;

@@ -7,6 +7,7 @@ import { errorHandler } from "./common/middleware/error-handler.js";
 import { attachmentsRouter } from "./modules/attachments/attachments.routes.js";
 import { branchesRouter } from "./modules/branches/branches.routes.js";
 import { companiesRouter } from "./modules/companies/companies.routes.js";
+import { clausesRouter } from "./modules/contract/contract.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { fieldDefinitionsRouter } from "./modules/field-definitions/field-definitions.routes.js";
@@ -56,6 +57,7 @@ export function createApp(): Express {
   app.use("/api/v1/purchase-receipts", purchaseReceiptsListRouter);
   app.use("/api/v1/purchase-bills", purchaseBillsListRouter);
   app.use("/api/v1/payments", purchasePaymentsRouter);
+  app.use("/api/v1/clauses", clausesRouter);
   app.use("/api/v1/inventory", inventoryRouter);
   app.use("/api/v1/companies", companiesRouter);
   app.use("/api/v1/branches", branchesRouter);
