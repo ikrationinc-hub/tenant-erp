@@ -153,7 +153,10 @@ describe("SchemaForm - metadata-driven rendering", () => {
 
     const relabeled = buildFixture(module, entity, 1, [{ ...nameField, label: "Renamed Label" }]);
     act(() => {
-      queryClient.setQueryData(["field-definitions", module, entity], relabeled);
+      // C-3a added divisionId as a 4th query-key segment (SchemaForm.tsx) -
+      // this caller never passes one, so its key ends in the explicit
+      // `undefined` TanStack Query requires as an exact segment match.
+      queryClient.setQueryData(["field-definitions", module, entity, undefined], relabeled);
     });
 
     expect(await screen.findByLabelText("Renamed Label")).toBeInTheDocument();

@@ -1600,10 +1600,137 @@ export const FIELD_DEFAULTS: FieldDefault[] = [
   // core/masters/registry.ts's MASTER_MODULES rather than hand-duplicated
   // here, so a 16th master needs zero changes to this file.
   ...ALL_MASTER_FIELD_DEFAULTS,
+
+  // --- C-3a (docs/CONTRACT-MODULE-BUILD.md Part 2): division-scoped ---
+  // contract fields. materialType/weightKg/rateUsd/deliveryTerms are a
+  // PLACEHOLDER field set - this prompt's own instruction was to confirm
+  // the real Scrap field list with the user before seeding; that
+  // confirmation has NOT happened yet. These four are named after the
+  // prompt's own example fields only, marked here so nobody mistakes them
+  // for a client-confirmed list. Expect this block to be replaced once
+  // the real list is confirmed - see docs/adr/0022.
+  //
+  // divisionCode: "SCRAP" (not a divisionId/UUID - see FieldDefault.
+  // divisionCode's own doc comment) is what proves division-scoping: a
+  // second division (e.g. "METAL") gets its OWN set of entries below,
+  // with zero code change anywhere else in the field engine - onboarding
+  // a division is adding FIELD_DEFAULTS entries, a data/config change,
+  // not a code change.
+  {
+    module: "contract",
+    entity: "header",
+    fieldKey: "materialType",
+    section: "scrapDetails",
+    divisionCode: "SCRAP",
+    label: "Material Type",
+    dataType: "text",
+    isVisible: true,
+    isMandatory: true,
+    isEditable: true,
+    isSystem: false,
+    sortOrder: 0,
+  },
+  {
+    module: "contract",
+    entity: "header",
+    fieldKey: "weightKg",
+    section: "scrapDetails",
+    divisionCode: "SCRAP",
+    label: "Weight (kg)",
+    dataType: "decimal",
+    isVisible: true,
+    isMandatory: true,
+    isEditable: true,
+    isSystem: false,
+    sortOrder: 1,
+  },
+  {
+    module: "contract",
+    entity: "header",
+    fieldKey: "rateUsd",
+    section: "scrapDetails",
+    divisionCode: "SCRAP",
+    label: "Rate (USD)",
+    dataType: "decimal",
+    isVisible: true,
+    isMandatory: true,
+    isEditable: true,
+    isSystem: false,
+    sortOrder: 2,
+  },
+  {
+    module: "contract",
+    entity: "header",
+    fieldKey: "deliveryTerms",
+    section: "scrapDetails",
+    divisionCode: "SCRAP",
+    label: "Delivery Terms",
+    dataType: "text",
+    isVisible: true,
+    isMandatory: false,
+    isEditable: true,
+    isSystem: false,
+    sortOrder: 3,
+  },
+  // TEST-ONLY: proves "onboarding a division is a data task" (docs/
+  // CONTRACT-MODULE-BUILD.md's own acceptance criterion) - a SECOND
+  // division ("METAL", not one of the four real client divisions) gets
+  // its own field with zero change to resolve.ts/cache.ts/any resolution
+  // logic. Exercised by apps/api/src/modules/contract/__tests__/
+  // contract-fields.test.ts. Not real client-confirmed business data -
+  // same placeholder status as the Scrap fields above.
+  {
+    module: "contract",
+    entity: "header",
+    fieldKey: "alloyGrade",
+    divisionCode: "METAL",
+    label: "Alloy Grade",
+    dataType: "text",
+    isVisible: true,
+    isMandatory: false,
+    isEditable: true,
+    isSystem: false,
+    sortOrder: 0,
+  },
 ];
 
-export function getFieldDefaults(module: string, entity: string): FieldDefault[] {
-  return FIELD_DEFAULTS.filter((field) => field.module === module && field.entity === entity);
+/**
+ * C-3a (docs/CONTRACT-MODULE-BUILD.md): mirrors resolve.ts's own
+ * "all-divisions row, then division-specific overwrites by fieldKey"
+ * merge exactly, applied here to CODE defaults rather than DB rows -
+ * needed because two code defaults for the same module/entity/fieldKey
+ * but different divisionCode (one undefined = all divisions, one scoped)
+ * are both valid entries in FIELD_DEFAULTS, and only one should surface
+ * per division. Takes a division CODE (e.g. "SCRAP"), not a divisionId/
+ * UUID - see FieldDefault.divisionCode's own doc comment for why a UUID
+ * can't be a static code-declared constant. The caller (resolve.ts)
+ * resolves whatever divisionId a request carries to that division's code
+ * before calling this. When `divisionCode` is omitted, only all-divisions
+ * defaults are returned - the pre-C-3a behavior.
+ */
+export function getFieldDefaults(module: string, entity: string, divisionCode?: string): FieldDefault[] {
+  const candidates = FIELD_DEFAULTS.filter(
+    (field) =>
+      field.module === module &&
+      field.entity === entity &&
+      (field.divisionCode === undefined || field.divisionCode === divisionCode),
+  );
+
+  const byFieldKey = new Map<string, FieldDefault>();
+  for (const field of candidates) {
+    if (field.divisionCode === undefined) {
+      if (!byFieldKey.has(field.fieldKey)) {
+        byFieldKey.set(field.fieldKey, field);
+      }
+    }
+  }
+  for (const field of candidates) {
+    if (field.divisionCode !== undefined) {
+      byFieldKey.set(field.fieldKey, field);
+    }
+  }
+
+  return [...byFieldKey.values()];
 }
 
 /**
@@ -1646,6 +1773,14 @@ export const SECTION_DEFAULTS: FieldSectionDefault[] = [
     label: "Documents",
     description: "Supporting documents for this purchase",
     sortOrder: 3,
+  },
+  {
+    module: "contract",
+    entity: "header",
+    key: "scrapDetails",
+    label: "Scrap Details",
+    description: "Division-specific fields for a Scrap contract",
+    sortOrder: 0,
   },
 ];
 

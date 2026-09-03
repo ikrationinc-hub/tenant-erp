@@ -260,6 +260,19 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
         icon: "file-protect",
         requiredPermission: "contract.clause.read",
       },
+      // C-3a: admin-facing setup for the contract module's own division-
+      // scoped Tier 2 fields - same shelf as the generic Field Definitions
+      // screen, just scoped to module="contract" (reuses field_
+      // definitions.field.read/update, no contract-specific permission -
+      // matches Field Definitions' own admin.field.manage precedent being
+      // generic across every module, not per-module).
+      {
+        key: "contract.field-setup",
+        label: "Contract Field Setup",
+        path: "/settings/contract/field-setup",
+        icon: "form",
+        requiredPermission: "admin.field.manage",
+      },
     ],
   },
 ];

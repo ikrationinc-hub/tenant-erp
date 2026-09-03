@@ -99,6 +99,22 @@ export interface FieldDefault {
   isSystem: boolean;
   /** Groups this field under a FieldSectionDefault's key (core/field-engine/group-sections.ts) - code-declared and never company-overridable, same as fieldType. Undefined for an entity that hasn't been split into sections yet (every field then stays in the flat `fields` response, as today). */
   section?: string;
+  /**
+   * C-3a (docs/CONTRACT-MODULE-BUILD.md): undefined/omitted = applies to
+   * ALL divisions. Deliberately a stable divisionCODE (e.g. "SCRAP"), NOT
+   * a divisionId/UUID - core/masters/seed-data.ts's DIVISION_SEEDS proves
+   * why a UUID can't work here: every company gets its OWN divisions rows
+   * with their own generated ids at provisioning time, but this file is a
+   * static, code-declared array evaluated before any company or division
+   * row exists. A code is the only stable, code-declared handle a
+   * FieldDefault can reference. seed-field-definitions.ts resolves each
+   * company's own SCRAP division row's real id at seed time (division
+   * code -> that company's own divisions.id) before writing the
+   * field_definitions row's real (UUID) division_id column - the DB
+   * column and resolve.ts's runtime query are always keyed by the real
+   * UUID; only this static declaration layer uses the code.
+   */
+  divisionCode?: string;
 }
 
 /**

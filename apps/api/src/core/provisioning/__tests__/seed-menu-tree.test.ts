@@ -43,6 +43,9 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/purchase/bills",
   "/purchase/payments",
   "/inventory",
+  // C-3a (docs/CONTRACT-MODULE-BUILD.md) - modules/contract/contract-
+  // registry.tsx's ContractFieldSetupScreen.
+  "/settings/contract/field-setup",
   ...MASTER_MODULES.filter((module) => module.entity !== "customer").map(
     (module) => `/settings/masters/${module.urlSegment}`,
   ),

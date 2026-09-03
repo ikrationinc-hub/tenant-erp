@@ -4,7 +4,11 @@ import { UnauthorizedError } from "../../common/errors/index.js";
 import { getFieldSections } from "../../core/field-engine/defaults.js";
 import { groupFieldsIntoSections } from "../../core/field-engine/group-sections.js";
 import * as fieldDefinitionsService from "./field-definitions.service.js";
-import { getFieldDefinitionsParamsSchema, updateFieldDefinitionSchema } from "./field-definitions.validator.js";
+import {
+  getFieldDefinitionsParamsSchema,
+  getFieldDefinitionsQuerySchema,
+  updateFieldDefinitionSchema,
+} from "./field-definitions.validator.js";
 
 function requireContext() {
   const ctx = getRequestContext();
@@ -25,7 +29,8 @@ export async function getFieldDefinitions(req: Request, res: Response, next: Nex
   try {
     const ctx = requireContext();
     const { module, entity } = getFieldDefinitionsParamsSchema.parse(req.params);
-    const fields = await fieldDefinitionsService.getFieldDefinitions(ctx, module, entity);
+    const { divisionId } = getFieldDefinitionsQuerySchema.parse(req.query);
+    const fields = await fieldDefinitionsService.getFieldDefinitions(ctx, module, entity, divisionId);
     const sections = groupFieldsIntoSections(getFieldSections(module, entity), fields);
     res.status(200).json({ module, entity, fields, ...(sections ? { sections } : {}) });
   } catch (error) {

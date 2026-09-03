@@ -316,8 +316,11 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     ],
     // "masters": clauses.division_id FK into core/masters' divisions table
     // (reused as-is from Purchase, per the build doc - not recreated).
-    dependsOn: ["auth", "roles", "masters"],
-    migrations: ["0038_c1_clause_library"],
+    // "field-definitions": C-3a's division-scoped contract fields extend
+    // the field engine (field_definitions.division_id), which needs it
+    // available before this module's own routes read from it.
+    dependsOn: ["auth", "roles", "masters", "field-definitions"],
+    migrations: ["0038_c1_clause_library", "0039_c3a_contract_fields"],
   },
   {
     key: "inventory",

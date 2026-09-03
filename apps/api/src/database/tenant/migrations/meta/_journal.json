@@ -274,6 +274,13 @@
       "when": 1788407132097,
       "tag": "0038_c1_clause_library",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1788411264173,
+      "tag": "0039_c3a_contract_fields",
+      "breakpoints": true
     }
   ]
 }

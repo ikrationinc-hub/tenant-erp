@@ -12,6 +12,7 @@ import { DynamicRoutes } from "../core/navigation/DynamicRoutes";
 import { SettingsLauncher } from "../modules/settings/SettingsLauncher";
 import { resolveMasterScreen } from "../modules/masters/master-registry";
 import { resolveAdminScreen } from "../modules/admin/admin-registry";
+import { resolveContractScreen } from "../modules/contract/contract-registry";
 import { resolveSupplierScreen } from "../modules/suppliers/supplier-registry";
 import { resolveBrokerScreen } from "../modules/brokers/broker-registry";
 import { resolvePurchaseScreen, resolvePurchaseReceiptsScreen, resolvePurchaseBillsScreen, resolvePurchasePaymentsScreen } from "../modules/purchase/purchase-registry";
@@ -72,7 +73,9 @@ export const routes: RouteObject[] = [
                 element: (
                   <DynamicRoutes
                     resolveScreen={(entry, pathname) =>
-                      resolveMasterScreen(entry, pathname) ?? resolveAdminScreen(entry, pathname)
+                      resolveMasterScreen(entry, pathname) ??
+                      resolveAdminScreen(entry, pathname) ??
+                      resolveContractScreen(entry, pathname)
                     }
                   />
                 ),

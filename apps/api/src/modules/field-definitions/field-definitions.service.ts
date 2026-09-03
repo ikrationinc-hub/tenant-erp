@@ -18,8 +18,9 @@ export async function getFieldDefinitions(
   ctx: RequestContext,
   module: string,
   entity: string,
+  divisionId?: string,
 ): Promise<EffectiveField[]> {
-  return resolveFieldDefinitions(ctx, module, entity);
+  return resolveFieldDefinitions(ctx, module, entity, divisionId);
 }
 
 export interface FieldDefinitionModulePair {

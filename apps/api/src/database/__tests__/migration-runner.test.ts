@@ -54,6 +54,7 @@ const REAL_MIGRATION_VERSIONS = [
   "0036_nifty_stone_men",
   "0037_ordinary_ulik",
   "0038_c1_clause_library",
+  "0039_c3a_contract_fields",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

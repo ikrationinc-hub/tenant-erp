@@ -37,6 +37,7 @@ import { suppliersHandlers, resolveSupplierFieldDefinitions } from "./suppliers-
 import { brokersHandlers, resolveBrokerFieldDefinitions } from "./brokers-handlers";
 import { purchaseHandlers, resolvePurchaseFieldDefinitions } from "./purchase-handlers";
 import { purchasePaymentsHandlers, PAYMENT_FIELDS } from "./purchase-payments-handlers";
+import { contractHandlers, resolveContractFieldDefinitions } from "./contract-handlers";
 import { inventoryHandlers } from "./inventory-handlers";
 import { attachmentsHandlers } from "./attachments-handlers";
 
@@ -394,6 +395,20 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
           launcherGroup: null,
           children: [],
         },
+        // C-3a - must stay in lockstep with seed-menu-tree.ts's own
+        // "contract.field-setup" child (the recurring drift bug).
+        {
+          id: "m-contract-field-setup",
+          key: "contract.field-setup",
+          label: "Contract Field Setup",
+          path: "/settings/contract/field-setup",
+          icon: "form",
+          sortOrder: 2,
+          section: "settings",
+          launcherSection: null,
+          launcherGroup: null,
+          children: [],
+        },
       ],
     },
   ],
@@ -493,7 +508,7 @@ export const handlers = [
   ),
   http.post(`${API_BASE}${endpoints.acceptInvitation(":token")}`, () => new HttpResponse(null, { status: 204 })),
   http.get(`${API_BASE}${endpoints.fieldDefinitionModules}`, () => HttpResponse.json(mockFieldDefinitionModules)),
-  http.get(`${API_BASE}${endpoints.fieldDefinitions(":module", ":entity")}`, ({ params }) => {
+  http.get(`${API_BASE}${endpoints.fieldDefinitions(":module", ":entity")}`, ({ params, request }) => {
     if (params.module === schemaFormDevFixture.module && params.entity === schemaFormDevFixture.entity) {
       return HttpResponse.json(schemaFormDevFixture);
     }
@@ -527,6 +542,13 @@ export const handlers = [
     }
     if (module === "purchase" && entity === "payment") {
       return HttpResponse.json(PAYMENT_FIELDS);
+    }
+    // C-3a: divisionId read from the query string, same as the real
+    // GET /field-definitions/:module/:entity?divisionId=... contract.
+    const divisionId = new URL(request.url).searchParams.get("divisionId");
+    const contractFields = resolveContractFieldDefinitions(module, entity, divisionId);
+    if (contractFields) {
+      return HttpResponse.json(contractFields);
     }
     return HttpResponse.json(mockFieldDefinitions);
   }),
@@ -588,4 +610,5 @@ export const handlers = [
   ...purchasePaymentsHandlers,
   ...inventoryHandlers,
   ...attachmentsHandlers,
+  ...contractHandlers,
 ];

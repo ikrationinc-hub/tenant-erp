@@ -6,6 +6,12 @@ export const getFieldDefinitionsParamsSchema = z.object({
 });
 export type GetFieldDefinitionsParams = z.infer<typeof getFieldDefinitionsParamsSchema>;
 
+/** C-3a (docs/CONTRACT-MODULE-BUILD.md): optional - omitted entirely keeps the pre-C-3a behavior (only NULL-division/"all divisions" field definitions). */
+export const getFieldDefinitionsQuerySchema = z.object({
+  divisionId: z.string().uuid().optional(),
+});
+export type GetFieldDefinitionsQuery = z.infer<typeof getFieldDefinitionsQuerySchema>;
+
 /**
  * `.strict()`, deliberately: field_key/data_type/tier/is_system are not
  * even optional fields here, they're structurally absent - an attempt to

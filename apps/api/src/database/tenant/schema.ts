@@ -786,12 +786,30 @@ export const fieldDefinitions = pgTable(
     isSystem: boolean("is_system").notNull().default(false),
     /** Lookup only, ignored otherwise - lets this field's "+ Add" quick-create the referenced record inline (core/schema-form/field-types/LookupField.tsx). Company-overridable, same tier as label/isVisible/isMandatory - not structural like dataType. */
     allowCreate: boolean("allow_create").notNull().default(false),
+    /**
+     * C-3a (docs/CONTRACT-MODULE-BUILD.md): nullable = applies to ALL
+     * divisions, same optional-FK convention as purchases.divisionId
+     * (schema.ts). A specific division's override (e.g. Scrap's own
+     * "materialType" label) coexists with a NULL-division row for the
+     * same fieldKey - resolve.ts's merge logic picks the division-specific
+     * row when both exist, never the DB. Two PARTIAL unique indexes below
+     * (not one plain 5-column index) are what actually prevent duplicates:
+     * Postgres unique indexes treat every NULL as distinct from every
+     * other NULL, so a single index including a nullable division_id
+     * would silently allow the SAME fieldKey to be inserted twice with
+     * division_id NULL - exactly the ambiguous "all divisions" collision
+     * this column exists to prevent.
+     */
+    divisionId: uuid("division_id").references(() => divisions.id, { onDelete: "restrict" }),
     ...auditColumns(),
   },
   (table) => [
-    uniqueIndex("field_definitions_company_module_entity_field_key")
+    uniqueIndex("field_definitions_company_module_entity_field_key_division")
+      .on(table.companyId, table.module, table.entity, table.fieldKey, table.divisionId)
+      .where(sql`${table.deletedAt} is null and ${table.divisionId} is not null`),
+    uniqueIndex("field_definitions_company_module_entity_field_key_all_divisions")
       .on(table.companyId, table.module, table.entity, table.fieldKey)
-      .where(sql`${table.deletedAt} is null`),
+      .where(sql`${table.deletedAt} is null and ${table.divisionId} is null`),
     check("field_definitions_tier_check", sql`${table.tier} = 2`),
   ],
 );
@@ -2136,5 +2154,44 @@ export const clauseVersionsRelations = relations(clauseVersions, ({ one }) => ({
   clause: one(clauses, {
     fields: [clauseVersions.clauseId],
     references: [clauses.id],
+  }),
+}));
+
+// --- C-3a (docs/CONTRACT-MODULE-BUILD.md Part 2): the contract header ------
+// Minimal on purpose - just enough real, typed columns for the division-
+// scoped field engine (field_definitions.divisionId above) to have
+// somewhere genuine to read/write values, proving Scrap's fields render
+// AND persist per division. The full contract document (templates,
+// clause assembly, snapshot, gapless contract_number via core/numbering)
+// is C-3b's job - this table WILL gain columns then, never lose these.
+//
+// materialType/weightKg/rateUsd/deliveryTerms are a PLACEHOLDER field set
+// (this prompt's own instruction: confirm the real Scrap list with the
+// user before seeding; not yet confirmed) - named after the prompt's own
+// example fields, not invented beyond them. Expect these column names to
+// change once the client's real field list is confirmed.
+export const contracts = pgTable(
+  "contracts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    /** Nullable, matching purchases.divisionId's own precedent - required going forward at the validator level for new contracts, never backfilled for old ones. This is also the value SchemaForm.tsx's divisionId prop reads back once a contract is loaded, so the same field set renders on reload as on create. */
+    divisionId: uuid("division_id").references(() => divisions.id, { onDelete: "restrict" }),
+    materialType: text("material_type"),
+    weightKg: numeric("weight_kg", { precision: 18, scale: 6 }),
+    rateUsd: numeric("rate_usd", { precision: 18, scale: 2 }),
+    deliveryTerms: text("delivery_terms"),
+    ...auditColumns(),
+  },
+  (table) => [index("contracts_division_id_idx").on(table.divisionId)],
+);
+
+export const contractsRelations = relations(contracts, ({ one }) => ({
+  division: one(divisions, {
+    fields: [contracts.divisionId],
+    references: [divisions.id],
   }),
 }));

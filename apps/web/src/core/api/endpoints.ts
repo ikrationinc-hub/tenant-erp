@@ -4,7 +4,9 @@ export const endpoints = {
   refresh: "/auth/refresh",
   logout: "/auth/logout",
   me: "/auth/me",
-  fieldDefinitions: (module: string, entity: string) => `/field-definitions/${module}/${entity}`,
+  /** C-3a (docs/CONTRACT-MODULE-BUILD.md): divisionId is optional - omitted entirely keeps the pre-C-3a request shape (no query string at all, via withQuery skipping undefined values). */
+  fieldDefinitions: (module: string, entity: string, divisionId?: string) =>
+    withQuery(`/field-definitions/${module}/${entity}`, { divisionId }),
   fieldDefinitionModules: "/field-definitions/modules",
   fieldDefinition: (id: string) => `/field-definitions/${id}`,
   validateInvitation: (token: string) => `/invitations/${token}`,
@@ -83,6 +85,10 @@ export const endpoints = {
   inventoryBalances: "/inventory/balances",
   inventoryMovements: "/inventory/movements",
   inventoryMovementsForBalance: (itemId: string, warehouseId: string) => `/inventory/movements/${itemId}/${warehouseId}`,
+
+  // --- C-3a (docs/CONTRACT-MODULE-BUILD.md): the minimal contract header ---
+  contracts: "/contracts",
+  contract: (id: string) => `/contracts/${id}`,
 } as const;
 
 /** Appends a query string, skipping undefined values - `?tenantCode=` for an unset optional field is just noise. */
