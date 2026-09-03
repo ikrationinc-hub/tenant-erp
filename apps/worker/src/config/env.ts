@@ -10,6 +10,13 @@ const envSchema = z.object({
   // tenant-scoped transactions via the non-superuser hyperion_app role).
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   DATABASE_APP_URL: z.string().min(1, "DATABASE_APP_URL is required"),
+  // C-2: the document-generation job stores its DOCX/PDF output via the
+  // same MinIO/S3 endpoint apps/api's core/storage uses.
+  S3_ENDPOINT: z.string().min(1, "S3_ENDPOINT is required"),
+  S3_REGION: z.string().min(1, "S3_REGION is required"),
+  S3_ACCESS_KEY_ID: z.string().min(1, "S3_ACCESS_KEY_ID is required"),
+  S3_SECRET_ACCESS_KEY: z.string().min(1, "S3_SECRET_ACCESS_KEY is required"),
+  S3_BUCKET: z.string().min(1, "S3_BUCKET is required"),
 });
 
 export type Env = z.infer<typeof envSchema>;

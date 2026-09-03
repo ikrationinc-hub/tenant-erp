@@ -6,10 +6,11 @@ import { closePlatformDbPool } from "./database/get-platform-db.js";
 import { closeTenantDbPool } from "./database/get-tenant-db.js";
 import { CLAUSE_PROMOTION_QUEUE_NAME, CLAUSE_PROMOTION_REPEAT_JOB_ID } from "./queues/clause-promotion.queue.js";
 import { createClausePromotionWorker } from "./workers/clause-promotion.worker.js";
+import { createContractGenerationWorker } from "./workers/contract-generation.worker.js";
 import { createExampleWorker } from "./workers/example.worker.js";
 
 const connection = createRedisConnection();
-const workers = [createExampleWorker(connection), createClausePromotionWorker(connection)];
+const workers = [createExampleWorker(connection), createClausePromotionWorker(connection), createContractGenerationWorker(connection)];
 const heartbeatTimer = startWorkerHeartbeat(connection);
 
 // docs/CONTRACT-MODULE-BUILD.md C-1 item 5: every 5 minutes is frequent
