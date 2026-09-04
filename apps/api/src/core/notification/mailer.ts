@@ -1,11 +1,18 @@
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
 
+/** C-4 item 6 ("Email Contract: send the generated PDF") - the first caller in this codebase to need an attachment. `content` is the raw file bytes; resendMailer base64-encodes it itself (Resend's own API expects a base64 string per attachment, never raw binary in JSON) so every OTHER caller of Mailer.send keeps passing plain Buffers, never thinking about encoding. */
+export interface MailAttachment {
+  filename: string;
+  content: Buffer;
+}
+
 export interface SendMailInput {
   to: string;
   subject: string;
   text: string;
   html: string;
+  attachments?: MailAttachment[];
 }
 
 export interface Mailer {
@@ -33,6 +40,9 @@ export const resendMailer: Mailer = {
         subject: input.subject,
         text: input.text,
         html: input.html,
+        ...(input.attachments?.length
+          ? { attachments: input.attachments.map((a) => ({ filename: a.filename, content: a.content.toString("base64") })) }
+          : {}),
       }),
     });
 

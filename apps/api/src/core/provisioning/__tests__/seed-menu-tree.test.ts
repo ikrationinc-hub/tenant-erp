@@ -43,6 +43,18 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/purchase/bills",
   "/purchase/payments",
   "/inventory",
+  // C-3a (docs/CONTRACT-MODULE-BUILD.md) - modules/contract/contract-
+  // registry.tsx's ContractFieldSetupScreen.
+  "/settings/contract/field-setup",
+  // C-3b - modules/contract/contract-registry.tsx's ContractsListScreen/
+  // ContractDetailScreen (operate), ClauseLibraryScreen and
+  // ContractTemplatesScreen (settings) - C-1's Clause Library screen was
+  // deliberately deferred until assembly existed to link to; it exists now.
+  "/contracts",
+  "/settings/contract/clauses",
+  "/settings/contract/templates",
+  // C-4 item 1/2: ClauseRulesScreen (settings) - see contract-registry.tsx.
+  "/settings/contract/rules",
   ...MASTER_MODULES.filter((module) => module.entity !== "customer").map(
     (module) => `/settings/masters/${module.urlSegment}`,
   ),

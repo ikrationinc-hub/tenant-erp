@@ -4,7 +4,9 @@ export const endpoints = {
   refresh: "/auth/refresh",
   logout: "/auth/logout",
   me: "/auth/me",
-  fieldDefinitions: (module: string, entity: string) => `/field-definitions/${module}/${entity}`,
+  /** C-3a (docs/CONTRACT-MODULE-BUILD.md): divisionId is optional - omitted entirely keeps the pre-C-3a request shape (no query string at all, via withQuery skipping undefined values). */
+  fieldDefinitions: (module: string, entity: string, divisionId?: string) =>
+    withQuery(`/field-definitions/${module}/${entity}`, { divisionId }),
   fieldDefinitionModules: "/field-definitions/modules",
   fieldDefinition: (id: string) => `/field-definitions/${id}`,
   validateInvitation: (token: string) => `/invitations/${token}`,
@@ -47,6 +49,7 @@ export const endpoints = {
   activateBroker: (id: string) => `/brokers/${id}/activate`,
   deactivateBroker: (id: string) => `/brokers/${id}/deactivate`,
   purchases: "/purchases",
+  purchase: (id: string) => `/purchases/${id}`,
   issuePurchase: (id: string) => `/purchases/${id}/issue`,
   cancelPurchase: (id: string) => `/purchases/${id}/cancel`,
   purchaseItems: (purchaseId: string) => `/purchases/${purchaseId}/items`,
@@ -83,6 +86,38 @@ export const endpoints = {
   inventoryBalances: "/inventory/balances",
   inventoryMovements: "/inventory/movements",
   inventoryMovementsForBalance: (itemId: string, warehouseId: string) => `/inventory/movements/${itemId}/${warehouseId}`,
+
+  // --- C-3a/C-3b (docs/CONTRACT-MODULE-BUILD.md): the contract module -------
+  clauses: "/clauses",
+  clauseVersions: (clauseId: string) => `/clauses/${clauseId}/versions`,
+  approveClauseVersion: (clauseId: string, versionId: string) => `/clauses/${clauseId}/versions/${versionId}/approve`,
+  contracts: "/contracts",
+  contract: (id: string) => `/contracts/${id}`,
+  contractClauses: (id: string) => `/contracts/${id}/clauses`,
+  contractClause: (id: string, contractClauseId: string) => `/contracts/${id}/clauses/${contractClauseId}`,
+  reorderContractClauses: (id: string) => `/contracts/${id}/clauses/reorder`,
+  resnapshotContractClauses: (id: string) => `/contracts/${id}/clauses/resnapshot`,
+  contractPreview: (id: string) => `/contracts/${id}/preview`,
+  approveContract: (id: string) => `/contracts/${id}/approve`,
+  signContract: (id: string) => `/contracts/${id}/sign`,
+  closeContract: (id: string) => `/contracts/${id}/close`,
+  generateContract: (id: string) => `/contracts/${id}/generate`,
+  contractGenerationStatus: (id: string, jobId: string) => `/contracts/${id}/generate/${jobId}`,
+  contractDocumentUrl: (id: string) => `/contracts/${id}/document-url`,
+  contractTemplates: "/contract-templates",
+  contractTemplate: (id: string) => `/contract-templates/${id}`,
+  contractTemplateClauses: (id: string) => `/contract-templates/${id}/clauses`,
+  contractTemplateClause: (id: string, clauseId: string) => `/contract-templates/${id}/clauses/${clauseId}`,
+  contractTemplateGenerateDefaultDocx: (id: string) => `/contract-templates/${id}/generate-default-docx`,
+
+  // --- C-4 (docs/CONTRACT-MODULE-BUILD.md): rules, approval, e-signature, email
+  clauseRules: "/clause-rules",
+  clauseRule: (id: string) => `/clause-rules/${id}`,
+  runContractRules: (id: string) => `/contracts/${id}/run-rules`,
+  sendContractForApproval: (id: string) => `/contracts/${id}/send-for-approval`,
+  reviseContract: (id: string) => `/contracts/${id}/revise`,
+  emailContract: (id: string) => `/contracts/${id}/email`,
+  sendContractForESignature: (id: string) => `/contracts/${id}/send-for-esignature`,
 } as const;
 
 /** Appends a query string, skipping undefined values - `?tenantCode=` for an unset optional field is just noise. */

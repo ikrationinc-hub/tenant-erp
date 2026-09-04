@@ -1,0 +1,1 @@
+ALTER TABLE "contracts" ADD COLUMN "contract_type" "contract_source_type";

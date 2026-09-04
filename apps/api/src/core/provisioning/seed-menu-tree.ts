@@ -162,6 +162,19 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     moduleKey: "inventory",
     requiredPermission: "inventory.stock.read",
   },
+  // C-3b (docs/CONTRACT-MODULE-BUILD.md): the actual contract document -
+  // main sidebar, not Settings, since creating/assembling a contract is a
+  // day-to-day operational task (same shelf as Purchase), unlike the
+  // Clause Library/Field Setup/Templates screens below, which are
+  // legitimately admin/setup content.
+  {
+    key: "contracts",
+    label: "Contracts",
+    path: "/contracts",
+    icon: "file-protect",
+    moduleKey: "contract",
+    requiredPermission: "contract.clause.read",
+  },
   // --- Settings (configure) - Zoho-style split: everything below here is
   // reached via the header gear, not the main sidebar. See
   // docs/PROMPT-settings-restructure.md.
@@ -238,6 +251,62 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     moduleKey: "masters",
     section: "settings",
     children: buildMastersChildren(),
+  },
+  // C-1 (docs/CONTRACT-MODULE-BUILD.md): the versioned clause library -
+  // Settings-side for now (legal/setup content, same shelf as Field
+  // Definitions/Masters), same as those every subsequent Contract-module
+  // screen (templates, the contract document itself) will likely join this
+  // node as its own child once C-3b/C-4 land.
+  {
+    key: "contract",
+    label: "Contract",
+    icon: "file-protect",
+    moduleKey: "contract",
+    section: "settings",
+    launcherSection: "Organization Settings",
+    launcherGroup: "Setup & Configuration",
+    children: [
+      {
+        key: "contract.clauses",
+        label: "Clause Library",
+        path: "/settings/contract/clauses",
+        icon: "file-protect",
+        requiredPermission: "contract.clause.read",
+      },
+      // C-3a: admin-facing setup for the contract module's own division-
+      // scoped Tier 2 fields - same shelf as the generic Field Definitions
+      // screen, just scoped to module="contract" (reuses field_
+      // definitions.field.read/update, no contract-specific permission -
+      // matches Field Definitions' own admin.field.manage precedent being
+      // generic across every module, not per-module).
+      {
+        key: "contract.field-setup",
+        label: "Contract Field Setup",
+        path: "/settings/contract/field-setup",
+        icon: "form",
+        requiredPermission: "admin.field.manage",
+      },
+      // C-3b item 1: template management is master-style CRUD, admin/setup
+      // content - same shelf as Clause Library, not the operational
+      // "Contracts" node above.
+      {
+        key: "contract.templates",
+        label: "Templates",
+        path: "/settings/contract/templates",
+        icon: "file-protect",
+        requiredPermission: "contract.document.edit",
+      },
+      // C-4 item 1/2: the rule engine's own management screen - same shelf
+      // as Clause Library/Templates, admin/setup content, not the
+      // operational "Contracts" node.
+      {
+        key: "contract.rules",
+        label: "Clause Rules",
+        path: "/settings/contract/rules",
+        icon: "branches",
+        requiredPermission: "contract.rule.read",
+      },
+    ],
   },
 ];
 

@@ -9,6 +9,7 @@ import {
   DatabaseOutlined,
   DollarOutlined,
   FileDoneOutlined,
+  FileProtectOutlined,
   FileTextOutlined,
   FormOutlined,
   InboxOutlined,
@@ -37,6 +38,7 @@ const ICONS: Record<string, ComponentType> = {
   setting: SettingOutlined,
   "file-text": FileTextOutlined,
   "file-done": FileDoneOutlined,
+  "file-protect": FileProtectOutlined,
   "account-book": AccountBookOutlined,
   dollar: DollarOutlined,
 };

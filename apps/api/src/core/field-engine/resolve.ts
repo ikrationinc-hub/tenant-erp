@@ -1,8 +1,8 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull, or } from "drizzle-orm";
 import type { RequestContext } from "../../common/context/request-context.js";
 import { UnauthorizedError } from "../../common/errors/index.js";
 import { withTenantDb, withTenantSchema } from "../../database/get-db.js";
-import { fieldDefinitions } from "../../database/tenant/schema.js";
+import { divisions, fieldDefinitions } from "../../database/tenant/schema.js";
 import { fieldPermissionKey } from "../rbac/types.js";
 import { resolve as resolvePermissions } from "../rbac/resolve.js";
 import { getFieldDefaults } from "./defaults.js";
@@ -51,28 +51,62 @@ function mergeRow(row: FieldDefinitionRow | undefined, fallback: EffectiveField)
  * under whatever field_definitions rows this company has. Cached by
  * core/field-engine/cache.ts, keyed by field_version - bumped by every
  * core/field-engine/mutations.ts write, nothing else touches this table.
+ *
+ * C-3a (docs/CONTRACT-MODULE-BUILD.md): `divisionId` is optional - when
+ * given, a row scoped to THAT division and a row scoped to no division
+ * (division_id IS NULL, "applies to all divisions") can both exist for
+ * the same fieldKey; the division-specific row wins (see the two-pass
+ * `rowsByFieldKey` build below - NULL-division rows are laid down first,
+ * then overwritten by division-specific ones). When `divisionId` is
+ * omitted entirely, only NULL-division rows are considered - the
+ * pre-C-3a behavior for every existing module/entity that has never had a
+ * division-scoped row.
  */
 export async function resolveBaseFieldDefinitions(
   companyId: string,
   schemaName: string,
   module: string,
   entity: string,
+  divisionId?: string,
 ): Promise<EffectiveField[]> {
   const fieldVersion = await getFieldVersion(companyId, module, entity);
-  const cached = await getCachedFieldDefinitions<EffectiveField[]>(companyId, module, entity, fieldVersion);
+  const cached = await getCachedFieldDefinitions<EffectiveField[]>(companyId, module, entity, fieldVersion, divisionId);
   if (cached) {
     return cached;
   }
 
-  const defaults = getFieldDefaults(module, entity);
+  const divisionCondition = divisionId
+    ? or(isNull(fieldDefinitions.divisionId), eq(fieldDefinitions.divisionId, divisionId))
+    : isNull(fieldDefinitions.divisionId);
 
-  const rows = await withTenantSchema(schemaName, (tx) =>
-    tx
+  // getFieldDefaults (defaults.ts) is keyed by division CODE ("SCRAP"),
+  // not divisionId/UUID - a FieldDefault is a static, code-declared
+  // constant evaluated before any company's own divisions rows (with
+  // their own generated ids) exist, so a UUID can never be a code
+  // default's own field. Look up this specific division's code once here,
+  // where a real tenant schema connection is already open.
+  const [divisionRow, rows] = await withTenantSchema(schemaName, async (tx) => {
+    const division = divisionId
+      ? (await tx.select({ code: divisions.code }).from(divisions).where(eq(divisions.id, divisionId)).limit(1))[0]
+      : undefined;
+    const fieldRows = await tx
       .select()
       .from(fieldDefinitions)
-      .where(and(eq(fieldDefinitions.companyId, companyId), eq(fieldDefinitions.module, module), eq(fieldDefinitions.entity, entity))),
-  );
-  const rowsByFieldKey = new Map(rows.map((row) => [row.fieldKey, row]));
+      .where(and(eq(fieldDefinitions.companyId, companyId), eq(fieldDefinitions.module, module), eq(fieldDefinitions.entity, entity), divisionCondition));
+    return [division, fieldRows] as const;
+  });
+
+  const defaults = getFieldDefaults(module, entity, divisionRow?.code);
+
+  // Two-pass build: NULL-division ("all divisions") rows first, then
+  // division-specific rows overwrite them for the same fieldKey - a
+  // division-specific override always wins over the shared default.
+  const rowsByFieldKey = new Map(rows.filter((row) => row.divisionId === null).map((row) => [row.fieldKey, row]));
+  for (const row of rows) {
+    if (row.divisionId !== null) {
+      rowsByFieldKey.set(row.fieldKey, row);
+    }
+  }
 
   const resolved = defaults
     .map((fallback): EffectiveField => {
@@ -101,7 +135,7 @@ export async function resolveBaseFieldDefinitions(
     })
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
-  await setCachedFieldDefinitions(companyId, module, entity, fieldVersion, resolved);
+  await setCachedFieldDefinitions(companyId, module, entity, fieldVersion, resolved, divisionId);
   return resolved;
 }
 
@@ -119,6 +153,7 @@ export async function resolveFieldDefinitions(
   ctx: RequestContext,
   module: string,
   entity: string,
+  divisionId?: string,
 ): Promise<EffectiveField[]> {
   const scope = ctx.tenantScope;
   if (!scope?.userId) {
@@ -126,7 +161,7 @@ export async function resolveFieldDefinitions(
   }
 
   const [base, permissions] = await Promise.all([
-    resolveBaseFieldDefinitions(scope.companyId, scope.tenantSchema, module, entity),
+    resolveBaseFieldDefinitions(scope.companyId, scope.tenantSchema, module, entity, divisionId),
     resolvePermissions(ctx),
   ]);
 

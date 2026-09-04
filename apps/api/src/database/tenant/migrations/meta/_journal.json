@@ -267,6 +267,48 @@
       "when": 1788007306507,
       "tag": "0037_ordinary_ulik",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788407132097,
+      "tag": "0038_c1_clause_library",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1788411264173,
+      "tag": "0039_c3a_contract_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788416351242,
+      "tag": "0040_c3b_contract_document",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788425348104,
+      "tag": "0041_c4_rules_and_esignature",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1788426391922,
+      "tag": "0042_c4_generated_document_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1788496225151,
+      "tag": "0043_contract_type_column",
+      "breakpoints": true
     }
   ]
 }

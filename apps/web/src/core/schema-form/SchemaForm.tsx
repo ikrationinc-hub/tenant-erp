@@ -109,6 +109,15 @@ export interface SchemaFormProps {
   module: string;
   entity: string;
   mode: SchemaFormMode;
+  /**
+   * C-3a (docs/CONTRACT-MODULE-BUILD.md): when the entity's field
+   * definitions are division-scoped (e.g. contract/header), the caller
+   * passes the currently-selected division's id so the form renders that
+   * division's own fields (plus every all-divisions field). Omitted
+   * entirely for every non-division-scoped entity - the pre-C-3a
+   * behavior, unchanged.
+   */
+  divisionId?: string;
   initialValues?: Record<string, unknown>;
   onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
   /** FileUpload/MultiUpload fields need a real entity/entityId to attach to - absent (e.g. create mode, before the record has an id) they fall back to local-only tracking. */
@@ -159,6 +168,7 @@ export function SchemaForm({
   module,
   entity,
   mode,
+  divisionId,
   initialValues,
   onSubmit,
   uploadContext,
@@ -167,9 +177,13 @@ export function SchemaForm({
   onDiscard,
 }: SchemaFormProps): ReactElement {
   const schemaQuery = useQuery({
-    queryKey: ["field-definitions", module, entity],
+    // divisionId in the query key (not just the URL) - a stale cached
+    // result for one division must never be served for another (same
+    // principle as the backend's Redis cache key, core/field-engine/
+    // cache.ts's defsCacheKey).
+    queryKey: ["field-definitions", module, entity, divisionId],
     queryFn: () =>
-      apiFetch(endpoints.fieldDefinitions(module, entity), {}, { schema: fieldDefinitionsResponseSchema }),
+      apiFetch(endpoints.fieldDefinitions(module, entity, divisionId), {}, { schema: fieldDefinitionsResponseSchema }),
   });
 
   if (schemaQuery.isLoading) {

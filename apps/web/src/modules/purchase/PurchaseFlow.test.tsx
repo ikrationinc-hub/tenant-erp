@@ -547,10 +547,17 @@ describe("Purchase - Tier-2 field engine proof", () => {
 
       expect(await screen.findByLabelText("Other Charges", {}, ASYNC)).toBeInTheDocument();
 
+      // C-3a (docs/CONTRACT-MODULE-BUILD.md) added divisionId as a 4th
+      // query-key segment (SchemaForm.tsx) so a division-scoped result
+      // never collides with another division's cache entry - this
+      // caller never passes divisionId, so its own key ends in the
+      // explicit `undefined` TanStack Query still requires as an exact
+      // key segment match.
       const current = queryClient.getQueryData<{ fields: { fieldKey: string; label: string }[] }>([
         "field-definitions",
         "purchase",
         "po",
+        undefined,
       ]);
       if (!current) {
         throw new Error("expected the costs field-definitions to already be cached");
@@ -562,7 +569,7 @@ describe("Purchase - Tier-2 field engine proof", () => {
         ),
       };
       act(() => {
-        queryClient.setQueryData(["field-definitions", "purchase", "po"], relabeled);
+        queryClient.setQueryData(["field-definitions", "purchase", "po", undefined], relabeled);
       });
 
       expect(await screen.findByLabelText("Clearing Charges", {}, ASYNC)).toBeInTheDocument();

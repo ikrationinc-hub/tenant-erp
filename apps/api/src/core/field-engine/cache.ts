@@ -32,8 +32,25 @@ export async function bumpFieldVersion(companyId: string, module: string, entity
   return redis.incr(versionKey(companyId, module, entity));
 }
 
-function defsCacheKey(companyId: string, module: string, entity: string, fieldVersion: number): string {
-  return `${DEFS_PREFIX}${companyId}:${module}:${entity}:${fieldVersion}`;
+/**
+ * C-3a (docs/CONTRACT-MODULE-BUILD.md): `divisionId` is folded into the
+ * cache key (defaulting to the literal string "all" when the caller wants
+ * the undivided/no-division-filter view) so Scrap's and a future Metal
+ * division's resolved field lists never collide on the same entry - but
+ * `bumpFieldVersion` deliberately stays keyed by (companyId, module,
+ * entity) ONLY, with no division component: any write to ANY division's
+ * (or the shared, division-NULL) field_definitions rows for this entity
+ * invalidates every division's cached result at once, not just the one
+ * that changed. This is intentionally coarser than per-division
+ * invalidation - a shared-across-divisions field_definitions row exists
+ * (division_id IS NULL) whose edit must invalidate every division's view
+ * anyway, so per-division invalidation would still need to fall back to
+ * "bump everything" for that case; one shared counter is simpler and
+ * always correct, just occasionally invalidates one division's cache a
+ * little more eagerly than strictly necessary.
+ */
+function defsCacheKey(companyId: string, module: string, entity: string, fieldVersion: number, divisionId?: string): string {
+  return `${DEFS_PREFIX}${companyId}:${module}:${entity}:${divisionId ?? "all"}:${fieldVersion}`;
 }
 
 export async function getCachedFieldDefinitions<T>(
@@ -41,8 +58,9 @@ export async function getCachedFieldDefinitions<T>(
   module: string,
   entity: string,
   fieldVersion: number,
+  divisionId?: string,
 ): Promise<T | undefined> {
-  const raw = await redis.get(defsCacheKey(companyId, module, entity, fieldVersion));
+  const raw = await redis.get(defsCacheKey(companyId, module, entity, fieldVersion, divisionId));
   return raw === null ? undefined : (JSON.parse(raw) as T);
 }
 
@@ -52,9 +70,10 @@ export async function setCachedFieldDefinitions<T>(
   entity: string,
   fieldVersion: number,
   definitions: T,
+  divisionId?: string,
 ): Promise<void> {
   await redis.set(
-    defsCacheKey(companyId, module, entity, fieldVersion),
+    defsCacheKey(companyId, module, entity, fieldVersion, divisionId),
     JSON.stringify(definitions),
     "EX",
     DEFS_TTL_SECONDS,

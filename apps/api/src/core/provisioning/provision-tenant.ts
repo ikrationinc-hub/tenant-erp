@@ -238,9 +238,18 @@ async function provisionNewTenant(
     const roleIdsByName = await seedDefaultRoles({ schemaName, companyId, createdBy: adminUserId });
 
     await seedDefaultMenuTree({ schemaName, companyId, createdBy: adminUserId });
+    // C-3a (docs/CONTRACT-MODULE-BUILD.md): seedMasterData now runs BEFORE
+    // seedDefaultFieldDefinitions (was after) - a division-scoped field
+    // default (FieldDefault.divisionCode) needs this company's own Scrap
+    // division row to already exist so seedDefaultFieldDefinitions can
+    // resolve its code to a real division_id before writing the
+    // field_definitions row. Nothing in either function depends on the
+    // OLD order - seedMasterData never reads field_definitions, and
+    // seedDefaultNumberSeries/backfillDefaultCountryAndCurrency are
+    // unaffected either way.
+    await seedMasterData({ schemaName, companyId, createdBy: adminUserId });
     await seedDefaultFieldDefinitions({ schemaName, companyId, createdBy: adminUserId });
     await seedDefaultNumberSeries({ schemaName, companyId, createdBy: adminUserId });
-    await seedMasterData({ schemaName, companyId, createdBy: adminUserId });
     await backfillDefaultCountryAndCurrency(schemaName, companyId);
 
     await applyModuleEnablement(tenant.id, schemaName, input.modules);
@@ -306,9 +315,13 @@ async function reProvisionExistingTenant(
 
   const adminUser = await withTenantSchema(schemaName, (tx) => findActiveUserByEmail(tx, input.adminEmail));
 
+  // C-3a: seedMasterData before seedDefaultFieldDefinitions, same
+  // reordering and same reason as provisionTenant's own call sequence
+  // above - division-scoped field defaults need this company's divisions
+  // rows to already exist.
+  await seedMasterData({ schemaName, companyId, createdBy: adminUser?.id ?? existingTenant.id });
   await seedDefaultFieldDefinitions({ schemaName, companyId, createdBy: adminUser?.id ?? existingTenant.id });
   await seedDefaultNumberSeries({ schemaName, companyId, createdBy: adminUser?.id ?? existingTenant.id });
-  await seedMasterData({ schemaName, companyId, createdBy: adminUser?.id ?? existingTenant.id });
   await applyModuleEnablement(existingTenant.id, schemaName, input.modules);
 
   return {

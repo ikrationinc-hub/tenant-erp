@@ -48,6 +48,16 @@ const REAL_MIGRATION_VERSIONS = [
   "0030_early_magik",
   "0031_pl2_bill_rename",
   "0032_pl3_po_lifecycle",
+  "0033_nebulous_franklin_storm",
+  "0034_nosy_earthquake",
+  "0035_smiling_madelyne_pryor",
+  "0036_nifty_stone_men",
+  "0037_ordinary_ulik",
+  "0038_c1_clause_library",
+  "0039_c3a_contract_fields",
+  "0040_c3b_contract_document",
+  "0041_c4_rules_and_esignature",
+  "0042_c4_generated_document_keys",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

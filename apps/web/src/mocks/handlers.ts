@@ -37,6 +37,7 @@ import { suppliersHandlers, resolveSupplierFieldDefinitions } from "./suppliers-
 import { brokersHandlers, resolveBrokerFieldDefinitions } from "./brokers-handlers";
 import { purchaseHandlers, resolvePurchaseFieldDefinitions } from "./purchase-handlers";
 import { purchasePaymentsHandlers, PAYMENT_FIELDS } from "./purchase-payments-handlers";
+import { contractHandlers, resolveContractFieldDefinitions } from "./contract-handlers";
 import { inventoryHandlers } from "./inventory-handlers";
 import { attachmentsHandlers } from "./attachments-handlers";
 
@@ -266,6 +267,9 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       ],
     },
     { id: "m-inventory", key: "inventory", label: "Inventory", path: "/inventory", icon: "inbox", sortOrder: 5, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
+    // C-3b (docs/CONTRACT-MODULE-BUILD.md) - must stay in lockstep with
+    // seed-menu-tree.ts's own "contracts" node (the recurring drift bug).
+    { id: "m-contracts", key: "contracts", label: "Contracts", path: "/contracts", icon: "file-protect", sortOrder: 6, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
     // --- Settings (configure) - reached via the header gear, not the main
     // sidebar. See docs/PROMPT-settings-restructure.md.
     {
@@ -274,7 +278,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Companies",
       path: "/settings/companies",
       icon: "bank",
-      sortOrder: 6,
+      sortOrder: 7,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Organization",
@@ -286,7 +290,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Branches",
       path: "/settings/branches",
       icon: "apartment",
-      sortOrder: 7,
+      sortOrder: 8,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Organization",
@@ -298,7 +302,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Users",
       path: "/settings/users",
       icon: "users",
-      sortOrder: 8,
+      sortOrder: 9,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Users & Roles",
@@ -310,7 +314,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Roles",
       path: "/settings/roles",
       icon: "shield",
-      sortOrder: 9,
+      sortOrder: 10,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Users & Roles",
@@ -322,7 +326,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Field Definitions",
       path: "/settings/field-definitions",
       icon: "form",
-      sortOrder: 10,
+      sortOrder: 11,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Setup & Configuration",
@@ -334,7 +338,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Number Series",
       path: "/settings/number-series",
       icon: "ordered-list",
-      sortOrder: 11,
+      sortOrder: 12,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Setup & Configuration",
@@ -346,7 +350,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Masters",
       path: null,
       icon: "database",
-      sortOrder: 12,
+      sortOrder: 13,
       section: "settings",
       launcherSection: null,
       launcherGroup: null,
@@ -367,6 +371,76 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
         launcherGroup: MASTER_LAUNCHER_GROUPS[master.urlSegment] ?? "Logistics",
         children: [],
       })),
+    },
+    // C-1 (docs/CONTRACT-MODULE-BUILD.md) - must stay in lockstep with
+    // seed-menu-tree.ts's own "contract" node (the recurring drift bug
+    // CLAUDE.md flags).
+    {
+      id: "m-contract",
+      key: "contract",
+      label: "Contract",
+      path: null,
+      icon: "file-protect",
+      sortOrder: 14,
+      section: "settings",
+      launcherSection: "Organization Settings",
+      launcherGroup: "Setup & Configuration",
+      children: [
+        {
+          id: "m-contract-clauses",
+          key: "contract.clauses",
+          label: "Clause Library",
+          path: "/settings/contract/clauses",
+          icon: "file-protect",
+          sortOrder: 1,
+          section: "settings",
+          launcherSection: null,
+          launcherGroup: null,
+          children: [],
+        },
+        // C-3a - must stay in lockstep with seed-menu-tree.ts's own
+        // "contract.field-setup" child (the recurring drift bug).
+        {
+          id: "m-contract-field-setup",
+          key: "contract.field-setup",
+          label: "Contract Field Setup",
+          path: "/settings/contract/field-setup",
+          icon: "form",
+          sortOrder: 2,
+          section: "settings",
+          launcherSection: null,
+          launcherGroup: null,
+          children: [],
+        },
+        // C-3b item 1 - must stay in lockstep with seed-menu-tree.ts's own
+        // "contract.templates" child (the recurring drift bug).
+        {
+          id: "m-contract-templates",
+          key: "contract.templates",
+          label: "Templates",
+          path: "/settings/contract/templates",
+          icon: "file-protect",
+          sortOrder: 3,
+          section: "settings",
+          launcherSection: null,
+          launcherGroup: null,
+          children: [],
+        },
+        // C-4 item 1/2 - must stay in lockstep with seed-menu-tree.ts's own
+        // "contract.rules" child (the recurring drift bug).
+        {
+          id: "m-contract-rules",
+          key: "contract.rules",
+          label: "Clause Rules",
+          path: "/settings/contract/rules",
+          icon: "branches",
+          sortOrder: 4,
+          section: "settings",
+          launcherSection: null,
+          launcherGroup: null,
+          children: [],
+        },
+      ],
     },
   ],
 });
@@ -399,6 +473,15 @@ const mockPermissions: MyPermissionsResponse = myPermissionsResponseSchema.parse
     "purchase.receipt.create",
     "purchase.receipt.confirm",
     "purchase.payment.record",
+    "contract.clause.read",
+    "contract.clause.create",
+    "contract.clause.version",
+    "contract.clause.approve",
+    "contract.clause.deactivate",
+    "contract.document.create",
+    "contract.document.edit",
+    "contract.document.assemble",
+    "contract.document.generate",
     "inventory.stock.read",
     "suppliers.supplier.read",
     "suppliers.supplier.create",
@@ -460,7 +543,7 @@ export const handlers = [
   ),
   http.post(`${API_BASE}${endpoints.acceptInvitation(":token")}`, () => new HttpResponse(null, { status: 204 })),
   http.get(`${API_BASE}${endpoints.fieldDefinitionModules}`, () => HttpResponse.json(mockFieldDefinitionModules)),
-  http.get(`${API_BASE}${endpoints.fieldDefinitions(":module", ":entity")}`, ({ params }) => {
+  http.get(`${API_BASE}${endpoints.fieldDefinitions(":module", ":entity")}`, ({ params, request }) => {
     if (params.module === schemaFormDevFixture.module && params.entity === schemaFormDevFixture.entity) {
       return HttpResponse.json(schemaFormDevFixture);
     }
@@ -494,6 +577,13 @@ export const handlers = [
     }
     if (module === "purchase" && entity === "payment") {
       return HttpResponse.json(PAYMENT_FIELDS);
+    }
+    // C-3a: divisionId read from the query string, same as the real
+    // GET /field-definitions/:module/:entity?divisionId=... contract.
+    const divisionId = new URL(request.url).searchParams.get("divisionId");
+    const contractFields = resolveContractFieldDefinitions(module, entity, divisionId);
+    if (contractFields) {
+      return HttpResponse.json(contractFields);
     }
     return HttpResponse.json(mockFieldDefinitions);
   }),
@@ -555,4 +645,5 @@ export const handlers = [
   ...purchasePaymentsHandlers,
   ...inventoryHandlers,
   ...attachmentsHandlers,
+  ...contractHandlers,
 ];
