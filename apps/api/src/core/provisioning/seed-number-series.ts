@@ -20,6 +20,9 @@ interface DefaultSeries {
 /** Just enough to prove the mechanism works out of the box - a real tenant configures the rest via core/numbering directly once Purchase (or another numbered document type) has real routes. */
 const DEFAULT_SERIES: DefaultSeries[] = [
   { docType: "PO", prefixPattern: "PO-{FY}-{0000}", padding: 4 },
+  // S-3 (docs/SALES-MODULE-PLAN.md): the Sales Order is its own fiscal
+  // document, same {FY} pattern as PO - numbered independently.
+  { docType: "SO", prefixPattern: "SO-{FY}-{0000}", padding: 4 },
   // FR-002 (docs/spec/Purchase-V2.md Sub Tab 1): supplier code is auto-generated,
   // company-wide (no fiscal year in the pattern - a supplier isn't a fiscal document).
   { docType: "SUPPLIER", prefixPattern: "SUP-{0000}", padding: 4 },

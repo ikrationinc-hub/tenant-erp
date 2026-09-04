@@ -48,3 +48,11 @@ export const CONTRACT_STATUS_COLORS: Record<string, string> = {
   signed: semantic.success,
   closed: slate[600],
 };
+
+/** S-3 (docs/SALES-MODULE-PLAN.md): draft/approved/closed/cancelled - a deliberate naming divergence from PURCHASE_STATUS_COLORS' issued (see docs/adr/0026), same color roles otherwise (approved = steelCobalt, matching CONTRACT_STATUS_COLORS' own "approved" for the same reason - both are the moment a real hold/commitment happens). */
+export const SALES_STATUS_COLORS: Record<string, string> = {
+  draft: slate[400],
+  approved: steelCobalt.base,
+  closed: semantic.success,
+  cancelled: semantic.error,
+};

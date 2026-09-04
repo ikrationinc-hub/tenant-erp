@@ -330,6 +330,13 @@
       "when": 1788521197709,
       "tag": "0046_s2_lot_allocation_and_costing",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1788535579608,
+      "tag": "0047_s3_sales_order",
+      "breakpoints": true
     }
   ]
 }

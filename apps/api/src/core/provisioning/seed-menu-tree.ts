@@ -165,6 +165,25 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
       },
     ],
   },
+  // S-3 (docs/SALES-MODULE-PLAN.md): mirrors "purchase"'s own shape.
+  // Deliveries/Invoices/Payments children are added in S-4/S-5, once
+  // those documents exist - only Sales Orders is real in this phase.
+  {
+    key: "sales",
+    label: "Sales",
+    icon: "dollar",
+    moduleKey: "sales",
+    requiredPermission: "sales.order.read",
+    children: [
+      {
+        key: "sales.orders",
+        label: "Sales Orders",
+        path: "/sales/orders",
+        icon: "file-text",
+        requiredPermission: "sales.order.read",
+      },
+    ],
+  },
   {
     key: "inventory",
     label: "Inventory",

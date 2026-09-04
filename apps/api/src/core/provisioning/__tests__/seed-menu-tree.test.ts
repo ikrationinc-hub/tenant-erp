@@ -41,6 +41,8 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/customers",
   "/brokers",
   "/purchase/orders",
+  // S-3 (docs/SALES-MODULE-PLAN.md) - modules/sales/sales-registry.tsx.
+  "/sales/orders",
   "/purchase/receipts",
   "/purchase/bills",
   "/purchase/payments",

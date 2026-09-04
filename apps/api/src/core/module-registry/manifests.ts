@@ -7,6 +7,7 @@ import { healthRouter } from "../../modules/health/health.routes.js";
 import { inventoryRouter } from "../../modules/inventory/inventory.routes.js";
 import { menusRouter } from "../../modules/menus/menus.routes.js";
 import { purchaseRouter } from "../../modules/purchase/purchase.routes.js";
+import { salesRouter } from "../../modules/sales/sales.routes.js";
 import { brokersRouter } from "../../modules/brokers/brokers.routes.js";
 import { customersRouter } from "../../modules/customers/customers.routes.js";
 import { suppliersRouter } from "../../modules/suppliers/suppliers.routes.js";
@@ -311,6 +312,39 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       "0033_nebulous_franklin_storm",
       "0034_nosy_earthquake",
     ],
+  },
+  {
+    // S-3 (docs/SALES-MODULE-PLAN.md): the Sales Order document, mirroring
+    // Purchase's own manifest shape. "closed" has no permission of its own
+    // (derived/automatic, once S-4/S-5 exist - not built in this phase);
+    // "delete" is intentionally NOT declared - no requirement has asked
+    // for one, unlike purchase.po.delete which stays declared-but-
+    // unexercised for forward-compatibility reasons specific to that
+    // module's own history.
+    key: "sales",
+    name: "Sales",
+    version: "1.0.0",
+    routes: salesRouter,
+    permissions: [
+      permissionEntry("sales", "order", "create", "Create a sales order"),
+      permissionEntry("sales", "order", "read", "View sales orders"),
+      permissionEntry("sales", "order", "update", "Edit a draft or approved sales order"),
+      // Draft -> Approved reserves the sales order's picked lots (core/
+      // inventory-lots' reserveFromLot) - the two-step model's step 1
+      // (docs/SALES-MODULE-PLAN.md §0). Cancel releases any reservations
+      // an Approved sale is holding.
+      permissionEntry("sales", "order", "approve", "Approve a sales order - reserves its picked stock lots"),
+      permissionEntry("sales", "order", "cancel", "Cancel a sales order, releasing any reserved lots"),
+    ],
+    // "customers": sales.customerId FK (S-1). "inventory": sales_item_lots.
+    // stockLotId FKs into stock_lots, which only exists once a Purchase
+    // Receipt has been confirmed (inventory-subscriber.ts) - core/
+    // inventory-lots itself is a core engine, not gated behind its own
+    // module-enabled flag, but the DATA it operates on requires inventory
+    // to be enabled first, same reasoning purchase's own dependency on
+    // "suppliers" mirrors.
+    dependsOn: ["auth", "roles", "masters", "customers", "inventory"],
+    migrations: ["0047_s3_sales_order"],
   },
   {
     key: "contract",

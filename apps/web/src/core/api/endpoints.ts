@@ -83,6 +83,20 @@ export const endpoints = {
   payments: "/payments",
   payment: (id: string) => `/payments/${id}`,
   outstandingBillsForSupplier: (supplierId: string) => `/payments/outstanding-bills/${supplierId}`,
+
+  // --- S-3 (docs/SALES-MODULE-PLAN.md): Sales Order, mirrors Purchase ------
+  sales: "/sales",
+  salesOrder: (id: string) => `/sales/${id}`,
+  approveSalesOrder: (id: string) => `/sales/${id}/approve`,
+  cancelSalesOrder: (id: string) => `/sales/${id}/cancel`,
+  salesItems: (salesId: string) => `/sales/${salesId}/items`,
+  salesItem: (salesId: string, itemId: string) => `/sales/${salesId}/items/${itemId}`,
+  salesItemLots: (salesId: string, itemId: string) => `/sales/${salesId}/items/${itemId}/lots`,
+  salesItemLot: (salesId: string, itemId: string, lotId: string) => `/sales/${salesId}/items/${itemId}/lots/${lotId}`,
+  salesCosts: (salesId: string) => `/sales/${salesId}/costs`,
+  /** The lot-picker's own read - available stock_lots filtered by item/grade, live/unlocked (the real lock only happens at Approve). */
+  availableStockLots: "/sales/lots-available",
+
   uploadAttachment: (entity: string, entityId: string, fieldKey: string) =>
     `/attachments/${entity}/${entityId}/${fieldKey}`,
   attachmentDownloadUrl: (id: string) => `/attachments/${id}/download-url`,
