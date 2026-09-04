@@ -296,6 +296,16 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
         icon: "file-protect",
         requiredPermission: "contract.document.edit",
       },
+      // C-4 item 1/2: the rule engine's own management screen - same shelf
+      // as Clause Library/Templates, admin/setup content, not the
+      // operational "Contracts" node.
+      {
+        key: "contract.rules",
+        label: "Clause Rules",
+        path: "/settings/contract/rules",
+        icon: "branches",
+        requiredPermission: "contract.rule.read",
+      },
     ],
   },
 ];

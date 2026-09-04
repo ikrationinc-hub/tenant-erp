@@ -1,6 +1,6 @@
 import { convertDocxToPdf } from "./pdf-converter.js";
 import { renderDocx } from "./docx-renderer.js";
-import { resolvePlaceholders, type PlaceholderContext } from "./placeholder-resolver.js";
+import { flattenPlaceholderContext, resolvePlaceholders, type PlaceholderContext } from "./placeholder-resolver.js";
 import { storeGeneratedDocument } from "./store-generated-document.js";
 
 export interface GenerateDocumentInput {
@@ -31,20 +31,25 @@ export interface GenerateDocumentResult {
  * (MissingPlaceholderError/UnresolvedTemplateTagError) - no partial
  * output is ever stored for a clause with an unresolved placeholder.
  *
- * C-3b reuses this UNCHANGED for whole-contract generation: the caller
- * (contract-generation.worker.ts) passes a single `clauseText` that is
- * the ALREADY-SNAPSHOTTED, already-resolved concatenation of every
- * contract_clauses.resolved_text row (assembled in the API, at snapshot
- * time - see contract-assembly.service.ts) - resolvePlaceholders below is
- * then a no-op pass-through for a whole-contract job (no {{tokens}}
- * remain in already-resolved text), and only genuinely substitutes
- * anything for C-2's own single-clause spike path, which still calls this
- * with a raw, unresolved clause_versions.clause_text.
+ * C-3b reuses this for whole-contract generation: the caller (contract-
+ * generation.worker.ts) passes a single `clauseText` that is the ALREADY-
+ * SNAPSHOTTED, already-resolved concatenation of every contract_clauses.
+ * resolved_text row (assembled in the API, at snapshot time - see
+ * contract-assembly.service.ts) - resolvePlaceholders below is then a
+ * no-op pass-through for {{contractBody}} itself (no {{tokens}} remain in
+ * already-resolved clause text), and only genuinely substitutes anything
+ * for C-2's own single-clause spike path, which still calls this with a
+ * raw, unresolved clause_versions.clause_text. Either way, the .docx
+ * TEMPLATE's own letterhead can ALSO reference any other context leaf
+ * directly (e.g. {{seller.name}}) - flattenPlaceholderContext below
+ * covers that, merged in underneath so an explicit clauseText token never
+ * gets shadowed by a same-named context leaf.
  */
 export async function generateDocument(input: GenerateDocumentInput): Promise<GenerateDocumentResult> {
   const { values } = resolvePlaceholders(input.clauseText, input.context, { moneyTokens: input.moneyTokens });
+  const letterheadValues = flattenPlaceholderContext(input.context, { moneyTokens: input.moneyTokens });
 
-  const docxBuffer = renderDocx(input.templateBuffer, values);
+  const docxBuffer = renderDocx(input.templateBuffer, { ...letterheadValues, ...values });
   const pdfBuffer = await convertDocxToPdf(docxBuffer);
 
   const [docxStorageKey, pdfStorageKey] = await Promise.all([

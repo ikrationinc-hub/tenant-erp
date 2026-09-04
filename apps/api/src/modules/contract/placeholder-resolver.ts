@@ -1,4 +1,5 @@
 import { Decimal } from "decimal.js";
+import { ValidationError } from "../../common/errors/index.js";
 
 Decimal.set({ rounding: Decimal.ROUND_HALF_UP });
 
@@ -25,10 +26,21 @@ export interface PlaceholderResolverOptions {
   moneyTokens?: readonly string[];
 }
 
-export class MissingPlaceholderError extends Error {
-  constructor(readonly token: string) {
-    super(`Missing value for placeholder {{${token}}} - refusing to render a blank where a value belongs`);
-    this.name = "MissingPlaceholderError";
+/**
+ * A ValidationError (422), not a bare Error - this is a client-fixable
+ * content problem (a clause referencing a token this contract's context
+ * doesn't have, e.g. a typo'd token or a placeholder used outside a real
+ * generation flow), never a server fault. Before this fix it fell through
+ * to the generic error handler as an unhandled 500 with a raw stack
+ * trace - every caller (addClause/preview/generate) now surfaces this as
+ * a clean, actionable 422 instead.
+ */
+export class MissingPlaceholderError extends ValidationError {
+  readonly token: string;
+
+  constructor(token: string) {
+    super(`Missing value for placeholder {{${token}}} - refusing to render a blank where a value belongs`, { token });
+    this.token = token;
   }
 }
 

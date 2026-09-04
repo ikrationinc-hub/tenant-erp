@@ -426,6 +426,20 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
           launcherGroup: null,
           children: [],
         },
+        // C-4 item 1/2 - must stay in lockstep with seed-menu-tree.ts's own
+        // "contract.rules" child (the recurring drift bug).
+        {
+          id: "m-contract-rules",
+          key: "contract.rules",
+          label: "Clause Rules",
+          path: "/settings/contract/rules",
+          icon: "branches",
+          sortOrder: 4,
+          section: "settings",
+          launcherSection: null,
+          launcherGroup: null,
+          children: [],
+        },
       ],
     },
   ],

@@ -2244,6 +2244,8 @@ export const contractTemplateClausesRelations = relations(contractTemplateClause
 // read after creation).
 export const contractStatusEnum = pgEnum("contract_status", ["draft", "approved", "signed", "closed"]);
 export const contractSourceTypeEnum = pgEnum("contract_source_type", ["purchase", "sale"]);
+/** C-4 item 5 - mirrors clause_version_status's own "one active state machine, tracked on the row" shape. `sent` is set the instant the stub/real provider accepts the send request; `signed`/`declined` arrive via the provider's own webhook (ESignatureProvider's own interface, apps/api/src/core/esignature/). */
+export const contractEsignatureStatusEnum = pgEnum("contract_esignature_status", ["not_sent", "sent", "signed", "declined"]);
 
 export const contracts = pgTable(
   "contracts",
@@ -2260,6 +2262,22 @@ export const contracts = pgTable(
     contractDate: date("contract_date").notNull(),
     status: contractStatusEnum("status").notNull().default("draft"),
     templateId: uuid("template_id").references(() => contractTemplates.id, { onDelete: "restrict" }),
+    /**
+     * The contract DOCUMENT's own kind (Sales or Purchase) - reuses
+     * contractSourceTypeEnum's exact two values rather than a second
+     * identical enum. Deliberately distinct from `sourceType` below:
+     * `sourceType`/`sourceId` say "this contract is LINKED to that
+     * purchase/sale document"; `contractType` says "this contract itself
+     * IS a sale or purchase contract" - a standalone contract (no source
+     * link at all) can still have a contractType, and a linked contract's
+     * contractType is not required to match its sourceType (a purchase
+     * contract could reference source data for context without being
+     * itself the purchase). Nullable - never backfilled for a contract
+     * created before this column existed, and not required going forward
+     * either, since a template's own contractType already carries this
+     * meaning when a template is used.
+     */
+    contractType: contractSourceTypeEnum("contract_type"),
     /** Self-FK - schema only for now (see this table's own doc comment above): every contract created by this build's endpoints has this NULL and revisionNumber 1. Reserved for a future amendment flow, not yet built. */
     parentContractId: uuid("parent_contract_id").references((): AnyPgColumn => contracts.id, { onDelete: "restrict" }),
     revisionNumber: integer("revision_number").notNull().default(1),
@@ -2274,6 +2292,28 @@ export const contracts = pgTable(
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     signedBy: uuid("signed_by").references(() => users.id, { onDelete: "restrict" }),
     signedAt: timestamp("signed_at", { withTimezone: true }),
+    /** C-4 item 4 - "Send for Approval routes to an approver": WHO this contract was routed to, stamped when sent, distinct from approvedBy (the person who actually clicked Approve, which may or may not be the same user - this table doesn't assume they must match). Nullable - not every approved contract was routed through this action (a Manager could approve directly without a prior "send"). */
+    approvalRequestedFor: uuid("approval_requested_for").references(() => users.id, { onDelete: "restrict" }),
+    approvalRequestedBy: uuid("approval_requested_by").references(() => users.id, { onDelete: "restrict" }),
+    approvalRequestedAt: timestamp("approval_requested_at", { withTimezone: true }),
+    /** C-4 items 5/9 - the e-signature STUB's own status tracking (apps/api/src/core/esignature/). No real provider is wired (spec's own explicit instruction) - these columns exist so the UI has something real to show regardless of which provider eventually fills the interface. */
+    esignatureStatus: contractEsignatureStatusEnum("esignature_status").notNull().default("not_sent"),
+    esignatureRequestId: text("esignature_request_id"),
+    esignatureSentAt: timestamp("esignature_sent_at", { withTimezone: true }),
+    esignatureCompletedAt: timestamp("esignature_completed_at", { withTimezone: true }),
+    /**
+     * C-4 item 6 - the generation job's result (contract-generation.service.ts's
+     * own GenerationJobStatus.result) lives only in BullMQ job state, which
+     * is not durable/queryable once the job ages out - these two columns are
+     * the durable copy, written by markGenerationComplete right after a
+     * generation job is observed as completed. A repeat generation just
+     * overwrites both; there is no generation history table.
+     */
+    lastGeneratedDocxKey: text("last_generated_docx_key"),
+    lastGeneratedPdfKey: text("last_generated_pdf_key"),
+    /** C-4 item 6 - "Email Contract: send the generated PDF" - last-sent tracking only (no email history table; a repeat send just overwrites this). Nullable - never emailed yet is a normal, common state. */
+    lastEmailedAt: timestamp("last_emailed_at", { withTimezone: true }),
+    lastEmailedTo: text("last_emailed_to"),
     ...auditColumns(),
   },
   (table) => [
@@ -2414,5 +2454,59 @@ export const contractClausesRelations = relations(contractClauses, ({ one }) => 
   clauseVersion: one(clauseVersions, {
     fields: [contractClauses.clauseVersionId],
     references: [clauseVersions.id],
+  }),
+}));
+
+/**
+ * C-4 (docs/CONTRACT-MODULE-BUILD.md): data-driven rule engine
+ * (json-rules-engine, NEVER a hand-rolled DSL) - a rule is a CONDITION on
+ * contract data (e.g. incoterm=='CIF') and an ACTION (add clause X,
+ * optionally as mandatory). `conditionJson` is json-rules-engine's own
+ * condition-tree shape verbatim ({all:[...]} / {any:[...]} of {fact,
+ * operator, value} leaves) - stored opaquely, never parsed/validated by
+ * this schema, so the engine library owns the condition grammar, not this
+ * table. `isExample` is REQUIRED, not cosmetic: docs/CONTRACT-MODULE-
+ * BUILD.md's own repeated warning is that real rules are unknown until
+ * the client provides them - every rule this build seeds is an EXAMPLE,
+ * and the column exists so the rules-management UI can visibly label
+ * every current row as such rather than let an example rule look
+ * indistinguishable from a client-confirmed one.
+ */
+export const clauseRules = pgTable(
+  "clause_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    divisionId: uuid("division_id").references(() => divisions.id, { onDelete: "restrict" }),
+    name: text("name").notNull(),
+    /** json-rules-engine's own condition-tree JSON, e.g. `{"all":[{"fact":"incoterm","operator":"equal","value":"CIF"}]}` - opaque to this schema. */
+    conditionJson: jsonb("condition_json").$type<Record<string, unknown>>().notNull(),
+    targetClauseId: uuid("target_clause_id")
+      .notNull()
+      .references(() => clauses.id, { onDelete: "restrict" }),
+    /** Whether a clause this rule adds becomes non-removable (contract_clauses.isMandatory) - the SAME generic guard contract-assembly.service.ts's removeClause already enforces for template-sourced mandatory clauses. */
+    actionIsMandatory: boolean("action_is_mandatory").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    /** See this table's own doc comment above - never omit-by-default; a rule seeded by this build's own example set is always true, a client-confirmed rule (none exist yet) would be false. */
+    isExample: boolean("is_example").notNull().default(true),
+    ...auditColumns(),
+  },
+  (table) => [
+    index("clause_rules_division_id_idx").on(table.divisionId),
+    index("clause_rules_target_clause_id_idx").on(table.targetClauseId),
+  ],
+);
+
+export const clauseRulesRelations = relations(clauseRules, ({ one }) => ({
+  division: one(divisions, {
+    fields: [clauseRules.divisionId],
+    references: [divisions.id],
+  }),
+  targetClause: one(clauses, {
+    fields: [clauseRules.targetClauseId],
+    references: [clauses.id],
   }),
 }));

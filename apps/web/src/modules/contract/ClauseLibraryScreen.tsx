@@ -1,12 +1,30 @@
 import type { ReactElement } from "react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { App as AntApp, Button, Form, Input, Modal, Select, Space, Table, Tag, Typography } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { App as AntApp, Button, Card, DatePicker, Drawer, Empty, Form, Input, Modal, Select, Space, Table, Tag, Typography } from "antd";
+import { CheckCircleOutlined, HistoryOutlined, PlusOutlined } from "@ant-design/icons";
+import dayjs, { type Dayjs } from "dayjs";
 import { masterOptionsResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints, withQuery } from "../../core/api/endpoints";
 import { Can } from "../../core/permissions/Can";
+import { semantic } from "../../theme/palette";
+
+const DATE_FORMAT = "YYYY-MM-DD";
+
+/**
+ * Plain AntD Form (not <SchemaForm/> - clause metadata isn't part of the
+ * field-definitions engine), so date handling has to be wired by hand:
+ * getValueProps/normalize keep the FORM STATE (and what's POSTed to the
+ * API) as the same "YYYY-MM-DD" string clauses.service.ts's validator
+ * expects, with Dayjs mediating only the widget itself - same "never a
+ * Date/dayjs object in form state" discipline as core/schema-form/field-
+ * types/DatePickerField.tsx.
+ */
+const dateFieldProps = {
+  getValueProps: (value?: string) => ({ value: value ? dayjs(value, DATE_FORMAT) : undefined }),
+  normalize: (value: Dayjs | null) => (value ? value.format(DATE_FORMAT) : undefined),
+};
 
 interface CreateClauseFormValues {
   clauseTitle: string;
@@ -39,6 +57,8 @@ interface ClauseVersionRow {
   versionNumber: number;
   status: string;
   effectiveFrom: string;
+  clauseText: string;
+  changeReason: string;
 }
 
 function useDivisionOptions() {
@@ -81,10 +101,13 @@ export function ClauseLibraryScreen(): ReactElement {
 
   return (
     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
-      <Space style={{ width: "100%", justifyContent: "space-between" }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>
-          Clause Library
-        </Typography.Title>
+      <Space style={{ width: "100%", justifyContent: "space-between" }} align="start">
+        <Space direction="vertical" size={0}>
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            Clause Library
+          </Typography.Title>
+          <Typography.Text type="secondary">Versioned - edits create new versions; signed contracts keep their snapshot</Typography.Text>
+        </Space>
         <Can permission="contract.clause.create">
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
             New Clause
@@ -105,7 +128,7 @@ export function ClauseLibraryScreen(): ReactElement {
             key: "actions",
             title: "",
             render: (_v, row) => (
-              <Button size="small" onClick={() => setManagingClauseId(row.id)}>
+              <Button size="small" icon={<HistoryOutlined />} onClick={() => setManagingClauseId(row.id)}>
                 Versions
               </Button>
             ),
@@ -132,8 +155,8 @@ export function ClauseLibraryScreen(): ReactElement {
           <Form.Item name="clauseText" label="Clause Text" rules={[{ required: true }]}>
             <Input.TextArea autoSize={{ minRows: 4 }} placeholder="Use {{dotted.tokens}} for placeholders" />
           </Form.Item>
-          <Form.Item name="effectiveFrom" label="Effective From (YYYY-MM-DD)" rules={[{ required: true }]}>
-            <Input placeholder="2026-01-01" />
+          <Form.Item name="effectiveFrom" label="Effective From" rules={[{ required: true }]} {...dateFieldProps}>
+            <DatePicker style={{ width: "100%" }} format={DATE_FORMAT} />
           </Form.Item>
           <Form.Item name="changeReason" label="Change Reason" rules={[{ required: true }]}>
             <Input />
@@ -144,12 +167,28 @@ export function ClauseLibraryScreen(): ReactElement {
         </Form>
       </Modal>
 
-      {managingClauseId && <ManageClauseVersionsModal clauseId={managingClauseId} onClose={() => setManagingClauseId(null)} />}
+      {managingClauseId && <ClauseVersionsDrawer clauseId={managingClauseId} onClose={() => setManagingClauseId(null)} />}
     </Space>
   );
 }
 
-function ManageClauseVersionsModal({ clauseId, onClose }: { clauseId: string; onClose: () => void }): ReactElement {
+const VERSION_STATUS_TAG_COLOR: Record<string, string> = {
+  draft: "default",
+  approved: "gold",
+  active: "success",
+  superseded: "default",
+  expired: "default",
+};
+
+/**
+ * Version history as a slide-in Drawer (mockup: docs/mockups/ikration-
+ * contract-prototype.html's clause-version drawer) - the Active version
+ * gets a highlighted border/background (semantic.success), matching the
+ * mockup's `.ver.active` treatment but with our own theme color. Same
+ * data/handlers as before this redesign (handleAddVersion, handleApprove)
+ * - only the Modal->Drawer conversion and per-version card styling changed.
+ */
+function ClauseVersionsDrawer({ clauseId, onClose }: { clauseId: string; onClose: () => void }): ReactElement {
   const { message } = AntApp.useApp();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
@@ -178,38 +217,59 @@ function ManageClauseVersionsModal({ clauseId, onClose }: { clauseId: string; on
     void message.success("Version approved");
   }
 
+  const versions = versionsQuery.data?.items ?? [];
+
   return (
-    <Modal title="Clause Versions" open onCancel={onClose} footer={null} destroyOnHidden width={640}>
-      <Space direction="vertical" style={{ width: "100%" }}>
+    <Drawer
+      title="Clause Versions"
+      open
+      onClose={onClose}
+      width={480}
+      destroyOnHidden
+      extra={
         <Can permission="contract.clause.version">
-          <Button size="small" onClick={() => setAddOpen(true)}>
+          <Button size="small" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
             Add Version
           </Button>
         </Can>
+      }
+    >
+      <Typography.Paragraph type="secondary" style={{ fontSize: 12.5 }}>
+        Editing creates a new version. Signed contracts keep the version they were signed with - always.
+      </Typography.Paragraph>
 
-        <Table<ClauseVersionRow>
-          rowKey="id"
-          size="small"
-          loading={versionsQuery.isLoading}
-          dataSource={versionsQuery.data?.items ?? []}
-          columns={[
-            { key: "versionNumber", title: "Version", dataIndex: "versionNumber" },
-            { key: "status", title: "Status", render: (_v, row) => <Tag>{row.status}</Tag> },
-            { key: "effectiveFrom", title: "Effective From", dataIndex: "effectiveFrom" },
-            {
-              key: "actions",
-              title: "",
-              render: (_v, row) =>
-                row.status === "draft" ? (
-                  <Can permission="contract.clause.approve">
-                    <Button size="small" onClick={() => void handleApprove(row.id)}>
-                      Approve
-                    </Button>
-                  </Can>
-                ) : null,
-            },
-          ]}
-        />
+      {versionsQuery.isLoading && <Typography.Text type="secondary">Loading...</Typography.Text>}
+      {!versionsQuery.isLoading && versions.length === 0 && <Empty description="No versions yet" />}
+
+      <Space direction="vertical" size="small" style={{ width: "100%" }}>
+        {versions.map((version) => {
+          const isActive = version.status === "active";
+          return (
+            <Card
+              key={version.id}
+              size="small"
+              style={isActive ? { borderColor: semantic.success, background: "rgba(14, 159, 110, 0.06)" } : {}}
+            >
+              <Space align="center" style={{ marginBottom: 6 }}>
+                <Tag color={VERSION_STATUS_TAG_COLOR[version.status] ?? "default"}>{isActive && <CheckCircleOutlined />} {version.status}</Tag>
+                <Typography.Text strong>v{version.versionNumber}</Typography.Text>
+              </Space>
+              <Typography.Paragraph type="secondary" style={{ margin: 0, fontSize: 12.5, whiteSpace: "pre-wrap" }}>
+                {version.clauseText}
+              </Typography.Paragraph>
+              <Typography.Text type="secondary" style={{ fontSize: 11.5, display: "block", marginTop: 6 }}>
+                Effective {version.effectiveFrom} · Reason: "{version.changeReason}"
+              </Typography.Text>
+              {version.status === "draft" && (
+                <Can permission="contract.clause.approve">
+                  <Button size="small" style={{ marginTop: 8 }} onClick={() => void handleApprove(version.id)}>
+                    Approve
+                  </Button>
+                </Can>
+              )}
+            </Card>
+          );
+        })}
       </Space>
 
       <Modal title="Add Version" open={addOpen} onCancel={() => setAddOpen(false)} footer={null} destroyOnHidden>
@@ -217,8 +277,8 @@ function ManageClauseVersionsModal({ clauseId, onClose }: { clauseId: string; on
           <Form.Item name="clauseText" label="Clause Text" rules={[{ required: true }]}>
             <Input.TextArea autoSize={{ minRows: 4 }} />
           </Form.Item>
-          <Form.Item name="effectiveFrom" label="Effective From (YYYY-MM-DD)" rules={[{ required: true }]}>
-            <Input placeholder="2026-01-01" />
+          <Form.Item name="effectiveFrom" label="Effective From" rules={[{ required: true }]} {...dateFieldProps}>
+            <DatePicker style={{ width: "100%" }} format={DATE_FORMAT} />
           </Form.Item>
           <Form.Item name="changeReason" label="Change Reason" rules={[{ required: true }]}>
             <Input />
@@ -228,6 +288,6 @@ function ManageClauseVersionsModal({ clauseId, onClose }: { clauseId: string; on
           </Button>
         </Form>
       </Modal>
-    </Modal>
+    </Drawer>
   );
 }

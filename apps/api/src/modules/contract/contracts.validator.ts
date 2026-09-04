@@ -33,6 +33,8 @@ export const createContractSchema = z
     divisionId: z.string().uuid().optional(),
     branchId: z.string().uuid().optional(),
     templateId: z.string().uuid().optional(),
+    /** The contract document's own kind - Sales or Purchase. Reuses the same two values as `source.sourceType` (see schema.ts's own doc comment on why they're distinct columns) but is set independently. */
+    contractType: z.enum(["purchase", "sale"]).optional(),
     contractDate: dateStringSchema,
     source: sourceLinkSchema.optional(),
     seller: partySchema.optional(),
@@ -106,3 +108,30 @@ export const generationJobIdParamsSchema = z.object({
   id: z.string().uuid(),
   jobId: z.string().min(1),
 });
+
+// --- C-4 item 4: approval routing -------------------------------------------
+
+export const sendForApprovalSchema = z
+  .object({
+    approverId: z.string().uuid(),
+  })
+  .strict();
+export type SendForApprovalInput = z.infer<typeof sendForApprovalSchema>;
+
+// --- C-4 item 6: email the generated PDF ------------------------------------
+
+export const emailContractSchema = z
+  .object({
+    to: z.string().email(),
+  })
+  .strict();
+export type EmailContractInput = z.infer<typeof emailContractSchema>;
+
+// --- C-4 item 5: e-signature (stub provider only) ---------------------------
+
+export const sendForESignatureSchema = z
+  .object({
+    signerEmail: z.string().email(),
+  })
+  .strict();
+export type SendForESignatureInput = z.infer<typeof sendForESignatureSchema>;

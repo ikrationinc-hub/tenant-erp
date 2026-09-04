@@ -53,6 +53,8 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/contracts",
   "/settings/contract/clauses",
   "/settings/contract/templates",
+  // C-4 item 1/2: ClauseRulesScreen (settings) - see contract-registry.tsx.
+  "/settings/contract/rules",
   ...MASTER_MODULES.filter((module) => module.entity !== "customer").map(
     (module) => `/settings/masters/${module.urlSegment}`,
   ),

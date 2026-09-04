@@ -12,10 +12,14 @@ import {
   contractsListQuerySchema,
   createContractSchema,
   editContractClauseTextSchema,
+  emailContractSchema,
   generationJobIdParamsSchema,
   reorderContractClausesSchema,
+  sendForApprovalSchema,
+  sendForESignatureSchema,
   updateContractSchema,
 } from "./contracts.validator.js";
+import * as clauseRulesService from "./clause-rules.service.js";
 
 function requireContext() {
   const ctx = getRequestContext();
@@ -42,6 +46,17 @@ export async function getById(req: Request, res: Response, next: NextFunction): 
     const { id } = contractIdParamsSchema.parse(req.params);
     const contract = await contractsService.getById(ctx, id);
     res.status(200).json(contract);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getDocumentUrl(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const { id } = contractIdParamsSchema.parse(req.params);
+    const presigned = await contractsService.getDocumentUrl(ctx, id);
+    res.status(200).json(presigned);
   } catch (error) {
     next(error);
   }
@@ -98,6 +113,64 @@ export async function close(req: Request, res: Response, next: NextFunction): Pr
     const { id } = contractIdParamsSchema.parse(req.params);
     const contract = await contractsService.close(ctx, id);
     res.status(200).json(contract);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function sendForApproval(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const { id } = contractIdParamsSchema.parse(req.params);
+    const input = sendForApprovalSchema.parse(req.body);
+    const contract = await contractsService.sendForApproval(ctx, id, input);
+    res.status(200).json(contract);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function revise(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const { id } = contractIdParamsSchema.parse(req.params);
+    const contract = await contractsService.revise(ctx, id);
+    res.status(201).json(contract);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function emailContract(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const { id } = contractIdParamsSchema.parse(req.params);
+    const input = emailContractSchema.parse(req.body);
+    const contract = await contractsService.emailContract(ctx, id, input);
+    res.status(200).json(contract);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function sendForESignature(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const { id } = contractIdParamsSchema.parse(req.params);
+    const input = sendForESignatureSchema.parse(req.body);
+    const contract = await contractsService.sendForESignature(ctx, id, input);
+    res.status(200).json(contract);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function runRules(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const { id } = contractIdParamsSchema.parse(req.params);
+    const result = await clauseRulesService.runRules(ctx, id);
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }
@@ -190,8 +263,8 @@ export async function generate(req: Request, res: Response, next: NextFunction):
 export async function getGenerationStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const ctx = requireContext();
-    const { jobId } = generationJobIdParamsSchema.parse(req.params);
-    const status = await generationService.getGenerationJobStatus(ctx, jobId);
+    const { id, jobId } = generationJobIdParamsSchema.parse(req.params);
+    const status = await generationService.getGenerationJobStatus(ctx, id, jobId);
     if (status.state === "completed" && status.result) {
       const [docx, pdf] = await Promise.all([
         getPresignedDownloadUrl(status.result.docxStorageKey),

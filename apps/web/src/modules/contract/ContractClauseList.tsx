@@ -1,15 +1,17 @@
-import type { ReactElement } from "react";
+import type { CSSProperties, ReactElement } from "react";
 import { useState } from "react";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Button, Card, Input, Popconfirm, Space, Tag, Typography } from "antd";
-import { DeleteOutlined, DragOutlined, EditOutlined } from "@ant-design/icons";
+import { Button, Empty, Flex, Input, Popconfirm, Space, Tag, Typography } from "antd";
+import { HolderOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { Can } from "../../core/permissions/Can";
+import { semantic } from "../../theme/palette";
 
 export interface ContractClauseItem {
   id: string;
   clauseTitle: string;
+  clauseCode: string;
   resolvedText: string;
   isMandatory: boolean;
   isEdited: boolean;
@@ -23,44 +25,76 @@ interface SortableClauseCardProps {
   onEditText: (contractClauseId: string, resolvedText: string) => void;
 }
 
+/** Mandatory (amber) takes precedence when a clause is both mandatory and rule-added - the removal restriction is the more important cue. Matches the prototype's own `.clause.mandatory`/`.clause.rule` left-border language, using our own semantic colors instead of the prototype's own CSS vars. */
+function clauseBorderColor(clause: ContractClauseItem): string | undefined {
+  if (clause.isMandatory) {
+    return semantic.warning;
+  }
+  if (clause.isFromRule) {
+    return "#7048e8";
+  }
+  return undefined;
+}
+
+/**
+ * A flat bordered row (not a nested Card-in-Card) - closer to the
+ * prototype's own compact `.clause` block: a grip handle on the left,
+ * title + code + status tags on one line, the resolved text below, and
+ * plain text-link actions ("Edit" / "Remove" / "Required by rule -
+ * cannot remove") rather than icon-only buttons. Matches the prototype's
+ * information density while staying on our own theme tokens.
+ */
 function SortableClauseCard({ clause, editable, onRemove, onEditText }: SortableClauseCardProps): ReactElement {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: clause.id, disabled: !editable });
   const [editing, setEditing] = useState(false);
   const [draftText, setDraftText] = useState(clause.resolvedText);
 
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  const borderColor = clauseBorderColor(clause);
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderLeft: borderColor ? `3px solid ${borderColor}` : "1px solid #e5e7eb",
+    borderRadius: 8,
+    padding: "12px 14px",
+    marginBottom: 8,
+    display: "flex",
+    gap: 12,
+    alignItems: "flex-start",
+  };
 
   return (
     <div ref={setNodeRef} style={style}>
-      <Card
-        size="small"
-        style={{ marginBottom: 8 }}
-        title={
-          <Space>
-            {editable && (
-              <Button type="text" size="small" icon={<DragOutlined />} aria-label={`Drag to reorder ${clause.clauseTitle}`} {...attributes} {...listeners} />
-            )}
-            <Typography.Text strong>{clause.clauseTitle}</Typography.Text>
-            {clause.isMandatory && <Tag>Mandatory</Tag>}
-            {clause.isFromRule && <Tag color="purple">From rule</Tag>}
-            {clause.isEdited && <Tag color="orange">Edited</Tag>}
-          </Space>
-        }
-        extra={
-          editable && (
-            <Space>
-              <Button type="text" size="small" icon={<EditOutlined />} aria-label={`Edit ${clause.clauseTitle}`} onClick={() => setEditing((v) => !v)} />
-              <Popconfirm
-                title="Remove this clause?"
-                disabled={clause.isMandatory}
-                onConfirm={() => onRemove(clause.id)}
-              >
-                <Button type="text" size="small" danger icon={<DeleteOutlined />} disabled={clause.isMandatory} aria-label={`Remove ${clause.clauseTitle}`} />
-              </Popconfirm>
-            </Space>
-          )
-        }
-      >
+      {editable && (
+        <Button
+          type="text"
+          size="small"
+          icon={<HolderOutlined />}
+          aria-label={`Drag to reorder ${clause.clauseTitle}`}
+          style={{ cursor: "grab", marginTop: 2 }}
+          {...attributes}
+          {...listeners}
+        />
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Flex wrap gap={8} align="center" style={{ marginBottom: 4 }}>
+          <Typography.Text strong>{clause.clauseTitle}</Typography.Text>
+          {clause.clauseCode && (
+            <Tag bordered={false} style={{ background: "#f1f3f5", color: "#6b7280" }}>
+              {clause.clauseCode}
+            </Tag>
+          )}
+          {clause.isMandatory && <Tag color="warning">Mandatory</Tag>}
+          {clause.isFromRule && (
+            <Tag color="purple" icon={<ThunderboltOutlined />}>
+              From rule
+            </Tag>
+          )}
+          {clause.isEdited && <Tag color="orange">Edited</Tag>}
+        </Flex>
+
         {editing ? (
           <Space direction="vertical" style={{ width: "100%" }}>
             <Input.TextArea value={draftText} onChange={(e) => setDraftText(e.target.value)} autoSize={{ minRows: 2 }} />
@@ -76,9 +110,40 @@ function SortableClauseCard({ clause, editable, onRemove, onEditText }: Sortable
             </Button>
           </Space>
         ) : (
-          <Typography.Paragraph style={{ margin: 0, whiteSpace: "pre-wrap" }}>{clause.resolvedText}</Typography.Paragraph>
+          <Typography.Text type="secondary" style={{ fontSize: 12.5, whiteSpace: "pre-wrap" }}>
+            {clause.resolvedText}
+          </Typography.Text>
         )}
-      </Card>
+
+        {editable && !editing && (
+          <div style={{ marginTop: 8 }}>
+            {clause.isFromRule ? (
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                Required by rule - cannot remove
+              </Typography.Text>
+            ) : (
+              <Space size="middle">
+                <Typography.Link style={{ fontSize: 12.5 }} onClick={() => setEditing(true)}>
+                  Edit on this contract
+                </Typography.Link>
+                <Popconfirm title="Remove this clause?" disabled={clause.isMandatory} onConfirm={() => onRemove(clause.id)}>
+                  <Typography.Link
+                    disabled={clause.isMandatory}
+                    style={{ fontSize: 12.5, color: clause.isMandatory ? undefined : semantic.error }}
+                  >
+                    {clause.isMandatory ? "Cannot remove (mandatory)" : "Remove"}
+                  </Typography.Link>
+                </Popconfirm>
+              </Space>
+            )}
+          </div>
+        )}
+        {!editable && (
+          <Typography.Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 8 }}>
+            Locked - snapshot frozen
+          </Typography.Text>
+        )}
+      </div>
     </div>
   );
 }
@@ -117,7 +182,7 @@ export function ContractClauseList({ clauses, editable, onReorder, onRemove, onE
       </SortableContext>
       {clauses.length === 0 && (
         <Can permission="contract.document.assemble">
-          <Typography.Text type="secondary">No clauses assembled yet. Add one from the library below.</Typography.Text>
+          <Empty description="No clauses assembled yet. Add one from the library below." image={Empty.PRESENTED_IMAGE_SIMPLE} />
         </Can>
       )}
     </DndContext>

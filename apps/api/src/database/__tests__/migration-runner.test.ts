@@ -56,6 +56,8 @@ const REAL_MIGRATION_VERSIONS = [
   "0038_c1_clause_library",
   "0039_c3a_contract_fields",
   "0040_c3b_contract_document",
+  "0041_c4_rules_and_esignature",
+  "0042_c4_generated_document_keys",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

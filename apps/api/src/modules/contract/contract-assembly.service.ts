@@ -121,6 +121,62 @@ export async function addClause(ctx: RequestContext, contractId: string, clauseI
   });
 }
 
+/**
+ * C-4 item 2: the rule engine's own "add clause" path - identical
+ * snapshot mechanics to addClause above, but takes an already-open `tx`
+ * (called from clause-rules.service.ts's runRules, itself already inside
+ * a withTenantDb block - never opens a second transaction) and sets
+ * isFromRule=true / isMandatory=(the rule's own action-is-mandatory flag)
+ * instead of always false. Never adds the SAME clause twice: if this
+ * contract already has a contract_clauses row for `clauseId` (from a
+ * template, a manual add, or an earlier rule run), this is a no-op that
+ * reports "already-present" back to the caller rather than creating a
+ * duplicate or silently skipping without telling anyone - runRules
+ * surfaces this distinction in its own result.
+ */
+export async function addClauseFromRule(
+  tx: TenantTx,
+  input: { companyId: string; contractId: string; userId: string; clauseId: string; isMandatory: boolean },
+): Promise<"added" | "already-present"> {
+  const existing = await listContractClauses(tx, input.companyId, input.contractId);
+  if (existing.some((c) => c.clauseId === input.clauseId)) {
+    return "already-present";
+  }
+
+  const contract = await findContractById(tx, input.companyId, input.contractId);
+  if (!contract) {
+    throw new NotFoundError("Contract not found");
+  }
+  const parties = await listContractParties(tx, input.companyId, input.contractId);
+  const context = await buildContractPlaceholderContext(tx, contract, parties);
+  const { clauseVersionId, resolvedText } = await snapshotClause(tx, input.companyId, input.clauseId, context);
+
+  const nextSortOrder = existing.length === 0 ? 0 : Math.max(...existing.map((c) => c.sortOrder)) + 1;
+
+  const row = await insertContractClause(tx, {
+    contractId: input.contractId,
+    companyId: input.companyId,
+    clauseId: input.clauseId,
+    clauseVersionId,
+    resolvedText,
+    sortOrder: nextSortOrder,
+    isMandatory: input.isMandatory,
+    isFromRule: true,
+    createdBy: input.userId,
+  });
+
+  await insertAuditLog(tx, {
+    companyId: input.companyId,
+    changedBy: input.userId,
+    entity: "contract_clause",
+    entityId: row.id,
+    action: "contract_clause.added_by_rule",
+    after: { contractId: input.contractId, clauseId: input.clauseId, isMandatory: input.isMandatory },
+  });
+
+  return "added";
+}
+
 /** Remove - blocked for a mandatory clause (item 5: "block removing mandatory"), Draft only. */
 export async function removeClause(ctx: RequestContext, contractId: string, contractClauseId: string): Promise<void> {
   const scope = requireTenantScope(ctx);

@@ -52,6 +52,16 @@ export async function findContractById(tx: TenantTx, companyId: string, id: stri
   return row;
 }
 
+/** C-4 item 5 - webhook lookup: a provider's callback only knows its own requestId, never our contract id. */
+export async function findContractByESignatureRequestId(tx: TenantTx, companyId: string, requestId: string): Promise<ContractRow | undefined> {
+  const [row] = await tx
+    .select()
+    .from(contracts)
+    .where(and(eq(contracts.esignatureRequestId, requestId), eq(contracts.companyId, companyId), isNull(contracts.deletedAt)))
+    .limit(1);
+  return row;
+}
+
 export async function updateContractFields(
   tx: TenantTx,
   companyId: string,

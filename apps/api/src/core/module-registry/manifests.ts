@@ -326,6 +326,18 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       permissionEntry("contract", "document", "edit", "Edit a draft contract's header fields"),
       permissionEntry("contract", "document", "assemble", "Assemble a contract's clauses and transition its status"),
       permissionEntry("contract", "document", "generate", "Generate a contract's Word/PDF documents"),
+      // C-4 item 6 - separate from "assemble"/"generate": emailing an
+      // already-generated PDF is a distinct action from producing it.
+      permissionEntry("contract", "document", "email", "Email a contract's generated PDF"),
+      // C-4 item 5 - the stub e-signature abstraction's own action.
+      permissionEntry("contract", "document", "esign", "Send a contract for e-signature"),
+      // C-4 items 1/2 - the rule engine's own CRUD surface, and running
+      // rules against a specific contract (a document-scoped action, not a
+      // rule-scoped one - it mutates that contract's own clause list).
+      permissionEntry("contract", "rule", "read", "View clause rules"),
+      permissionEntry("contract", "rule", "create", "Create a clause rule"),
+      permissionEntry("contract", "rule", "update", "Update a clause rule"),
+      permissionEntry("contract", "document", "run_rules", "Run clause rules against a contract"),
     ],
     // "masters": clauses.division_id FK into core/masters' divisions table
     // (reused as-is from Purchase, per the build doc - not recreated) -
@@ -337,7 +349,13 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     // "storage": a contract template's uploaded .docx file goes through
     // the existing attachments mechanism (contract-generation.service.ts).
     dependsOn: ["auth", "roles", "masters", "field-definitions", "suppliers", "storage"],
-    migrations: ["0038_c1_clause_library", "0039_c3a_contract_fields", "0040_c3b_contract_document"],
+    migrations: [
+      "0038_c1_clause_library",
+      "0039_c3a_contract_fields",
+      "0040_c3b_contract_document",
+      "0041_c4_rules_and_esignature",
+      "0042_c4_generated_document_keys",
+    ],
   },
   {
     key: "inventory",

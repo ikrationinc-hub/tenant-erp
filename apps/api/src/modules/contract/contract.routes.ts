@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireModuleEnabled } from "../../common/middleware/require-module-enabled.js";
 import { requirePermission } from "../../common/middleware/rbac.js";
 import { scopeResolverMiddleware } from "../../common/middleware/scope-resolver.js";
+import * as clauseRulesController from "./clause-rules.controller.js";
 import * as clausesController from "./clauses.controller.js";
 import * as contractTemplatesController from "./contract-templates.controller.js";
 import * as contractsController from "./contracts.controller.js";
@@ -58,6 +59,34 @@ contractsRouter.patch("/:id/approve", scopeResolverMiddleware, requireContractMo
 contractsRouter.patch("/:id/sign", scopeResolverMiddleware, requireContractModule, contractAssemblePermission, contractsController.sign);
 contractsRouter.patch("/:id/close", scopeResolverMiddleware, requireContractModule, contractAssemblePermission, contractsController.close);
 
+// --- C-4 item 4: approval routing + revisions --------------------------------
+contractsRouter.post(
+  "/:id/send-for-approval",
+  scopeResolverMiddleware,
+  requireContractModule,
+  contractAssemblePermission,
+  contractsController.sendForApproval,
+);
+contractsRouter.post("/:id/revise", scopeResolverMiddleware, requireContractModule, contractAssemblePermission, contractsController.revise);
+
+// --- C-4 item 6: email the generated PDF -------------------------------------
+const contractEmailPermission = requirePermission("contract.document.email");
+contractsRouter.post("/:id/email", scopeResolverMiddleware, requireContractModule, contractEmailPermission, contractsController.emailContract);
+
+// --- C-4 item 5: e-signature (stub provider only) ----------------------------
+const contractEsignPermission = requirePermission("contract.document.esign");
+contractsRouter.post(
+  "/:id/send-for-esignature",
+  scopeResolverMiddleware,
+  requireContractModule,
+  contractEsignPermission,
+  contractsController.sendForESignature,
+);
+
+// --- C-4 items 1/2: run the rule engine against a contract -------------------
+const contractRunRulesPermission = requirePermission("contract.document.run_rules");
+contractsRouter.post("/:id/run-rules", scopeResolverMiddleware, requireContractModule, contractRunRulesPermission, contractsController.runRules);
+
 // --- Assembly (item 5) -------------------------------------------------------
 contractsRouter.post("/:id/clauses", scopeResolverMiddleware, requireContractModule, contractAssemblePermission, contractsController.addClause);
 contractsRouter.delete(
@@ -89,6 +118,13 @@ contractsRouter.post(
   contractsController.resnapshot,
 );
 contractsRouter.get("/:id/preview", scopeResolverMiddleware, requireContractModule, contractReadPermission, contractsController.preview);
+contractsRouter.get(
+  "/:id/document-url",
+  scopeResolverMiddleware,
+  requireContractModule,
+  contractReadPermission,
+  contractsController.getDocumentUrl,
+);
 
 // --- Generation (item 5) ------------------------------------------------------
 contractsRouter.post("/:id/generate", scopeResolverMiddleware, requireContractModule, contractGeneratePermission, contractsController.generate);
@@ -120,3 +156,26 @@ contractTemplatesRouter.delete(
   contractEditPermission,
   contractTemplatesController.removeClause,
 );
+contractTemplatesRouter.post(
+  "/:id/generate-default-docx",
+  scopeResolverMiddleware,
+  requireContractModule,
+  contractEditPermission,
+  contractTemplatesController.generateDefaultDocx,
+);
+
+/**
+ * C-4 items 1/2 - the rule engine's own CRUD surface, own top-level router
+ * (mounted at /api/v1/clause-rules), same "own top-level path" precedent as
+ * contractTemplatesRouter. Running rules AGAINST a contract stays on
+ * contractsRouter above (POST /:id/run-rules) since that's a document-
+ * scoped mutation, not a rule-scoped one.
+ */
+const clauseRuleReadPermission = requirePermission("contract.rule.read");
+const clauseRuleCreatePermission = requirePermission("contract.rule.create");
+const clauseRuleUpdatePermission = requirePermission("contract.rule.update");
+
+export const clauseRulesRouter: Router = Router();
+clauseRulesRouter.get("/", scopeResolverMiddleware, requireContractModule, clauseRuleReadPermission, clauseRulesController.list);
+clauseRulesRouter.post("/", scopeResolverMiddleware, requireContractModule, clauseRuleCreatePermission, clauseRulesController.create);
+clauseRulesRouter.patch("/:id", scopeResolverMiddleware, requireContractModule, clauseRuleUpdatePermission, clauseRulesController.update);

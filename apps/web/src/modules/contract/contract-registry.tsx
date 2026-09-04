@@ -4,6 +4,7 @@ import { CONTRACTS_LIST_PATH, ContractsListScreen } from "./ContractsListScreen"
 import { ContractDetailScreen } from "./ContractDetailScreen";
 import { ContractFieldSetupScreen } from "./ContractFieldSetupScreen";
 import { ClauseLibraryScreen } from "./ClauseLibraryScreen";
+import { ClauseRulesScreen } from "./ClauseRulesScreen";
 import { ContractTemplatesScreen } from "./ContractTemplatesScreen";
 
 const DETAIL_PATH_PATTERN = new RegExp(`^${CONTRACTS_LIST_PATH}/([^/]+)$`);
@@ -37,6 +38,8 @@ export function resolveContractScreen(entry: FlatMenuEntry, pathname: string): R
       return <ContractFieldSetupScreen />;
     case "/settings/contract/templates":
       return <ContractTemplatesScreen />;
+    case "/settings/contract/rules":
+      return <ClauseRulesScreen />;
     default:
       return null;
   }

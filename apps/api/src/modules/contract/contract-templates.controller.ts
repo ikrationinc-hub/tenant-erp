@@ -86,3 +86,14 @@ export async function removeClause(req: Request, res: Response, next: NextFuncti
     next(error);
   }
 }
+
+export async function generateDefaultDocx(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ctx = requireContext();
+    const { id } = contractTemplateIdParamsSchema.parse(req.params);
+    const attachment = await contractTemplatesService.generateDefaultDocx(ctx, id);
+    res.status(201).json(attachment);
+  } catch (error) {
+    next(error);
+  }
+}

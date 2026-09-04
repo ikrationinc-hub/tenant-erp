@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildGenerationContext, MONEY_TOKENS } from "../build-context.js";
 import { renderDocx, UnresolvedTemplateTagError } from "../docx-renderer.js";
 import { convertDocxToPdf } from "../pdf-converter.js";
-import { MissingPlaceholderError, resolvePlaceholders } from "../placeholder-resolver.js";
+import { flattenPlaceholderContext, MissingPlaceholderError, resolvePlaceholders, type PlaceholderContext } from "../placeholder-resolver.js";
 import { buildSpikeClauseTemplate, SPIKE_CLAUSE_TEXT } from "../../../test/fixtures/build-clause-template.js";
 
 /**
@@ -80,6 +80,30 @@ describe("C-2 spike: placeholder resolution", () => {
 
     expect(() => resolvePlaceholders(clauseTextWithUnknownToken, incompleteContext)).toThrow(MissingPlaceholderError);
     expect(() => resolvePlaceholders(clauseTextWithUnknownToken, incompleteContext)).toThrow(/commercial\.brokerFee/);
+  });
+});
+
+describe("C-3b whole-contract letterhead: flattenPlaceholderContext", () => {
+  it("flattens every leaf into a dotted key, so a .docx letterhead can reference seller.name/buyer.name directly", () => {
+    const values = flattenPlaceholderContext(REALISTIC_CONTEXT, { moneyTokens: MONEY_TOKENS });
+
+    expect(values["seller.name"]).toBe("Ikration Global LTD");
+    expect(values["buyer.name"]).toBe("Pacific Metals Trading Pte Ltd");
+    expect(values["commercial.rate"]).toBe("8,432.75");
+  });
+
+  it("omits a null leaf (unset party) rather than passing JS null through, so the renderer's nullGetter treats it as missing", () => {
+    const contextWithNoSeller: PlaceholderContext = {
+      seller: { name: null, address: null },
+      buyer: { name: "Pacific Metals Trading Pte Ltd", address: "1 Raffles Place, Singapore" },
+      commercial: { rate: "8432.75", currency: "USD", quantity: "500" },
+      shipment: { port: "Jebel Ali Port", eta: "2026-11-15" },
+      payment: { terms: "Net 30", dueDate: "2026-12-15" },
+    };
+
+    const values = flattenPlaceholderContext(contextWithNoSeller, { moneyTokens: MONEY_TOKENS });
+    expect(values["seller.name"]).toBeUndefined();
+    expect(values["buyer.name"]).toBe("Pacific Metals Trading Pte Ltd");
   });
 });
 

@@ -472,4 +472,30 @@ describe("contract document + assembly (C-3b)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "adding a clause whose text references an unresolvable token is rejected as a clean 422, not an unhandled 500",
+    async () => {
+      const tenant = await seedTenant("missing-placeholder");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+
+      // A real production incident: a clause authored with a literal
+      // "{{placeholder}}" (or any token this contract's context doesn't
+      // provide) must fail loudly and cleanly - never a blank (rule: "a
+      // blank where a price belongs is a legal problem"), and never an
+      // unhandled 500 with a raw stack trace either.
+      const clauseId = await createActiveClause(tenant.schemaName, tenant.companyId, tenant.userId, "Broken Clause", "this {{placeholder}} is test");
+
+      const createRes = await request(app).post("/api/v1/contracts").set("Authorization", authHeader).send({ contractDate: "2026-01-01", divisionId: tenant.divisionId });
+      const contractId = (createRes.body as { id: string }).id;
+
+      const addRes = await request(app).post(`/api/v1/contracts/${contractId}/clauses`).set("Authorization", authHeader).send({ clauseId });
+      expect(addRes.status).toBe(422);
+      const body = addRes.body as { error: { code: string; message: string } };
+      expect(body.error.code).toBe("VALIDATION_ERROR");
+      expect(body.error.message).toContain("placeholder");
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

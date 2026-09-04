@@ -1,8 +1,11 @@
 import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { App as AntApp, Alert, Button, Space, Spin, Typography } from "antd";
+import { CheckCircleFilled, FilePdfOutlined, FileWordOutlined } from "@ant-design/icons";
 import { apiFetch } from "../../core/api/client";
 import { endpoints } from "../../core/api/endpoints";
+import { semantic } from "../../theme/palette";
 
 interface GenerationStatus {
   jobId: string;
@@ -28,6 +31,7 @@ const MAX_POLL_ATTEMPTS = 60;
  */
 export function ContractGenerationPanel({ contractId }: { contractId: string }): ReactElement {
   const { message } = AntApp.useApp();
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<GenerationStatus | null>(null);
   const [generating, setGenerating] = useState(false);
   const pollCountRef = useRef(0);
@@ -50,6 +54,13 @@ export function ContractGenerationPanel({ contractId }: { contractId: string }):
         setGenerating(false);
         if (next.state === "failed") {
           void message.error(next.failedReason ?? "Generation failed");
+        } else {
+          // lastGeneratedDocxKey/PdfKey were just persisted onto the
+          // contract row (contract-generation.service.ts's own
+          // getGenerationJobStatus) - refetch so ContractActionsPanel's
+          // Email/Send for E-signature buttons enable immediately,
+          // without a manual page refresh.
+          void queryClient.invalidateQueries({ queryKey: ["contract", contractId] });
         }
         return;
       }
@@ -80,20 +91,22 @@ export function ContractGenerationPanel({ contractId }: { contractId: string }):
 
   return (
     <Space direction="vertical">
-      <Button loading={generating} onClick={() => void handleGenerate()}>
+      <Button icon={<FileWordOutlined />} loading={generating} onClick={() => void handleGenerate()}>
         Generate Word &amp; PDF
       </Button>
       {generating && !status?.downloadUrls && <Spin size="small" />}
       {status?.state === "failed" && <Alert type="error" showIcon message={status.failedReason ?? "Generation failed"} />}
       {status?.downloadUrls && (
         <Space direction="vertical">
-          <Typography.Text type="success">Generation complete.</Typography.Text>
+          <Typography.Text style={{ color: semantic.success }}>
+            <CheckCircleFilled /> Generation complete.
+          </Typography.Text>
           <Space>
             <a href={status.downloadUrls.docx} target="_blank" rel="noreferrer">
-              Download Word
+              <FileWordOutlined /> Download Word
             </a>
             <a href={status.downloadUrls.pdf} target="_blank" rel="noreferrer">
-              Download PDF
+              <FilePdfOutlined /> Download PDF
             </a>
           </Space>
         </Space>

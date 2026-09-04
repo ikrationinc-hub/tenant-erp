@@ -112,3 +112,41 @@ export function resolvePlaceholders(
 
   return { values };
 }
+
+/**
+ * Whole-contract generation's .docx TEMPLATE is a LETTERHEAD, not a clause -
+ * its own body can reference seller.name/buyer.name/commercial.rate/etc.
+ * directly (docxtemplater's own docx-renderer.ts doc comment: "lets a
+ * template author place {{contractBody}} anywhere in their letterhead/
+ * layout, exactly like every other {{token}} in this module"). Unlike
+ * resolvePlaceholders above (which only resolves tokens it finds by
+ * SCANNING a given string), this flattens every leaf of `context` up
+ * front into dotted keys so ANY of them can be referenced from the .docx
+ * body, wherever the template author puts them - docx-renderer.ts's own
+ * nullGetter (fires on a missing OR null value) is what turns a template
+ * referencing a leg that was never assigned (e.g. {{seller.name}} with no
+ * seller set) into the same loud UnresolvedTemplateTagError a genuinely
+ * unknown tag would - a null leaf is deliberately OMITTED here rather
+ * than passed through as JS null, so both cases funnel through the same
+ * one error path instead of docxtemplater stringifying "null" literally.
+ */
+export function flattenPlaceholderContext(context: PlaceholderContext, options: PlaceholderResolverOptions = {}): Record<string, string> {
+  const moneyTokenSet = new Set(options.moneyTokens ?? []);
+  const values: Record<string, string> = {};
+
+  function walk(node: PlaceholderContextValue, path: string): void {
+    if (node === null) {
+      return;
+    }
+    if (typeof node === "object") {
+      for (const [key, child] of Object.entries(node)) {
+        walk(child, path ? `${path}.${key}` : key);
+      }
+      return;
+    }
+    values[path] = stringifyValue(path, node, moneyTokenSet.has(path));
+  }
+
+  walk(context, "");
+  return values;
+}

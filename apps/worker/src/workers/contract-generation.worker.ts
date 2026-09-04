@@ -2,6 +2,7 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Worker, type Job } from "bullmq";
 import type { Redis } from "ioredis";
 import { CONTRACT_GENERATION_QUEUE_NAME } from "../queues/contract-generation.queue.js";
+import { buildDefaultContractDocx } from "../contract-generation/default-docx-template.js";
 import { generateDocument, type GenerateDocumentResult } from "../contract-generation/generate-document.js";
 import type { PlaceholderContext } from "../contract-generation/placeholder-resolver.js";
 import { env } from "../config/env.js";
@@ -37,7 +38,8 @@ export interface ContractGenerationJobData {
   tenantSchema: string;
   companyId: string;
   clauseText: string;
-  templateStorageKey: string;
+  /** null when the contract has no template, or its template has no .docx uploaded yet - falls back to buildDefaultContractDocx() below instead of reading S3. */
+  templateStorageKey: string | null;
   context: PlaceholderContext;
   moneyTokens: string[];
   filenameBase: string;
@@ -48,7 +50,9 @@ export function createContractGenerationWorker(connection: Redis): Worker<Contra
   const worker = new Worker<ContractGenerationJobData, GenerateDocumentResult>(
     CONTRACT_GENERATION_QUEUE_NAME,
     async (job: Job<ContractGenerationJobData>) => {
-      const templateBuffer = await readObjectAsBuffer(env.S3_BUCKET, job.data.templateStorageKey);
+      const templateBuffer = job.data.templateStorageKey
+        ? await readObjectAsBuffer(env.S3_BUCKET, job.data.templateStorageKey)
+        : buildDefaultContractDocx();
       return generateDocument({
         tenantSchema: job.data.tenantSchema,
         companyId: job.data.companyId,

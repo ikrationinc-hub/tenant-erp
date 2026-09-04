@@ -7,7 +7,7 @@ import { listAttachmentsForEntity } from "../attachments/attachments.repository.
 import { CONTRACT_MONEY_TOKENS, buildContractPlaceholderContext } from "./contract-context.js";
 import { listContractClauses } from "./contract-clauses.repository.js";
 import { listContractParties } from "./contract-parties.repository.js";
-import { findContractById } from "./contracts.repository.js";
+import { findContractById, updateContractFields } from "./contracts.repository.js";
 
 /**
  * C-3b item 5 ("generate Word/PDF - C-2's worker job"): the API-side
@@ -42,17 +42,15 @@ export interface GenerationJobHandle {
  * template's file is just an attachment like any other (see ADR 0023).
  * The most recently uploaded one wins if more than one was ever attached
  * (re-uploading replaces which file generation uses, without needing a
- * delete-then-upload dance).
+ * delete-then-upload dance). Returns null (never throws) when nothing has
+ * been uploaded yet - the caller falls back to the worker's built-in
+ * default shell rather than blocking generation.
  */
-async function findTemplateStorageKey(ctx: RequestContext, templateId: string): Promise<string> {
+async function findTemplateStorageKey(ctx: RequestContext, templateId: string): Promise<string | null> {
   const page = await withTenantDb(ctx, (tx) =>
     listAttachmentsForEntity(tx, ctx.tenantScope?.companyId ?? "", { entity: "contract_template", entityId: templateId, page: 1, pageSize: 1 }),
   );
-  const attachment = page.items[0];
-  if (!attachment) {
-    throw new ConflictError("This contract's template has no uploaded .docx file yet - upload one before generating");
-  }
-  return attachment.storageKey;
+  return page.items[0]?.storageKey ?? null;
 }
 
 /** Enqueues the whole-contract generation job - every one of this contract's OWN snapshotted contract_clauses.resolved_text rows, concatenated in sortOrder, becomes the "clauseText" the worker substitutes into the template's single content placeholder. Already-resolved text (no {{tokens}} survive a snapshot) means the worker's own resolvePlaceholders call is a no-op pass-through for this path - see generate-document.ts's own doc comment. */
@@ -64,9 +62,6 @@ export async function enqueueGeneration(ctx: RequestContext, contractId: string)
     if (!contractRow) {
       throw new NotFoundError("Contract not found");
     }
-    if (!contractRow.templateId) {
-      throw new ConflictError("This contract has no template - a template's uploaded .docx file is required to generate");
-    }
     const clauseRows = await listContractClauses(tx, scope.companyId, contractId);
     const partyRows = await listContractParties(tx, scope.companyId, contractId);
     return { contract: contractRow, clauses: clauseRows, parties: partyRows };
@@ -75,12 +70,17 @@ export async function enqueueGeneration(ctx: RequestContext, contractId: string)
   if (clauses.length === 0) {
     throw new ConflictError("This contract has no assembled clauses to generate");
   }
-  // Non-null by the check above (throws if missing) - re-asserted for TS.
-  const templateId = contract.templateId;
-  if (!templateId) {
-    throw new ConflictError("This contract has no template - a template's uploaded .docx file is required to generate");
-  }
-  const templateStorageKey = await findTemplateStorageKey(ctx, templateId);
+  /**
+   * A standalone contract (no template) or a template with no .docx
+   * attached yet both fall back to the worker's own built-in default
+   * shell (see apps/worker's default-docx-template.ts) rather than
+   * blocking generation outright - "Generate Word & PDF" should always
+   * produce something usable, even with zero template setup. This is a
+   * deliberate UX floor, not a substitute for a real letterhead: a
+   * template author can still upload/replace a proper .docx at any time
+   * (Contract Templates screen), which future generations then use.
+   */
+  const templateStorageKey = contract.templateId ? await findTemplateStorageKey(ctx, contract.templateId) : null;
 
   // Every clause is already-resolved snapshot text (no {{tokens}} remain -
   // that's the whole point of THE SNAPSHOT, item 4). The whole-contract
@@ -120,16 +120,37 @@ export interface GenerationJobStatus {
   failedReason?: string;
 }
 
-export async function getGenerationJobStatus(_ctx: RequestContext, jobId: string): Promise<GenerationJobStatus> {
+/**
+ * `contractId` is used ONLY to persist the durable copy of the result onto
+ * the contract row (contracts.lastGeneratedDocxKey/PdfKey) the first time
+ * this status is observed as completed - BullMQ job state ages out and is
+ * never the durable source of truth. Re-fetching an already-persisted
+ * completed status just re-writes the same values (idempotent, no guard
+ * needed).
+ */
+export async function getGenerationJobStatus(ctx: RequestContext, contractId: string, jobId: string): Promise<GenerationJobStatus> {
+  const scope = requireTenantScope(ctx);
   const job = await Job.fromId(queue, jobId);
   if (!job) {
     throw new NotFoundError("Generation job not found");
   }
   const state = await job.getState();
+
+  if (state === "completed") {
+    const result = job.returnvalue as { docxStorageKey: string; pdfStorageKey: string };
+    await withTenantDb(ctx, (tx) =>
+      updateContractFields(tx, scope.companyId, contractId, {
+        lastGeneratedDocxKey: result.docxStorageKey,
+        lastGeneratedPdfKey: result.pdfStorageKey,
+        updatedBy: scope.userId,
+      }),
+    );
+    return { jobId, state, result };
+  }
+
   return {
     jobId,
     state,
-    ...(state === "completed" ? { result: job.returnvalue as { docxStorageKey: string; pdfStorageKey: string } } : {}),
     ...(state === "failed" ? { failedReason: job.failedReason } : {}),
   };
 }

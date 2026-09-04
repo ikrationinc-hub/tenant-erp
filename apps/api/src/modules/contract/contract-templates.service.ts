@@ -1,9 +1,13 @@
+import { Readable } from "node:stream";
 import type { RequestContext } from "../../common/context/request-context.js";
 import { ConflictError, NotFoundError, UnauthorizedError } from "../../common/errors/index.js";
 import { insertAuditLog } from "../../core/audit/write.js";
 import type { PaginatedRows } from "../../core/masters/types.js";
 import { withTenantDb } from "../../database/get-db.js";
+import { uploadAttachment } from "../attachments/attachments.service.js";
+import type { AttachmentRow } from "../attachments/attachments.repository.js";
 import { findClauseById } from "./clauses.repository.js";
+import { buildDefaultContractDocx } from "./default-docx-template.js";
 import {
   findContractTemplateById,
   insertContractTemplate,
@@ -17,6 +21,9 @@ import {
   type TemplateClauseWithTitle,
 } from "./contract-templates.repository.js";
 import type { AddTemplateClauseInput, CreateContractTemplateInput, UpdateContractTemplateInput } from "./contract-templates.validator.js";
+
+export const TEMPLATE_FILE_ENTITY = "contract_template";
+export const TEMPLATE_FILE_FIELD_KEY = "templateFile";
 
 function requireTenantScope(ctx: RequestContext) {
   const scope = ctx.tenantScope;
@@ -147,6 +154,35 @@ export async function addClause(ctx: RequestContext, templateId: string, input: 
     });
 
     return listTemplateClauses(tx, scope.companyId, templateId);
+  });
+}
+
+/**
+ * "Generate starter .docx" (Templates screen) - builds the same minimal
+ * OOXML shell contract-generation.service.ts's no-template fallback would
+ * use, but ATTACHES it to this template via the existing attachments
+ * pipeline (entity="contract_template", fieldKey="templateFile" - see
+ * that constant's own doc comment) exactly as a manual upload would, so
+ * it goes through the real virus-scan/storage path and immediately
+ * becomes the template's active file. The user can then download and
+ * customize it in Word before re-uploading, or use it as-is.
+ */
+export async function generateDefaultDocx(ctx: RequestContext, templateId: string): Promise<AttachmentRow> {
+  const scope = requireTenantScope(ctx);
+
+  const template = await withTenantDb(ctx, (tx) => findContractTemplateById(tx, scope.companyId, templateId));
+  if (!template) {
+    throw new NotFoundError("Contract template not found");
+  }
+
+  const buffer = buildDefaultContractDocx();
+  return uploadAttachment(ctx, {
+    entity: TEMPLATE_FILE_ENTITY,
+    entityId: templateId,
+    fieldKey: TEMPLATE_FILE_FIELD_KEY,
+    filename: `${template.name.replace(/[^\w.-]+/g, "_")}-starter.docx`,
+    contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    stream: Readable.from(buffer),
   });
 }
 
