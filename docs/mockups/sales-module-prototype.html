@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ikration — Sales Module Prototype</title>
+<style>
+  :root{--navy:#1e2a3a;--navy-dark:#18222f;--navy-hover:#2a3a4f;--accent:#3b5bdb;--accent-hover:#324ec0;--accent-soft:#eef2ff;
+    --teal:#0ca678;--teal-bg:#e6f7f1;--amber:#f59f00;--amber-bg:#fff4e0;--red:#e03131;--red-bg:#fff5f5;--purple:#7048e8;--purple-bg:#f3f0ff;
+    --ink:#1f2937;--muted:#6b7280;--faint:#9ca3af;--line:#e5e7eb;--bg:#f4f6f8;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);font-size:14px;line-height:1.5}
+  .app{display:flex;height:100vh;overflow:hidden}
+  .sidebar{width:220px;background:var(--navy);color:#cbd5e1;display:flex;flex-direction:column;flex-shrink:0}
+  .sidebar-head{height:56px;display:flex;align-items:center;padding:0 18px;color:#fff;font-weight:700;font-size:16px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .nav{padding:8px 0;overflow-y:auto;flex:1}
+  .nav-label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#5f7286;padding:14px 20px 5px;font-weight:600}
+  .nav-item{display:flex;align-items:center;gap:11px;padding:9px 20px;color:#cbd5e1;cursor:pointer;font-size:13.5px;border-left:3px solid transparent;user-select:none}
+  .nav-item:hover{background:var(--navy-hover);color:#fff}
+  .nav-item.active{background:var(--navy-dark);color:#fff;border-left-color:var(--accent)}
+  .nav-item .ico{width:16px;text-align:center;opacity:.85}
+  .nav-item .ph{margin-left:auto;font-size:9.5px;background:var(--navy-hover);color:#8ea1b8;padding:1px 6px;border-radius:8px;font-weight:700}
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 22px;gap:16px;flex-shrink:0}
+  .brand{font-weight:700;font-size:14px}.spacer{flex:1}
+  .pill{border:1px solid var(--line);border-radius:6px;padding:5px 12px;font-size:13px;color:var(--muted);cursor:pointer}
+  .user-chip{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px}
+  .avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+  .content{flex:1;overflow-y:auto;padding:24px 28px}
+  .page-title{font-size:22px;font-weight:700}.page-sub{color:var(--faint);font-size:13px;margin-top:2px}
+  .page-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
+  .crumb{font-size:12.5px;color:var(--muted);margin-bottom:6px}.crumb a{color:var(--accent);cursor:pointer;text-decoration:none}
+  .btn{border:none;border-radius:7px;padding:9px 16px;font-size:13.5px;font-weight:600;cursor:pointer}
+  .btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent-hover)}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+  .btn-teal{background:var(--teal);color:#fff}.btn-teal:hover{opacity:.9}
+  .btn-sm{padding:6px 12px;font-size:12.5px}.btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn-row{display:flex;gap:10px;flex-wrap:wrap}
+  .filters{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .filters input,.filters select{border:1px solid var(--line);border-radius:6px;padding:8px 11px;font-size:13px;background:#fff;min-width:120px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:11px 16px;border-bottom:1px solid var(--line);background:#fafbfc}
+  td{padding:12px 16px;border-bottom:1px solid #f1f3f5;font-size:13.5px}
+  tr:last-child td{border-bottom:none}tr:hover td{background:#fafcff}
+  .mono{font-family:"SF Mono",Menlo,monospace;font-size:12.5px}
+  .link{color:var(--accent);cursor:pointer;font-weight:500}.link.danger{color:var(--red)}
+  .tag{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:12px;font-size:11.5px;font-weight:600}
+  .tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  .tag-green{background:var(--teal-bg);color:var(--teal)}.tag-gray{background:#f1f3f5;color:var(--muted)}
+  .tag-amber{background:var(--amber-bg);color:var(--amber)}.tag-blue{background:var(--accent-soft);color:var(--accent)}
+  .tag-purple{background:var(--purple-bg);color:var(--purple)}.tag-red{background:var(--red-bg);color:var(--red)}.tag.nodot::before{display:none}
+  .hidden{display:none !important}
+  .note{background:var(--accent-soft);border:1px solid #dbe2ff;border-radius:8px;padding:10px 14px;font-size:12.5px;color:#3b4a6b;margin-bottom:18px}
+  .note b{color:var(--accent)}
+  .note.warn{background:var(--amber-bg);border-color:#ffe3a3;color:#7a5800;margin-bottom:0}.note.warn b{color:var(--amber)}
+  .note.phase{background:#f8f9fb;border-color:var(--line);color:var(--muted);display:flex;align-items:center;gap:8px}
+  .note.phase b{color:var(--ink)}
+  .kpis{display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+  .kpi{background:#fff;border:1px solid var(--line);border-left:3px solid var(--faint);border-radius:8px;padding:12px 18px;min-width:130px}
+  .kpi.b-blue{border-left-color:var(--accent)}.kpi.b-amber{border-left-color:var(--amber)}.kpi.b-teal{border-left-color:var(--teal)}.kpi.b-red{border-left-color:var(--red)}.kpi.b-purple{border-left-color:var(--purple)}
+  .kpi .k-label{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .kpi .k-val{font-size:24px;font-weight:700;margin-top:3px}.kpi .k-sub{font-size:11px;color:var(--faint);margin-top:2px}
+  .sec{background:#fff;border:1px solid var(--line);border-radius:8px;margin-bottom:16px}
+  .sec-head{padding:12px 18px;border-bottom:1px solid #f1f3f5;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:space-between}
+  .sec-body{padding:16px 18px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  .fld{margin-bottom:12px}.fld label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600}
+  .fld label .req{color:var(--red)}
+  .fld input,.fld select,.fld textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 11px;font-size:13px;background:#fff;font-family:inherit}
+  .fld .val{padding:8px 0;font-size:13.5px}
+  .steps{display:flex;gap:0}
+  .step{flex:1;text-align:center;position:relative;padding-bottom:4px}
+  .step .sc{width:28px;height:28px;border-radius:50%;background:#e9ecef;color:var(--muted);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;margin:0 auto 6px}
+  .step .sl{font-size:11.5px;color:var(--muted)}
+  .step.done .sc{background:var(--teal);color:#fff}.step.done .sl{color:var(--teal);font-weight:600}
+  .step.current .sc{background:var(--accent);color:#fff}.step.current .sl{color:var(--accent);font-weight:700}
+  .step::after{content:"";position:absolute;top:14px;left:50%;width:100%;height:2px;background:#e9ecef;z-index:-1}
+  .step:last-child::after{display:none}.step.done::after{background:var(--teal)}
+  .state-banner{border-radius:8px;padding:11px 16px;margin-bottom:16px;font-size:13px;display:flex;align-items:center;gap:10px}
+  .state-banner .stitle{font-weight:700}
+  .sb-gray{background:#f1f3f5;color:#42506a}.sb-amber{background:var(--amber-bg);color:#7a5800}.sb-blue{background:var(--accent-soft);color:#324ec0}.sb-purple{background:var(--purple-bg);color:#5a3ec0}.sb-teal{background:var(--teal-bg);color:#0a7a5a}
+  .demo-hint{margin-left:auto;font-size:11.5px;opacity:.7;font-style:italic}
+  .drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:50}.drawer-bg.show{display:block}
+  .drawer{position:fixed;top:0;right:0;height:100vh;width:660px;background:#fff;box-shadow:-4px 0 24px rgba(0,0,0,.12);transform:translateX(100%);transition:transform .2s;z-index:51;display:flex;flex-direction:column}
+  .drawer.show{transform:translateX(0)}
+  .drawer-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .drawer-head .dt{font-weight:700;font-size:15px}
+  .drawer-body{padding:18px 20px;overflow-y:auto;flex:1}
+  .drawer-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end}
+  .x{cursor:pointer;color:var(--faint);font-size:18px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:80;opacity:0;transition:opacity .2s;pointer-events:none;max-width:560px;text-align:center}
+  .toast.show{opacity:1}.toast.err{background:var(--red)}
+  .lot-pick{border:1px solid var(--line);border-radius:8px;padding:11px 13px;margin-bottom:9px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .lot-pick.sel{border-color:var(--accent);background:var(--accent-soft)}
+  .lot-pick.empty{opacity:.5}
+  .lot-pick .lp-l{font-size:13px}.lot-pick .lp-l .sub{font-size:11.5px;color:var(--faint);margin-top:2px}
+  .lot-pick input{width:90px;border:1px solid var(--line);border-radius:6px;padding:7px 9px;font-size:13px}
+  .profit-box{background:var(--teal-bg);border:1px solid #bfe9d8;border-radius:8px;padding:14px 18px;display:flex;gap:26px;flex-wrap:wrap}
+  .profit-box.neg{background:var(--red-bg);border-color:#f5c2c2}
+  .pb-i .pb-l{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+  .pb-i .pb-v{font-size:19px;font-weight:700;margin-top:2px}.pb-i .pb-v.pos{color:var(--teal)}.pb-i .pb-v.bad{color:var(--red)}
+  .minibar{height:8px;background:#eef2ff;border-radius:4px;overflow:hidden;margin-top:8px}.minibar>span{display:block;height:100%;background:var(--accent)}
+  .bar-lbl{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px}
+  .credit-warn{background:var(--amber-bg);border:1px solid #ffe3a3;border-radius:8px;padding:10px 14px;font-size:12.5px;color:#7a5800;margin-top:10px}
+  .credit-warn b{color:var(--amber)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-head">Ikration</div>
+    <nav class="nav" id="nav">
+      <div class="nav-item" data-page="dashboard"><span class="ico">&#9673;</span> Dashboard <span class="ph">S-6</span></div>
+      <div class="nav-label">Sales</div>
+      <div class="nav-item active" data-page="so"><span class="ico">&#128176;</span> Sales Orders <span class="ph">S-3</span></div>
+      <div class="nav-item" data-page="deliveries"><span class="ico">&#128666;</span> Deliveries <span class="ph">S-4</span></div>
+      <div class="nav-item" data-page="invoices"><span class="ico">&#129534;</span> Invoices &amp; Payments <span class="ph">S-5</span></div>
+      <div class="nav-label">Records</div>
+      <div class="nav-item" data-page="customers"><span class="ico">&#128100;</span> Customers <span class="ph">S-1</span></div>
+      <div class="nav-item" data-page="inventory"><span class="ico">&#128230;</span> Inventory (stock)</div>
+    </nav>
+  </aside>
+  <div class="main">
+    <div class="topbar"><span class="brand">Ikration ERP &middot; Sales</span><span class="spacer"></span><span class="pill">Cloud &#9662;</span><span class="user-chip"><span class="avatar">M</span> Mustali</span></div>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+<div class="drawer-bg" id="drawerBg" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer"><div class="drawer-head"><span class="dt" id="drawerTitle"></span><span class="x" onclick="closeDrawer()">&#10005;</span></div><div class="drawer-body" id="drawerBody"></div><div class="drawer-foot" id="drawerFoot"></div></div>
+<div class="toast" id="toast"></div>
+<script>
+/* ============ DATA (lots come from Purchase; Sales consumes them) ============ */
+var LOTS=[
+  {lot:'LOT-0001',item:'Copper Cathode',grade:'Grade A',po:'PO-2026-0001',landed:412.00,received:500,reserved:0,delivered:0,wh:'Head Office'},
+  {lot:'LOT-0002',item:'HMS 1&2 Scrap',grade:'80:20',po:'PO-2026-0001',landed:305.50,received:300,reserved:0,delivered:0,wh:'Head Office'},
+  {lot:'LOT-0003',item:'Copper Cathode',grade:'Grade A',po:'PO-2026-0002',landed:418.75,received:150,reserved:0,delivered:0,wh:'Jebel Ali'}
+];
+var CUSTOMERS=[
+  {code:'CUS-001',name:'Northgate Metals',type:'Export',country:'India',terms:'30 Days',ccy:'USD',limit:500000,outstanding:0,status:'Active'},
+  {code:'CUS-002',name:'Gulf Traders',type:'Local',country:'UAE',terms:'Advance',ccy:'AED',limit:200000,outstanding:185000,status:'Active'}
+];
+var SALES=[]; // sales orders
+var DELIVERIES=[], INVOICES=[], PAYMENTS=[];
+var SEQ={so:0,dn:0,inv:0,pay:0,cus:2};
+function avail(l){return l.received-l.reserved-l.delivered;}
+function money(n){return (n<0?'-':'')+'USD '+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function num(n){return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+/* ============ NAV / RENDER ============ */
+var content=document.getElementById('content');var PAGES={};
+function showPage(p){content.innerHTML=PAGES[p]?PAGES[p]():'';document.querySelectorAll('.nav-item').forEach(function(n){n.classList.toggle('active',n.getAttribute('data-page')===p)});window.scrollTo(0,0);}
+document.getElementById('nav').addEventListener('click',function(e){var it=e.target.closest('.nav-item');if(it)showPage(it.getAttribute('data-page'));});
+function openDrawer(t,b,f){document.getElementById('drawerTitle').innerHTML=t;document.getElementById('drawerBody').innerHTML=b;document.getElementById('drawerFoot').innerHTML=f;document.getElementById('drawerBg').classList.add('show');document.getElementById('drawer').classList.add('show');}
+function closeDrawer(){document.getElementById('drawerBg').classList.remove('show');document.getElementById('drawer').classList.remove('show');}
+function toast(m,err){var t=document.getElementById('toast');t.textContent=m;t.className='toast show'+(err?' err':'');setTimeout(function(){t.className='toast'+(err?' err':'')},2600);}
+function tg(s){var m={Approved:'amber',Draft:'gray',Delivered:'teal',Closed:'green',Partial:'blue',Pending:'gray',Paid:'green',Open:'amber',Active:'green'};return '<span class="tag tag-'+(m[s]||'gray')+'">'+s+'</span>';}
+function head(t,s,btn){return '<div class="page-head"><div><div class="page-title">'+t+'</div><div class="page-sub">'+s+'</div></div>'+(btn||'')+'</div>';}
+function crumb(b,pg,c){return '<div class="crumb"><a onclick="showPage(\''+pg+'\')">'+b+'</a> &rsaquo; '+c+'</div>';}
+function kpis(a){return '<div class="kpis">'+a.map(function(k){return '<div class="kpi '+k[0]+'"><div class="k-label">'+k[1]+'</div><div class="k-val">'+k[2]+'</div>'+(k[3]?'<div class="k-sub">'+k[3]+'</div>':'')+'</div>'}).join('')+'</div>';}
+function fld(l,v,mono){return '<div class="fld"><label>'+l+'</label><div class="val '+(mono?'mono':'')+'">'+v+'</div></div>';}
+function lifecycle(labels,idx){var h='<div class="card" style="padding:14px 22px;margin-bottom:16px"><div class="steps">';for(var i=0;i<labels.length;i++){var cls=i<idx?'done':(i===idx?'current':'');h+='<div class="step '+cls+'"><div class="sc">'+(i<idx?'&#10003;':(i+1))+'</div><div class="sl">'+labels[i]+'</div></div>';}return h+'</div></div>';}
+
+/* ============ S-1: CUSTOMERS ============ */
+PAGES.customers=function(){
+  var rows=CUSTOMERS.map(function(c){
+    var over=c.outstanding>0;
+    return '<tr><td class="mono">'+c.code+'</td><td>'+c.name+'</td><td>'+c.type+'</td><td>'+c.country+'</td><td>'+c.terms+'</td><td class="mono">'+money(c.limit)+'</td><td class="mono" style="'+(over?'color:var(--amber);font-weight:600':'')+'">'+money(c.outstanding)+'</td><td>'+tg(c.status)+'</td><td><span class="link">Edit</span></td></tr>';
+  }).join('');
+  return '<div class="note phase"><b>S-1 · Customer master</b> — mirrors the Supplier master. Credit limit &amp; outstanding shown here feed the credit-limit warning on new sales.</div>'+
+  head('Customers',CUSTOMERS.length+' customers','<button class="btn btn-primary" onclick="newCustomer()">+ New Customer</button>')+
+  '<div class="filters"><input placeholder="Search"><select><option>Status</option></select><select><option>Type</option></select></div>'+
+  '<div class="card"><table><thead><tr><th>Code</th><th>Name</th><th>Type</th><th>Country</th><th>Terms</th><th>Credit Limit</th><th>Outstanding</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+};
+function newCustomer(){
+  openDrawer('New Customer',
+    '<div class="note">Fields per Sub Tab 1. credit_limit stored as decimal.</div>'+
+    '<div class="fld"><label>Customer Name <span class="req">*</span></label><input id="c_name" placeholder="e.g. Emirates Steel"></div>'+
+    '<div class="grid2"><div class="fld"><label>Type</label><select id="c_type"><option>Local</option><option>Export</option></select></div>'+
+    '<div class="fld"><label>Country</label><select id="c_country"><option>UAE</option><option>India</option><option>Oman</option></select></div></div>'+
+    '<div class="grid2"><div class="fld"><label>Payment Terms</label><select id="c_terms"><option>30 Days</option><option>60 Days</option><option>Advance</option></select></div>'+
+    '<div class="fld"><label>Default Currency</label><select id="c_ccy"><option>USD</option><option>AED</option><option>EUR</option></select></div></div>'+
+    '<div class="grid2"><div class="fld"><label>Credit Limit</label><input id="c_limit" type="number" value="250000"></div>'+
+    '<div class="fld"><label>Salesperson</label><select><option>Mustali</option></select></div></div>',
+    '<button class="btn btn-ghost" onclick="closeDrawer()">Cancel</button><button class="btn btn-primary" onclick="saveCustomer()">Create Customer</button>');
+}
+function saveCustomer(){
+  var name=document.getElementById('c_name').value.trim();
+  if(!name){toast('Customer name is required',true);return;}
+  if(CUSTOMERS.some(function(c){return c.name.toLowerCase()===name.toLowerCase()})){toast('Duplicate customer name — blocked (FR-005 mirror)',true);return;}
+  SEQ.cus++;var code='CUS-'+String(SEQ.cus).padStart(3,'0');
+  CUSTOMERS.push({code:code,name:name,type:document.getElementById('c_type').value,country:document.getElementById('c_country').value,terms:document.getElementById('c_terms').value,ccy:document.getElementById('c_ccy').value,limit:parseFloat(document.getElementById('c_limit').value)||0,outstanding:0,status:'Active'});
+  closeDrawer();showPage('customers');toast(code+' created');
+}
+
+/* ============ INVENTORY VIEW (shared stock) ============ */
+PAGES.inventory=function(){
+  var rows=LOTS.map(function(l){var a=avail(l);var pct=Math.round((l.reserved+l.delivered)/l.received*100);
+    return '<tr><td class="mono">'+l.lot+'</td><td>'+l.item+'</td><td>'+l.grade+'</td><td class="mono">'+l.po+'</td><td class="mono">'+l.received+'</td><td class="mono">'+l.reserved+'</td><td class="mono">'+l.delivered+'</td><td class="mono" style="font-weight:700;color:'+(a>0?'var(--teal)':'var(--faint)')+'">'+a+'</td><td style="min-width:90px"><div class="minibar"><span style="width:'+pct+'%"></span></div></td><td class="mono">'+num(l.landed)+'</td></tr>';
+  }).join('');
+  var tA=LOTS.reduce(function(s,l){return s+avail(l)},0),tR=LOTS.reduce(function(s,l){return s+l.reserved},0),tD=LOTS.reduce(function(s,l){return s+l.delivered},0);
+  return '<div class="note">Lots arrive from <b>Purchase Receipts</b> (shown here as existing stock). Sales <b>reserve</b> on approval and <b>consume</b> on delivery. Available = Received − Reserved − Delivered.</div>'+
+  head('Inventory','Lot stock available to Sales','')+
+  kpis([['b-teal','Available (MT)',tA],['b-blue','Reserved (MT)',tR],['b-purple','Delivered (MT)',tD]])+
+  '<div class="card"><table><thead><tr><th>Lot</th><th>Item</th><th>Grade</th><th>From PO</th><th>Received</th><th>Reserved</th><th>Delivered</th><th>Available</th><th>Utilization</th><th>Landed</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+};
+/* ============ S-3: SALES ORDERS (list + detail) ============ */
+PAGES.so=function(){
+  var rows=SALES.length?SALES.map(function(s){
+    return '<tr><td class="mono">'+s.no+'</td><td>'+tg(s.status)+'</td><td>'+s.customer+'</td><td class="mono">'+s.date+'</td><td class="mono">'+s.qty+' MT</td><td class="mono">'+money(s.value)+'</td><td class="mono" style="color:'+(s.gp>=0?'var(--teal)':'var(--red)')+';font-weight:700">'+money(s.gp)+'</td><td class="mono">'+s.gpp+'</td><td>'+delTag(s)+'</td><td><span class="link" onclick="openSO(\''+s.no+'\')">Open</span></td></tr>';
+  }).join(''):'<tr><td colspan="10" style="color:var(--faint);text-align:center;padding:26px">No sales yet — click <b>+ New Sale</b> to allocate lots and see live profit</td></tr>';
+  var gpTotal=SALES.reduce(function(s,x){return s+x.gp},0);
+  return '<div class="note phase"><b>S-3 · Sales Orders</b> — mirrors the Purchase 4-doc lifecycle. Approval <b>reserves</b> lots via the S-2 engine. Profit comes from S-2 specific-lot costing.</div>'+
+  head('Sales Orders',SALES.length+' orders','<button class="btn btn-primary" onclick="newSO()">+ New Sale</button>')+
+  kpis([['b-blue','Total',SALES.length],['b-amber','Approved',SALES.filter(function(s){return s.status==='Approved'}).length],['b-teal','Gross Profit',SALES.length?num(gpTotal):'—']])+
+  '<div class="filters"><input placeholder="Search"><select><option>Status</option></select><select><option>Customer</option></select><select><option>Delivered</option></select></div>'+
+  '<div class="card"><table><thead><tr><th>SO No.</th><th>Status</th><th>Customer</th><th>Date</th><th>Qty</th><th>Value</th><th>Gross Profit</th><th>Margin</th><th>Delivery</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+};
+function delTag(s){var d=s.delivered_qty||0;if(d===0)return '<span class="tag tag-gray nodot">Not Delivered</span>';if(d<s.qty)return '<span class="tag tag-blue">Partial</span>';return '<span class="tag tag-teal">Delivered</span>';}
+function openSO(no){
+  var s=SALES.filter(function(x){return x.no===no})[0];
+  var lotRows=s.allocs.map(function(a){return '<tr><td class="mono">'+a.lot+'</td><td>'+a.item+'</td><td class="mono">'+a.qty+' MT</td><td class="mono">'+num(a.landed)+'</td><td class="mono">'+money(a.qty*a.landed)+'</td></tr>'}).join('');
+  var stepIdx = s.status==='Draft'?0 : (s.delivered_qty>=s.qty?3 : (s.delivered_qty>0?2:1));
+  var realized = s.delivered_qty>0;
+  content.innerHTML=crumb('Sales Orders','so',s.no)+
+    '<div class="page-head"><div><div class="page-title">'+s.no+' &nbsp;'+tg(s.status)+'</div><div class="page-sub">'+s.customer+' &middot; Scrap</div></div>'+
+    '<div class="btn-row"><button class="btn btn-ghost btn-sm">Preview</button>'+
+    (s.status==='Approved'&&s.delivered_qty<s.qty?'<button class="btn btn-teal btn-sm" onclick="doDelivery(\''+no+'\')">&#128666; Deliver</button>':'')+
+    (s.status==='Approved'?'<button class="btn btn-ghost btn-sm" onclick="doInvoice(\''+no+'\')">Create Invoice</button>':'')+'</div></div>'+
+    lifecycle(['Draft','Approved','Delivered','Invoiced','Paid'],stepIdx)+
+    (s.creditWarn?'<div class="state-banner sb-amber"><span class="stitle">Credit limit exceeded</span><span>This sale put '+s.customer+' over their credit limit — allowed with a warning, not blocked (client rule).</span></div>':'')+
+    '<div class="sec"><div class="sec-head">Header</div><div class="sec-body grid3">'+fld('SO No.',s.no,1)+fld('Customer',s.customer)+fld('Date',s.date,1)+fld('Sales Rate',num(s.rate)+' /MT',1)+fld('Quantity',s.qty+' MT',1)+fld('Value',money(s.value),1)+'</div></div>'+
+    '<div class="sec"><div class="sec-head">Allocated Lots <span class="tag tag-blue nodot">reserved from inventory · S-2</span></div><div class="sec-body" style="padding:0"><table><thead><tr><th>Lot</th><th>Item</th><th>Qty</th><th>Landed Rate</th><th>Lot Cost</th></tr></thead><tbody>'+lotRows+'</tbody></table></div></div>'+
+    '<div class="sec"><div class="sec-head">Profit — specific-lot costing <span class="tag '+(realized?'tag-green':'tag-amber')+' nodot">'+(realized?'Realized':'Unrealized')+'</span></div><div class="sec-body">'+
+    '<div class="profit-box'+(s.gp<0?' neg':'')+'">'+
+    pbi('Sales Value',money(s.value))+pbi('Total Cost',money(s.cost))+pbi('Gross Profit',money(s.gp),s.gp>=0?'pos':'bad')+pbi('Margin',s.gpp,s.gp>=0?'pos':'bad')+
+    '</div><div style="font-size:11.5px;color:var(--faint);margin-top:10px">Cost = sum of allocated (qty × lot landed rate). Unrealized until delivered; realized on delivery.</div></div></div>';
+}
+function pbi(l,v,cls){return '<div class="pb-i"><div class="pb-l">'+l+'</div><div class="pb-v '+(cls||'')+'">'+v+'</div></div>';}
+
+/* ---- S-2 ENGINE (allocation + costing), driven by the New Sale drawer ---- */
+var ALLOC={};
+function newSO(){
+  ALLOC={};
+  var lotsHTML=LOTS.map(function(l){var a=avail(l);
+    if(a<=0)return '<div class="lot-pick empty"><div class="lp-l"><b>'+l.lot+'</b> · '+l.item+'<div class="sub">Fully allocated — 0 available</div></div><input disabled placeholder="0"></div>';
+    return '<div class="lot-pick" id="lp-'+l.lot+'"><div class="lp-l"><b>'+l.lot+'</b> · '+l.item+' ('+l.grade+')<div class="sub">Available '+a+' MT · landed '+num(l.landed)+' /MT · '+l.wh+'</div></div>'+
+      '<input type="number" min="0" max="'+a+'" placeholder="qty MT" oninput="allocChange(\''+l.lot+'\',this.value,'+a+','+l.landed+',\''+l.item+'\')"></div>';
+  }).join('');
+  openDrawer('New Sale — allocate lots (S-2 engine)',
+    '<div class="note">Pick lots &amp; quantities. Profit computes live from <b>specific-lot</b> cost. Over-allocating a lot is <b>blocked</b> — the concurrency-safe reservation in the real build.</div>'+
+    '<div class="grid2"><div class="fld"><label>Customer <span class="req">*</span></label><select id="s_cust">'+CUSTOMERS.map(function(c){return '<option value="'+c.code+'">'+c.name+'</option>'}).join('')+'</select></div>'+
+    '<div class="fld"><label>Sales Rate (USD/MT) <span class="req">*</span></label><input id="s_rate" type="number" value="1155" oninput="allocRecalc()"></div></div>'+
+    '<div class="fld"><label>Pricing Type</label><select><option>Fixed Price</option><option>LME Sale (× agreed %)</option></select></div>'+
+    '<div class="fld"><label>Allocate from purchase lots <span class="req">*</span></label>'+lotsHTML+'</div>'+
+    '<div id="s_profit"></div><div id="s_credit"></div>',
+    '<button class="btn btn-ghost" onclick="closeDrawer()">Cancel</button><button class="btn btn-primary" onclick="saveSO()">Create Sale &amp; Reserve Lots</button>');
+  allocRecalc();
+}
+function allocChange(lot,val,max,landed,item){
+  var q=parseInt(val)||0;
+  if(q>max){toast('Only '+max+' MT available in '+lot+' — capped (overselling blocked)',true);q=max;document.querySelector('#lp-'+lot+' input').value=max;}
+  if(q>0){ALLOC[lot]={qty:q,landed:landed,item:item};var el=document.getElementById('lp-'+lot);if(el)el.classList.add('sel');}
+  else{delete ALLOC[lot];var el2=document.getElementById('lp-'+lot);if(el2)el2.classList.remove('sel');}
+  allocRecalc();
+}
+function calcAlloc(){
+  var rate=parseFloat((document.getElementById('s_rate')||{}).value)||0;
+  var qty=0,cost=0;Object.keys(ALLOC).forEach(function(k){qty+=ALLOC[k].qty;cost+=ALLOC[k].qty*ALLOC[k].landed;});
+  var value=qty*rate,gp=value-cost,gpp=value?(gp/value*100).toFixed(1)+'%':'—';
+  return {rate:rate,qty:qty,cost:cost,value:value,gp:gp,gpp:gpp};
+}
+function allocRecalc(){
+  var c=calcAlloc();var box=document.getElementById('s_profit');if(!box)return;
+  if(c.qty===0){box.innerHTML='<div style="color:var(--faint);font-size:12.5px;padding:6px 0">Allocate a lot to see profit.</div>';document.getElementById('s_credit').innerHTML='';return;}
+  box.innerHTML='<div class="profit-box'+(c.gp<0?' neg':'')+'" style="margin-top:4px">'+
+    pbi('Qty',c.qty+' MT')+pbi('Sales',money(c.value))+pbi('Cost',money(c.cost))+pbi('Gross Profit',money(c.gp),c.gp>=0?'pos':'bad')+pbi('Margin',c.gpp,c.gp>=0?'pos':'bad')+'</div>';
+  // credit-limit warning (warn, not block)
+  var cust=CUSTOMERS.filter(function(x){return x.code===(document.getElementById('s_cust')||{}).value})[0];
+  var cd=document.getElementById('s_credit');
+  if(cust && (cust.outstanding+c.value)>cust.limit){
+    cd.innerHTML='<div class="credit-warn">&#9888; <b>Credit limit warning:</b> '+cust.name+' would reach '+money(cust.outstanding+c.value)+' against a '+money(cust.limit)+' limit. The sale is <b>allowed</b> — you can still create it.</div>';
+  } else cd.innerHTML='';
+}
+function saveSO(){
+  var c=calcAlloc();
+  if(c.qty===0){toast('Allocate at least one lot',true);return;}
+  var cust=CUSTOMERS.filter(function(x){return x.code===document.getElementById('s_cust').value})[0];
+  var creditWarn=(cust.outstanding+c.value)>cust.limit;
+  // S-3: reserve lots (two-step model, step 1)
+  var allocs=[];Object.keys(ALLOC).forEach(function(k){var l=LOTS.filter(function(x){return x.lot===k})[0];l.reserved+=ALLOC[k].qty;allocs.push({lot:k,qty:ALLOC[k].qty,landed:ALLOC[k].landed,item:ALLOC[k].item});});
+  SEQ.so++;var no='SO-2026-'+String(SEQ.so).padStart(4,'0');
+  SALES.unshift({no:no,customer:cust.name,custCode:cust.code,date:'2026-08-25',status:'Approved',rate:c.rate,qty:c.qty,value:c.value,cost:c.cost,gp:c.gp,gpp:c.gpp,allocs:allocs,delivered_qty:0,creditWarn:creditWarn});
+  closeDrawer();showPage('so');
+  toast(no+' created — '+c.qty+' MT reserved'+(creditWarn?' (credit warning noted)':''));
+}
+/* ============ S-4: DELIVERIES (consume reservation -> stock out) ============ */
+PAGES.deliveries=function(){
+  var rows=DELIVERIES.length?DELIVERIES.map(function(d){
+    return '<tr><td class="mono">'+d.no+'</td><td class="mono">'+d.so+'</td><td>'+d.customer+'</td><td class="mono">'+d.date+'</td><td class="mono">'+d.qty+' MT</td><td>'+tg(d.status)+'</td></tr>';
+  }).join(''):'<tr><td colspan="6" style="color:var(--faint);text-align:center;padding:26px">No deliveries yet — open an Approved sale and click <b>Deliver</b></td></tr>';
+  return '<div class="note phase"><b>S-4 · Deliveries</b> — mirrors Purchase Receipt (Receipt = stock in; Delivery = stock out). Confirming a delivery <b>consumes the reservation</b> as an outbound movement and flips profit to realized.</div>'+
+  head('Deliveries',DELIVERIES.length+' deliveries','')+
+  '<div class="card"><table><thead><tr><th>Delivery No.</th><th>SO</th><th>Customer</th><th>Date</th><th>Qty</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+};
+function doDelivery(no){
+  var s=SALES.filter(function(x){return x.no===no})[0];
+  var remaining=s.qty-s.delivered_qty;
+  openDrawer('Deliver — '+no,
+    '<div class="note">Delivery converts <b>Reserved</b> stock into an outbound movement. Partial allowed — remaining stays reserved.</div>'+
+    '<div class="grid2"><div class="fld"><label>Delivery Qty (MT) <span class="req">*</span></label><input id="d_qty" type="number" value="'+remaining+'" max="'+remaining+'"></div>'+
+    '<div class="fld"><label>Dispatch Date</label><input type="date" value="2026-08-26"></div></div>'+
+    '<div class="grid2"><div class="fld"><label>Vehicle / Container</label><input value="TCLU-7788213"></div>'+
+    '<div class="fld"><label>Gate Pass No.</label><input class="mono" value="GP-0042" readonly></div></div>'+
+    '<div style="font-size:12px;color:var(--muted)">Reserved for this sale: '+remaining+' MT remaining.</div>',
+    '<button class="btn btn-ghost" onclick="closeDrawer()">Cancel</button><button class="btn btn-teal" onclick="saveDelivery(\''+no+'\')">Confirm Delivery</button>');
+}
+function saveDelivery(no){
+  var s=SALES.filter(function(x){return x.no===no})[0];
+  var q=parseInt(document.getElementById('d_qty').value)||0;var remaining=s.qty-s.delivered_qty;
+  if(q<=0){toast('Enter a delivery quantity',true);return;}
+  if(q>remaining){toast('Cannot deliver more than reserved ('+remaining+' MT)',true);return;}
+  // consume reservation -> delivered on the lots, proportionally across allocs
+  var toConsume=q;
+  s.allocs.forEach(function(a){if(toConsume<=0)return;var l=LOTS.filter(function(x){return x.lot===a.lot})[0];var take=Math.min(toConsume,a.qty-(a.delivered||0));a.delivered=(a.delivered||0)+take;l.reserved-=take;l.delivered+=take;toConsume-=take;});
+  s.delivered_qty+=q;
+  SEQ.dn++;var dn='DN-2026-'+String(SEQ.dn).padStart(4,'0');
+  DELIVERIES.unshift({no:dn,so:no,customer:s.customer,date:'2026-08-26',qty:q,status:s.delivered_qty>=s.qty?'Delivered':'Partial'});
+  closeDrawer();openSO(no);toast(dn+' confirmed — '+q+' MT delivered, profit realized');
+}
+
+/* ============ S-5: INVOICES & PAYMENTS (receivables) ============ */
+PAGES.invoices=function(){
+  var rows=INVOICES.length?INVOICES.map(function(i){
+    return '<tr><td class="mono">'+i.no+'</td><td class="mono">'+i.so+'</td><td>'+i.customer+'</td><td class="mono">'+i.date+'</td><td class="mono">'+money(i.amount)+'</td><td class="mono" style="'+(i.outstanding>0?'color:var(--amber);font-weight:600':'color:var(--teal)')+'">'+money(i.outstanding)+'</td><td>'+tg(i.status)+'</td><td>'+(i.outstanding>0?'<span class="link" onclick="doPayment(\''+i.no+'\')">Record Payment</span>':'&mdash;')+'</td></tr>';
+  }).join(''):'<tr><td colspan="8" style="color:var(--faint);text-align:center;padding:26px">No invoices yet — open an Approved sale and click <b>Create Invoice</b></td></tr>';
+  var outstanding=INVOICES.reduce(function(s,i){return s+i.outstanding},0);
+  return '<div class="note phase"><b>S-5 · Invoices &amp; Payments</b> — accounts receivable. Independent axis from delivery. Outstanding feeds the customer credit-limit check.</div>'+
+  head('Invoices & Payments',INVOICES.length+' invoices','')+
+  kpis([['b-blue','Invoiced',INVOICES.length],['b-red','Outstanding',INVOICES.length?num(outstanding):'—'],['b-teal','Collected',num(PAYMENTS.reduce(function(s,p){return s+p.amount},0))]])+
+  '<div class="card"><table><thead><tr><th>Invoice</th><th>SO</th><th>Customer</th><th>Date</th><th>Amount</th><th>Outstanding</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+};
+function doInvoice(no){
+  var s=SALES.filter(function(x){return x.no===no})[0];
+  if(INVOICES.some(function(i){return i.so===no})){toast('Invoice already exists for '+no);showPage('invoices');return;}
+  SEQ.inv++;var inv='INV-2026-'+String(SEQ.inv).padStart(4,'0');
+  INVOICES.unshift({no:inv,so:no,customer:s.customer,custCode:s.custCode,date:'2026-08-26',amount:s.value,outstanding:s.value,status:'Open'});
+  // update customer outstanding
+  var cust=CUSTOMERS.filter(function(c){return c.code===s.custCode})[0];if(cust)cust.outstanding+=s.value;
+  showPage('invoices');toast(inv+' created — '+money(s.value)+' outstanding');
+}
+function doPayment(invNo){
+  var i=INVOICES.filter(function(x){return x.no===invNo})[0];
+  openDrawer('Record Payment — '+invNo,
+    '<div class="note">Partial payments allowed. Outstanding reduces; customer receivable updates.</div>'+
+    '<div class="grid2"><div class="fld"><label>Amount Received <span class="req">*</span></label><input id="p_amt" type="number" value="'+i.outstanding+'" max="'+i.outstanding+'"></div>'+
+    '<div class="fld"><label>Method</label><select id="p_method"><option>Bank Transfer</option><option>TT</option><option>LC</option><option>Cash</option></select></div></div>'+
+    '<div class="grid2"><div class="fld"><label>Date</label><input type="date" value="2026-08-28"></div>'+
+    '<div class="fld"><label>Bank / TT Ref</label><input value="TT-99213"></div></div>'+
+    '<div style="font-size:12px;color:var(--muted)">Outstanding on this invoice: '+money(i.outstanding)+'</div>',
+    '<button class="btn btn-ghost" onclick="closeDrawer()">Cancel</button><button class="btn btn-primary" onclick="savePayment(\''+invNo+'\')">Record Payment</button>');
+}
+function savePayment(invNo){
+  var i=INVOICES.filter(function(x){return x.no===invNo})[0];
+  var amt=parseFloat(document.getElementById('p_amt').value)||0;
+  if(amt<=0){toast('Enter an amount',true);return;}
+  if(amt>i.outstanding){toast('Cannot exceed outstanding ('+money(i.outstanding)+')',true);return;}
+  i.outstanding-=amt;if(i.outstanding<=0.001){i.outstanding=0;i.status='Paid';}
+  var cust=CUSTOMERS.filter(function(c){return c.code===i.custCode})[0];if(cust)cust.outstanding-=amt;
+  SEQ.pay++;PAYMENTS.unshift({no:'PAY-'+SEQ.pay,inv:invNo,amount:amt});
+  closeDrawer();showPage('invoices');toast('Payment of '+money(amt)+' recorded'+(i.status==='Paid'?' — invoice fully paid':''));
+}
+
+/* ============ S-6: DASHBOARD ============ */
+PAGES.dashboard=function(){
+  var value=SALES.reduce(function(s,x){return s+x.value},0);
+  var gp=SALES.reduce(function(s,x){return s+x.gp},0);
+  var outstanding=INVOICES.reduce(function(s,i){return s+i.outstanding},0);
+  var pending=SALES.filter(function(s){return s.delivered_qty<s.qty}).length;
+  var byCust={};SALES.forEach(function(s){byCust[s.customer]=(byCust[s.customer]||0)+s.gp});
+  var maxGp=Math.max(1,...Object.values(byCust));
+  var custBars=Object.keys(byCust).length?Object.keys(byCust).map(function(k){return bar(k,money(byCust[k]),Math.round(byCust[k]/maxGp*100))}).join(''):'<div style="color:var(--faint);font-size:12.5px">No sales yet</div>';
+  return '<div class="note phase"><b>S-6 · Sales Performance Dashboard</b> — aggregates from the sales you create. In the real build these are materialized views refreshed by a scheduled job, never live-queried under load.</div>'+
+  head('Sales Dashboard','Live from the sales you create in this prototype','')+
+  kpis([['b-teal','Total Sales',SALES.length?num(value):'0'],['b-teal','Gross Profit',SALES.length?num(gp):'0'],['b-blue','Avg Margin',value?(gp/value*100).toFixed(1)+'%':'—'],['b-red','Receivables',num(outstanding)],['b-amber','Shipments Pending',pending]])+
+  '<div class="grid2">'+
+  '<div class="sec"><div class="sec-head">Gross Profit by Customer</div><div class="sec-body">'+custBars+'</div></div>'+
+  '<div class="sec"><div class="sec-head">Sales vs Purchase (stock value)</div><div class="sec-body">'+bar('Purchase cost consumed',money(SALES.reduce(function(s,x){return s+x.cost},0)),68)+bar('Sales value',money(value),100)+'</div></div>'+
+  '<div class="sec"><div class="sec-head">Outstanding Receivables</div><div class="sec-body">'+(CUSTOMERS.filter(function(c){return c.outstanding>0}).map(function(c){return bar(c.name,money(c.outstanding),Math.round(c.outstanding/c.limit*100))}).join('')||'<div style="color:var(--faint);font-size:12.5px">Nothing outstanding</div>')+'</div></div>'+
+  '<div class="sec"><div class="sec-head">Stock Utilization</div><div class="sec-body">'+LOTS.map(function(l){var used=l.reserved+l.delivered;return bar(l.lot+' · '+l.item,used+' / '+l.received+' MT',Math.round(used/l.received*100))}).join('')+'</div></div>'+
+  '</div>';
+};
+function bar(l,v,pct){return '<div style="margin-bottom:12px"><div class="bar-lbl"><span>'+l+'</span><span class="mono" style="font-weight:600">'+v+'</span></div><div class="minibar"><span style="width:'+Math.max(0,Math.min(100,pct))+'%"></span></div></div>';}
+
+/* ============ INIT ============ */
+showPage('so');
+</script>
+</body>
+</html>

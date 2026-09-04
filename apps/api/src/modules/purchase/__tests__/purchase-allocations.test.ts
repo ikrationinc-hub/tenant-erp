@@ -18,6 +18,7 @@ import {
   countries,
   currencies,
   customers,
+  customerTypes,
   divisions,
   incoterms,
   paymentTerms,
@@ -123,8 +124,13 @@ async function seedTenant(label: string): Promise<SeededTenant> {
     const [warehouse] = await tx.insert(warehouses).values({ companyId: company.id, code: "WH1", name: "Main Warehouse", createdBy: user.id }).returning();
     const [incoterm] = await tx.insert(incoterms).values({ companyId: company.id, code: "CIF", name: "Cost, Insurance and Freight", createdBy: user.id }).returning();
 
-    const [customerA] = await tx.insert(customers).values({ companyId: company.id, code: "CUST-A", name: "Customer A", createdBy: user.id }).returning();
-    const [customerB] = await tx.insert(customers).values({ companyId: company.id, code: "CUST-B", name: "Customer B", createdBy: user.id }).returning();
+    const [customerType] = await tx.insert(customerTypes).values({ companyId: company.id, code: "LOCAL", name: "Local", createdBy: user.id }).returning();
+    if (!customerType) {
+      throw new Error("failed to insert customer type");
+    }
+    const customerCommon = { companyId: company.id, customerTypeId: customerType.id, countryId: country.id, paymentTermId: paymentTerm.id, currencyId: currency.id, createdBy: user.id };
+    const [customerA] = await tx.insert(customers).values({ ...customerCommon, code: "CUST-A", name: "Customer A" }).returning();
+    const [customerB] = await tx.insert(customers).values({ ...customerCommon, code: "CUST-B", name: "Customer B" }).returning();
     const [division] = await tx.insert(divisions).values({ companyId: company.id, code: "CONTAINER", name: "Container", createdBy: user.id }).returning();
     const [container] = await tx.insert(containers).values({ companyId: company.id, code: "CONT-1", name: "CONT-1", createdBy: user.id }).returning();
 

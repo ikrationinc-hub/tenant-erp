@@ -685,16 +685,140 @@ export const divisions = defineMasterTable("divisions", {});
 export const containers = defineMasterTable("containers", {
   containerType: text("container_type"),
 });
-/**
- * Stub only (docs/spec/Purchase-V2.md §4: "customers *(stub only - Reserved
- * Customer needs the dropdown)*", and manifests.ts's "masters" entry: "customer
- * remains a stub - not built yet, declared ahead of its own future module").
- * The table exists now purely so purchase_allocations.reserved_customer_id
- * has something real to FK into; no CRUD/masters-registry entry for it
- * yet - that's the dedicated future Customer module (likely alongside
- * Sales), not this session.
- */
-export const customers = defineMasterTable("customers", {});
+// --- Customer master (docs/SALES-MODULE-PLAN.md S-1) -----------------------
+// Graduated from a generic defineMasterTable() master (prompt 16) into its
+// own explicit pgTable, exactly mirroring the Supplier master's shape
+// (suppliers/supplierTypes/supplierContacts/supplierBanks below) - a
+// customer is a first-class business entity like a supplier, not a
+// code/name master, so it needs the same status enum, contacts/banks
+// sub-tables, and its own gapless numbering (docType "CUSTOMER"), not the
+// generic factory's isActive/sortOrder shape. purchase_allocations.
+// reserved_customer_id's FK keeps resolving unchanged - same exported
+// `customers` identifier, only how it's built has changed. No CRUD/
+// masters-registry entry anymore either - core/masters/registry.ts's
+// customerModule is removed in this same change; a dedicated
+// modules/customers now owns full CRUD, and GET /masters/customers/options
+// is re-pointed (not removed) to keep every existing caller of that exact
+// URL working unmodified.
+export const customerTypes = defineMasterTable("customer_types", {});
+
+export const customerStatusEnum = pgEnum("customer_status", ["active", "inactive"]);
+
+export const customers = pgTable(
+  "customers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    /** Company-wide, auto-generated via core/numbering/next-number.ts (docType "CUSTOMER"), never app-assigned - same reasoning as suppliers.code. */
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    /** "Local/Export... Configurable" (S-1 prompt) - a real master, not a hardcoded enum, same pattern as supplier_type_id. */
+    customerTypeId: uuid("customer_type_id")
+      .notNull()
+      .references(() => customerTypes.id, { onDelete: "restrict" }),
+    countryId: uuid("country_id")
+      .notNull()
+      .references(() => countries.id, { onDelete: "restrict" }),
+    cityId: uuid("city_id").references(() => cities.id, { onDelete: "restrict" }),
+    address: text("address"),
+    /** Mirrors supplier's taxRegistrationNo - the spec's own field name for a customer is VAT/TRN. */
+    vatTrn: text("vat_trn"),
+    paymentTermId: uuid("payment_term_id")
+      .notNull()
+      .references(() => paymentTerms.id, { onDelete: "restrict" }),
+    /** Doubles as "default currency" (S-1 prompt) - same dual role as supplier.currencyId. */
+    currencyId: uuid("currency_id")
+      .notNull()
+      .references(() => currencies.id, { onDelete: "restrict" }),
+    /** numeric, never a JS number (CLAUDE.md rule 1) - decimal.js at the repository boundary. WARN-but-allow at sale time (S-3, not built here) - never enforced as a hard block here either. */
+    creditLimit: numeric("credit_limit", { precision: 18, scale: 2 }).notNull().default("0"),
+    salespersonUserId: uuid("salesperson_user_id").references(() => users.id, { onDelete: "restrict" }),
+    remarks: text("remarks"),
+    status: customerStatusEnum("status").notNull().default("active"),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("customers_company_id_code_key")
+      .on(table.companyId, table.code)
+      .where(sql`${table.deletedAt} is null`),
+    // Soft-delete-aware, same as suppliers_company_id_name_key - a
+    // deactivated/deleted customer's name becomes reusable, never
+    // permanently reserved.
+    uniqueIndex("customers_company_id_name_key")
+      .on(table.companyId, table.name)
+      .where(sql`${table.deletedAt} is null`),
+  ],
+);
+
+export const customerContacts = pgTable(
+  "customer_contacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    contactPerson: text("contact_person").notNull(),
+    mobile: text("mobile"),
+    email: text("email"),
+    ...auditColumns(),
+  },
+  (table) => [index("customer_contacts_customer_id_idx").on(table.customerId)],
+);
+
+export const customerBanks = pgTable(
+  "customer_banks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    details: text("details").notNull(),
+    ...auditColumns(),
+  },
+  (table) => [index("customer_banks_customer_id_idx").on(table.customerId)],
+);
+
+export const customersRelations = relations(customers, ({ one, many }) => ({
+  company: one(companies, {
+    fields: [customers.companyId],
+    references: [companies.id],
+  }),
+  customerType: one(customerTypes, {
+    fields: [customers.customerTypeId],
+    references: [customerTypes.id],
+  }),
+  country: one(countries, {
+    fields: [customers.countryId],
+    references: [countries.id],
+  }),
+  city: one(cities, {
+    fields: [customers.cityId],
+    references: [cities.id],
+  }),
+  paymentTerm: one(paymentTerms, {
+    fields: [customers.paymentTermId],
+    references: [paymentTerms.id],
+  }),
+  currency: one(currencies, {
+    fields: [customers.currencyId],
+    references: [currencies.id],
+  }),
+  salesperson: one(users, {
+    fields: [customers.salespersonUserId],
+    references: [users.id],
+  }),
+  contacts: many(customerContacts),
+  banks: many(customerBanks),
+}));
 
 /** The one master with a required FK to another master (task: "cities (fk country)") - the cascading-dropdown reference case. */
 export const cities = defineMasterTable("cities", {
@@ -1956,7 +2080,15 @@ export const paymentAllocationsRelations = relations(paymentAllocations, ({ one 
 // row a future receipt-correction flow would write to undo a receipt's
 // previously-moved quantity - not built by PL-1 (a confirmed receipt's
 // items are immutable, matching rule 8), reserved for that later flow.
-export const stockMovementTypeEnum = pgEnum("stock_movement_type", ["purchase_receipt", "purchase_reversal"]);
+// S-2 (docs/SALES-MODULE-PLAN.md §1.1/§1.2): "sale_delivery" is the first
+// OUTBOUND movement type this ledger has ever had - negative quantity,
+// written by core/inventory-lots' consumeReservation when a sale delivers
+// against a reserved stock_lot. Added via ALTER TYPE ... ADD VALUE in its
+// own migration statement, same sequencing 0027 used for
+// 'purchase_reversal': the CHECK constraint below is updated in a LATER
+// statement of the same migration file (never the same transaction-unsafe
+// use of the bare enum), comparing movement_type::text.
+export const stockMovementTypeEnum = pgEnum("stock_movement_type", ["purchase_receipt", "purchase_reversal", "sale_delivery"]);
 
 /**
  * Append-only ledger, NOT a mutable running-quantity column (this task's
@@ -2018,9 +2150,12 @@ export const stockMovements = pgTable(
     // ALTER TYPE ... ADD VALUE within the transaction that added it
     // ("unsafe use of new value") - that restriction is about the ENUM
     // type's cache, and never triggers for a plain text comparison.
+    // S-2 extends this constraint (same ::text cast, same reasoning as the
+    // comment above) to require 'sale_delivery' rows to be negative too -
+    // an outbound movement, exactly like 'purchase_reversal'.
     check(
       "stock_movements_sign_matches_type",
-      sql`(${table.movementType}::text = 'purchase_receipt' AND ${table.quantity} > 0) OR (${table.movementType}::text = 'purchase_reversal' AND ${table.quantity} < 0)`,
+      sql`(${table.movementType}::text = 'purchase_receipt' AND ${table.quantity} > 0) OR (${table.movementType}::text = 'purchase_reversal' AND ${table.quantity} < 0) OR (${table.movementType}::text = 'sale_delivery' AND ${table.quantity} < 0)`,
     ),
   ],
 );
@@ -2049,6 +2184,147 @@ export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
   receipt: one(purchaseReceipts, {
     fields: [stockMovements.receiptId],
     references: [purchaseReceipts.id],
+  }),
+}));
+
+// --- S-2 (docs/SALES-MODULE-PLAN.md §1.1/§1.2): lot allocation + specific-
+// lot costing engine. `stock_movements` above is the permanent, append-only
+// AUDIT ledger of every quantity that ever moved - it has no per-lot balance
+// row to lock, which is exactly right for an immutable history but wrong
+// for concurrency control: locking "the ledger" would mean locking an
+// unbounded, ever-growing table. `stock_lots` is the fast, lockable
+// COUNTER row this task adds alongside it - one row per confirmed receipt
+// LINE (a receipt line IS a lot), carrying cached reservedQty/deliveredQty
+// counters that are mutated ONLY under this row's own `SELECT ... FOR
+// UPDATE` lock (core/inventory-lots/reserve-allocate.ts), the exact same
+// "the row lock IS the concurrency control" contract core/numbering's
+// nextNumber established. stock_movements is still written for every
+// physical stock change (unchanged discipline); stock_lots is a new,
+// separate structure that exists purely to make "is there enough of THIS
+// specific lot left to reserve" a single row-locked read instead of a
+// SUM() over the whole ledger. See docs/adr/0025-lot-allocation-and-
+// specific-lot-costing.md.
+export const stockLots = pgTable(
+  "stock_lots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => items.id, { onDelete: "restrict" }),
+    gradeId: uuid("grade_id").references(() => itemGrades.id, { onDelete: "restrict" }),
+    warehouseId: uuid("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id, { onDelete: "restrict" }),
+    receiptId: uuid("receipt_id")
+      .notNull()
+      .references(() => purchaseReceipts.id, { onDelete: "restrict" }),
+    purchaseItemId: uuid("purchase_item_id")
+      .notNull()
+      .references(() => purchaseItems.id, { onDelete: "restrict" }),
+    uomId: uuid("uom_id")
+      .notNull()
+      .references(() => uom.id, { onDelete: "restrict" }),
+    /** Fixed at creation from the confirmed receipt line - never mutated afterward (rule 8's spirit: this is the lot's own physical fact, not a running counter). */
+    receivedQty: numeric("received_qty", { precision: 18, scale: 6 }).notNull(),
+    /** purchaseRateUsd + this line's allocated share of the purchase's shared freight/insurance/customs/other charges, per unit - computed once at receipt-confirm time (core/inventory-lots/reserve-allocate.ts's costAllocation), never recomputed afterward. */
+    landedRate: numeric("landed_rate", { precision: 18, scale: 6 }).notNull(),
+    /** Cached counter, mutated ONLY under this row's own FOR UPDATE lock (reserveFromLot/releaseReservation). Never derived by summing reservations - the lock target IS this column. */
+    reservedQty: numeric("reserved_qty", { precision: 18, scale: 6 }).notNull().default("0"),
+    /** Cached counter, same lock discipline as reservedQty - incremented by consumeReservation as reservations convert into actual outbound stock_movements rows. */
+    deliveredQty: numeric("delivered_qty", { precision: 18, scale: 6 }).notNull().default("0"),
+    ...auditColumns(),
+  },
+  (table) => [
+    index("stock_lots_company_item_warehouse_idx").on(table.companyId, table.itemId, table.warehouseId),
+    index("stock_lots_receipt_id_idx").on(table.receiptId),
+    // Defense-in-depth, NEVER the primary concurrency control - the
+    // transaction-scoped `SELECT ... FOR UPDATE` in reserveFromLot/
+    // consumeReservation is that (identical division of labor to
+    // stock_movements_sign_matches_type above: the DB constraint catches a
+    // bug that slips past the lock discipline, it doesn't replace it).
+    check("stock_lots_counters_within_received", sql`${table.reservedQty} + ${table.deliveredQty} <= ${table.receivedQty}`),
+  ],
+);
+
+/**
+ * Generic reservation against one stock_lot - "generic" meaning no FK to a
+ * Sales Order table, because S-3 (the Sales Order document) does not exist
+ * yet. `referenceType`/`referenceId` mirror stock_movements' own
+ * polymorphic reference_type/reference_id convention (S-2's own tests use
+ * a synthetic referenceType like "test_reservation"; a future Sales Order
+ * line will use "sales_order_item" without any schema change here).
+ * A reservation is soft-reserved capacity (ADR 0014's own term for the
+ * analogous purchase-side concept) that either releases (nothing
+ * delivered) or consumes (converts into a real outbound stock_movements
+ * row via consumeReservation) - partial consumption is a first-class case,
+ * matching this codebase's established "partial is normal, not an edge
+ * case" pattern (purchase receipts, bills).
+ */
+export const stockLotReservations = pgTable(
+  "stock_lot_reservations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    stockLotId: uuid("stock_lot_id")
+      .notNull()
+      .references(() => stockLots.id, { onDelete: "restrict" }),
+    qty: numeric("qty", { precision: 18, scale: 6 }).notNull(),
+    referenceType: text("reference_type").notNull(),
+    referenceId: uuid("reference_id").notNull(),
+    /** Set by releaseReservation - null means still open (unreleased, unconsumed or partially consumed). */
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    /** Set by consumeReservation once consumedQty reaches qty (fully consumed). Null while open or only partially consumed. */
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    /** How much of `qty` has actually been delivered via consumeReservation so far - always <= qty, checked in the same FOR UPDATE critical section that increments it. */
+    consumedQty: numeric("consumed_qty", { precision: 18, scale: 6 }).notNull().default("0"),
+    ...auditColumns(),
+  },
+  (table) => [
+    index("stock_lot_reservations_stock_lot_id_idx").on(table.stockLotId),
+    index("stock_lot_reservations_reference_idx").on(table.referenceType, table.referenceId),
+    check("stock_lot_reservations_consumed_within_qty", sql`${table.consumedQty} <= ${table.qty}`),
+  ],
+);
+
+export const stockLotsRelations = relations(stockLots, ({ one, many }) => ({
+  item: one(items, {
+    fields: [stockLots.itemId],
+    references: [items.id],
+  }),
+  grade: one(itemGrades, {
+    fields: [stockLots.gradeId],
+    references: [itemGrades.id],
+  }),
+  warehouse: one(warehouses, {
+    fields: [stockLots.warehouseId],
+    references: [warehouses.id],
+  }),
+  uom: one(uom, {
+    fields: [stockLots.uomId],
+    references: [uom.id],
+  }),
+  receipt: one(purchaseReceipts, {
+    fields: [stockLots.receiptId],
+    references: [purchaseReceipts.id],
+  }),
+  purchaseItem: one(purchaseItems, {
+    fields: [stockLots.purchaseItemId],
+    references: [purchaseItems.id],
+  }),
+  reservations: many(stockLotReservations),
+}));
+
+export const stockLotReservationsRelations = relations(stockLotReservations, ({ one }) => ({
+  stockLot: one(stockLots, {
+    fields: [stockLotReservations.stockLotId],
+    references: [stockLots.id],
   }),
 }));
 

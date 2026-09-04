@@ -25,6 +25,10 @@ const DEFAULT_SERIES: DefaultSeries[] = [
   { docType: "SUPPLIER", prefixPattern: "SUP-{0000}", padding: 4 },
   // Prompt 21 item 4: broker code, same reasoning as SUPPLIER above.
   { docType: "BROKER", prefixPattern: "BRK-{0000}", padding: 4 },
+  // S-1 (docs/SALES-MODULE-PLAN.md): customer code, same reasoning as
+  // SUPPLIER/BROKER above - company-wide, no fiscal year (a customer isn't
+  // a fiscal document).
+  { docType: "CUSTOMER", prefixPattern: "CUS-{0000}", padding: 4 },
   // Prompt 22: a supplier invoice is its own fiscal document (rule 7),
   // numbered independently of the purchase it's linked to - same {FY}
   // pattern as PO, not SUPPLIER/BROKER's company-wide one.

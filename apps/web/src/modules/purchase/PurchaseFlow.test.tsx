@@ -822,7 +822,7 @@ describe("Purchase - sub-panel tables resolve master ids to names", () => {
                 pricing: { purchaseRateUsd: "5.000000", purchaseAmountUsd: "25.00", purchaseAmountAed: "91.75" },
               },
             ],
-            allocations: [{ id: "alloc-row-1", reservedCustomerId: "customers-1", allocationPct: "100.000000" }],
+            allocations: [{ id: "alloc-row-1", reservedCustomerId: "cust-1", allocationPct: "100.000000" }],
             hedges: [
               {
                 id: "hedge-row-1",
@@ -843,12 +843,12 @@ describe("Purchase - sub-panel tables resolve master ids to names", () => {
       expect(await screen.findByText("Items 1", {}, ASYNC)).toBeInTheDocument();
       expect(await screen.findByText("Item Grades 1", {}, ASYNC)).toBeInTheDocument();
       expect(await screen.findByText("Units of Measure 1", {}, ASYNC)).toBeInTheDocument();
-      expect(await screen.findByText("Customers 1", {}, ASYNC)).toBeInTheDocument();
+      expect(await screen.findByText("Northgate Metals", {}, ASYNC)).toBeInTheDocument();
       expect(await screen.findByText("Hedge Platforms 1", {}, ASYNC)).toBeInTheDocument();
       expect(screen.queryByText("items-1")).not.toBeInTheDocument();
       expect(screen.queryByText("item-grades-1")).not.toBeInTheDocument();
       expect(screen.queryByText("uom-1")).not.toBeInTheDocument();
-      expect(screen.queryByText("customers-1")).not.toBeInTheDocument();
+      expect(screen.queryByText("cust-1")).not.toBeInTheDocument();
       expect(screen.queryByText("hedge-platforms-1")).not.toBeInTheDocument();
     },
     30000,
@@ -918,8 +918,8 @@ describe("Purchase - customer allocation is a soft reservation, never blocked (P
           HttpResponse.json({
             ...draftFixture("purchase-over-allocated"),
             allocations: [
-              { id: "alloc-a", reservedCustomerId: "customers-1", allocationPct: "70.000000" },
-              { id: "alloc-b", reservedCustomerId: "customers-2", allocationPct: "60.000000" },
+              { id: "alloc-a", reservedCustomerId: "cust-1", allocationPct: "70.000000" },
+              { id: "alloc-b", reservedCustomerId: "cust-2", allocationPct: "60.000000" },
             ],
           }),
         ),
@@ -1098,7 +1098,7 @@ describe("Purchase - LME Records and Customer Allocation edit/remove (Prompt 23)
       await user.click(await within(await findCardElement("Customer Allocation")).findByRole("button", { name: "Add" }, ASYNC));
       const allocationDrawer = within(latestDialogElement());
       await user.click(allocationDrawer.getByRole("combobox", { name: "Reserved Customer" }));
-      await user.click((await screen.findAllByText("Customers 1", {}, ASYNC)).at(-1) ?? screen.getByText("Customers 1"));
+      await user.click((await screen.findAllByText("Northgate Metals", {}, ASYNC)).at(-1) ?? screen.getByText("Northgate Metals"));
       await user.type(allocationDrawer.getByLabelText("Allocation %"), "60");
       await user.click(allocationDrawer.getByRole("button", { name: "Save" }));
 

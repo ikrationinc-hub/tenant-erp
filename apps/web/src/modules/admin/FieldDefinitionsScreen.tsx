@@ -239,6 +239,15 @@ function FieldDefinitionsScreenContent(): ReactElement {
         options={moduleEntityOptions}
         loading={modulesQuery.isLoading}
         aria-label="Module / entity"
+        // This list only grows as modules are added (one entry per module/
+        // entity pair) and stays small (dozens, not thousands) - AntD's
+        // default virtualization beyond ~a screenful of options buys
+        // nothing here while making every option past the fold
+        // unreachable by DOM-based lookups (jsdom has no real scroll/
+        // layout), which is exactly what broke this dropdown for a later
+        // entity once S-1's "customers" module entry pushed it further
+        // down the list.
+        virtual={false}
       />
 
       {selected && fieldDefsQuery.isLoading && <Spin />}

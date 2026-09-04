@@ -8,6 +8,7 @@ import { inventoryRouter } from "../../modules/inventory/inventory.routes.js";
 import { menusRouter } from "../../modules/menus/menus.routes.js";
 import { purchaseRouter } from "../../modules/purchase/purchase.routes.js";
 import { brokersRouter } from "../../modules/brokers/brokers.routes.js";
+import { customersRouter } from "../../modules/customers/customers.routes.js";
 import { suppliersRouter } from "../../modules/suppliers/suppliers.routes.js";
 import { usersRouter } from "../../modules/users/users.routes.js";
 import { ALL_MASTER_PERMISSIONS, mastersRouter } from "../masters/registry.js";
@@ -132,15 +133,15 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       // supplier used to be declared here too, but now has a real
       // implementation (see the "suppliers" manifest below) -
       // module="suppliers", not "masters", is its real permission
-      // namespace. customer WAS a stub declared here ahead of its own
-      // module (prompt 16 resolved this: it's now a real instantiated
-      // master, so its create/read/update permissions come from
-      // ALL_MASTER_PERMISSIONS below like every other master - declaring
-      // it here too would be a duplicate permission key.
+      // namespace. customer went through the same graduation (S-1,
+      // docs/SALES-MODULE-PLAN.md): it WAS one of the 16 generic masters
+      // here, now has its own "customers" manifest below with its own
+      // customers.customer.* permission namespace - declaring it here too
+      // would be a duplicate permission key.
       //
-      // The 16 generic masters (countries, cities, currencies, ...,
-      // customers) - create/read/update per entity, generated from
-      // core/masters/registry.ts so a 17th master needs no changes here.
+      // The 15 remaining generic masters (countries, cities, currencies,
+      // ...) - create/read/update per entity, generated from
+      // core/masters/registry.ts so a new generic master needs no changes here.
       ...ALL_MASTER_PERMISSIONS,
     ],
     dependsOn: ["auth", "roles"],
@@ -210,6 +211,24 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     // "masters": suppliers.supplier_type_id/country_id/city_id/payment_term_id/currency_id all FK into core/masters tables.
     dependsOn: ["auth", "roles", "masters"],
     migrations: ["0014_shiny_lilandra"],
+  },
+  {
+    // S-1 (docs/SALES-MODULE-PLAN.md): graduated from a generic masters
+    // entry into its own dedicated module, mirroring "suppliers" above
+    // exactly - own table shape (contacts/banks sub-tables, status enum),
+    // own numbering (docType "CUSTOMER"), own permission namespace.
+    key: "customers",
+    name: "Customer Master",
+    version: "1.0.0",
+    routes: customersRouter,
+    permissions: [
+      permissionEntry("customers", "customer", "create", "Create a customer"),
+      permissionEntry("customers", "customer", "read", "View customers"),
+      permissionEntry("customers", "customer", "update", "Edit a customer, or activate/deactivate it"),
+    ],
+    // "masters": customerTypeId/countryId/cityId/paymentTermId/currencyId all FK into core/masters tables (same reasoning as suppliers).
+    dependsOn: ["auth", "roles", "masters"],
+    migrations: ["0044_s1_customer_master", "0045_s1_customer_required_fields_not_null"],
   },
   {
     key: "brokers",

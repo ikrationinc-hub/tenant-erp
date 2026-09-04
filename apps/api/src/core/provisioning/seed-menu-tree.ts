@@ -46,13 +46,13 @@ const MASTER_LAUNCHER_GROUPS: Record<string, string> = {
   "hedge-platforms": "Trading",
   divisions: "Trading",
   "supplier-types": "Trading",
+  "customer-types": "Trading",
   warehouses: "Logistics",
   vessels: "Logistics",
   "transport-modes": "Logistics",
   containers: "Logistics",
   items: "Logistics",
   "item-grades": "Logistics",
-  customers: "Logistics",
 };
 
 /**
@@ -90,8 +90,11 @@ function buildMastersChildren(): DefaultMenuItem[] {
  * never appears, not a crash. Suppliers is its own top-level module
  * (FE-6: contacts/banks sub-tables, activate/deactivate, its own
  * permission namespace "suppliers.supplier.*") - it does NOT live under
- * Masters, unlike the 16 generic masters (which do, including
- * "customers": a real master since prompt 16, not a placeholder).
+ * Masters, unlike the remaining generic masters. Customers (S-1,
+ * docs/SALES-MODULE-PLAN.md) graduated the same way - it USED to be a
+ * generic master (buildMastersChildren() below generated its menu node
+ * automatically), now it's its own top-level entry, exact mirror of
+ * suppliers'.
  */
 const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
   { key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard" },
@@ -102,6 +105,14 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     icon: "shop",
     moduleKey: "suppliers",
     requiredPermission: "suppliers.supplier.read",
+  },
+  {
+    key: "customers",
+    label: "Customers",
+    path: "/customers",
+    icon: "team",
+    moduleKey: "customers",
+    requiredPermission: "customers.customer.read",
   },
   {
     key: "brokers",

@@ -309,6 +309,27 @@
       "when": 1788496225151,
       "tag": "0043_contract_type_column",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1788509702732,
+      "tag": "0044_s1_customer_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1788509976640,
+      "tag": "0045_s1_customer_required_fields_not_null",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1788521197709,
+      "tag": "0046_s2_lot_allocation_and_costing",
+      "breakpoints": true
     }
   ]
 }

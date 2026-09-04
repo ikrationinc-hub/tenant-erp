@@ -18,6 +18,7 @@ import {
   companies,
   containers,
   customers,
+  customerTypes,
   divisions,
   permissions,
   purchaseItems,
@@ -108,7 +109,21 @@ async function seedTenant(label: string): Promise<SeededTenant> {
         createdBy: user.id,
       })
       .returning();
-    const [customer] = await tx.insert(customers).values({ companyId: company.id, code: "CUST-0001", name: "Pacific Metals Trading", createdBy: user.id }).returning();
+    const [customerType] = await tx.insert(customerTypes).values({ companyId: company.id, code: "LOCAL", name: "Local", createdBy: user.id }).returning();
+    if (!customerType) throw new Error("failed to insert customer type");
+    const [customer] = await tx
+      .insert(customers)
+      .values({
+        companyId: company.id,
+        code: "CUST-0001",
+        name: "Pacific Metals Trading",
+        customerTypeId: customerType.id,
+        countryId: country.id,
+        paymentTermId: paymentTerm.id,
+        currencyId: currency.id,
+        createdBy: user.id,
+      })
+      .returning();
     if (!supplier || !customer) throw new Error("failed to insert supplier/customer");
 
     return { companyId: company.id, userId: user.id, divisionId: division.id, supplierId: supplier.id, customerId: customer.id };

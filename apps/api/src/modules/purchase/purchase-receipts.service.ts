@@ -3,12 +3,14 @@ import { eventBus } from "../../common/events/bus.js";
 import { ConflictError, NotFoundError, UnauthorizedError, ValidationError } from "../../common/errors/index.js";
 import { parseMoney, roundRate } from "../../common/money/decimal.js";
 import { insertAuditLog } from "../../core/audit/write.js";
+import { costAllocation, landedRatePerUnit } from "../../core/inventory-lots/reserve-allocate.js";
 import { nextNumber } from "../../core/numbering/next-number.js";
 import { requireAtLeastOneValidLine } from "../../core/workflow/guards.js";
 import { findTransition, runGuards, type WorkflowTransition } from "../../core/workflow/transitions.js";
 import { withTenantDb } from "../../database/get-db.js";
 import type { PaginatedRows } from "../../core/masters/types.js";
 import { sumBilledQuantitiesByItem } from "./purchase-bills.repository.js";
+import { findCostsByPurchaseId } from "./purchase-costs.repository.js";
 import { listItemsWithPricingForPurchase } from "./purchase-items.repository.js";
 import { computeBilledStatus, computeReceivedStatus, maybeAutoClosePurchase, type ReceivedStatus } from "./purchase-lifecycle.js";
 import {
@@ -213,6 +215,37 @@ export async function confirm(ctx: RequestContext, purchaseId: string, receiptId
     const orderedItems = await listItemsWithPricingForPurchase(tx, scope.companyId, purchaseId);
     const orderedById = new Map(orderedItems.map((item) => [item.id, item]));
 
+    // S-2: landed rate = purchaseRateUsd + this receipt LINE's own
+    // allocated share of the purchase's shared freight/insurance/customs/
+    // other charges (purchase_additional_costs is one row per PURCHASE,
+    // not per line - costAllocation spreads it pro-rata by qty, the
+    // default basis, across just this receipt's own lines). No costs row
+    // at all means every charge is zero, never an error - a purchase with
+    // no additional costs configured yet still confirms fine, landedRate
+    // just equals the raw purchase rate.
+    const costs = await findCostsByPurchaseId(tx, scope.companyId, purchaseId);
+    const sharedCharges = {
+      freight: costs?.freight ?? "0",
+      insurance: costs?.insurance ?? "0",
+      customs: costs?.customs ?? "0",
+      other: parseMoney(costs?.otherCharges ?? "0")
+        .plus(costs?.otherCharges2 ?? "0")
+        .plus(costs?.otherCharges3 ?? "0")
+        .toString(),
+    };
+
+    const allocationLines = items.map((item) => {
+      const orderedItem = orderedById.get(item.purchaseItemId);
+      if (!orderedItem) {
+        throw new Error(`Receipt item ${item.id} references purchase item ${item.purchaseItemId} which no longer exists`);
+      }
+      return { lotId: item.id, qty: item.receivedQuantity, landedRate: orderedItem.pricing.purchaseRateUsd };
+    });
+    const allocatedCosts = costAllocation(allocationLines, sharedCharges, "qty");
+    const landedRateByReceiptItemId = new Map(
+      allocatedCosts.map((allocation) => [allocation.lotId, landedRatePerUnit(allocation.cost, allocationLines.find((l) => l.lotId === allocation.lotId)?.qty ?? "0")]),
+    );
+
     await eventBus.emit(tx, "receipt.confirmed", {
       receiptId,
       purchaseId,
@@ -225,12 +258,17 @@ export async function confirm(ctx: RequestContext, purchaseId: string, receiptId
         if (!orderedItem) {
           throw new Error(`Receipt item ${item.id} references purchase item ${item.purchaseItemId} which no longer exists`);
         }
+        const landedRate = landedRateByReceiptItemId.get(item.id);
+        if (!landedRate) {
+          throw new Error(`Failed to compute landed rate for receipt item ${item.id}`);
+        }
         return {
           purchaseItemId: item.purchaseItemId,
           itemId: orderedItem.itemId,
           gradeId: orderedItem.gradeId,
           quantity: item.receivedQuantity,
           uomId: orderedItem.uomId,
+          landedRate,
         };
       }),
     });

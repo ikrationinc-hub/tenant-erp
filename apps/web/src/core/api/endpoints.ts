@@ -44,6 +44,12 @@ export const endpoints = {
   supplierOptions: "/suppliers/options",
   activateSupplier: (id: string) => `/suppliers/${id}/activate`,
   deactivateSupplier: (id: string) => `/suppliers/${id}/deactivate`,
+
+  // --- S-1 (docs/SALES-MODULE-PLAN.md): Customer master, mirrors suppliers --
+  customers: "/customers",
+  customerOptions: "/customers/options",
+  activateCustomer: (id: string) => `/customers/${id}/activate`,
+  deactivateCustomer: (id: string) => `/customers/${id}/deactivate`,
   brokers: "/brokers",
   brokerOptions: "/brokers/options",
   activateBroker: (id: string) => `/brokers/${id}/activate`,
