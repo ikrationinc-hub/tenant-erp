@@ -204,6 +204,29 @@ body {
     0 4px 12px rgba(15, 23, 42, 0.06);
 }
 
+/* A labeled section's title (SchemaForm.tsx) doubles as its collapse
+   toggle - the chevron points right collapsed, rotates to point down
+   expanded (the same convention AntD's own Collapse uses). */
+.schema-form-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  cursor: pointer;
+  user-select: none;
+}
+.schema-form-section-header:focus-visible {
+  outline: 2px solid var(--color-rail);
+  outline-offset: 2px;
+}
+.schema-form-section-chevron {
+  transition: transform 0.2s ease;
+  font-size: 12px;
+}
+.schema-form-section-chevron-expanded {
+  transform: rotate(90deg);
+}
+
 /* Pins the form's Save button (and any caller `footer`) to the bottom of
    the viewport once a long, multi-section form (e.g. Purchase's header)
    scrolls past it - a short form never scrolls far enough for `sticky` to
@@ -241,29 +264,60 @@ body {
   }
 }
 
-/* SchemaTable's FilterBar (search + per-column filters) - stretches its
-   controls to use the bar's full width instead of bunching them at the
-   left with dead space to the right. Each control shares the row equally
-   (flex:1) down to a floor that keeps a RangePicker's two dates readable;
-   below that floor a control wraps to its own row rather than shrinking
-   further. "Clear filters" never stretches - it's an action, not a filter. */
+/* SchemaTable's FilterBar (search + per-column filters) - a fixed grid
+   instead of an open flex-wrap, so a row never holds more than a set
+   number of controls regardless of viewport width or how many filters a
+   given screen declares. Columns are `1fr` (an even share of the bar's
+   full width), not a fixed px ceiling - a fixed ceiling left dead space
+   once 4 columns stopped filling the bar. Grid still caps every row at
+   the column count on its own: a control lone on the last row only ever
+   occupies ITS column, never the whole row (unlike the old flex:1 setup,
+   where a single stranded control inherited the entire line's free space
+   and ballooned to the bar's full width - e.g. Branch, PurchaseListScreen's
+   8th filter, wrapping alone). Column count steps up with viewport width;
+   4 is the ceiling even on very wide screens, so no control grows past a
+   readable width no matter how wide the bar is.
+   "Clear filters" is pinned to the LAST column at each breakpoint
+   (grid-column-start matches that breakpoint's own column count below),
+   not left to auto-flow - auto-flow alone puts it wherever the next open
+   cell happens to be, which is column 4 (flush right, same row) when the
+   filters don't exactly fill a row but column 1 of a new row (stranded at
+   the FAR LEFT, not right) whenever they do (e.g. Purchase's 8 filters -
+   exactly two full rows of 4). Pinning the column explicitly means the
+   auto-placement algorithm instead searches for the next row where THAT
+   column is free - the same row when the filters left it open, a fresh
+   row when they didn't - and it's always the true right edge either way.
+   justify-self: end then hugs that cell's right edge instead of
+   stretching to fill it - it's an action, not a filter, and reads oddly
+   stretched to 180-400px wide. */
 .filter-bar-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(1, minmax(180px, 1fr));
   gap: 12px;
   width: 100%;
 }
 
-.filter-bar-row > * {
-  flex: 1 1 180px;
-  min-width: 180px;
+.filter-bar-row .filter-bar-clear {
+  grid-column-start: 1;
+  justify-self: end;
 }
 
-.filter-bar-row .filter-bar-clear {
-  flex: 0 0 auto;
-  min-width: 0;
-  margin-left: auto;
+@media (min-width: 640px) {
+  .filter-bar-row {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+  .filter-bar-row .filter-bar-clear {
+    grid-column-start: 2;
+  }
+}
+
+@media (min-width: 1024px) {
+  .filter-bar-row {
+    grid-template-columns: repeat(4, minmax(180px, 1fr));
+  }
+  .filter-bar-row .filter-bar-clear {
+    grid-column-start: 4;
+  }
 }
 
 /* The bar's background/placeholder/icon-contrast fix lives in FilterBar.tsx

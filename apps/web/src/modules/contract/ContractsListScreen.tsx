@@ -2,8 +2,8 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { App as AntApp, Button, DatePicker, Flex, Form, Input, Modal, Select, Space, Table, Typography } from "antd";
-import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
+import { App as AntApp, Button, DatePicker, Flex, Form, Modal, Select, Space, Table, Typography } from "antd";
+import { PlusOutlined } from "@ant-design/icons";
 import dayjs, { type Dayjs } from "dayjs";
 import { masterOptionsResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
@@ -11,10 +11,12 @@ import { ApiError } from "../../core/api/api-error";
 import { endpoints, withQuery } from "../../core/api/endpoints";
 import { useEntityList } from "../../core/schema-table/use-entity-list";
 import { useEntityListState } from "../../core/schema-table/use-entity-list-state";
-import type { EntityRow } from "../../core/schema-table/types";
+import { FilterBar } from "../../core/schema-table/FilterBar";
+import type { EntityRow, SchemaTableFilter } from "../../core/schema-table/types";
 import { Can } from "../../core/permissions/Can";
 import { StatusTag } from "../../core/status-tag/StatusTag";
 import { CONTRACT_STATUS_COLORS } from "../../core/status-tag/status-colors";
+import { slate, surface } from "../../theme/palette";
 
 export const CONTRACTS_LIST_PATH = "/contracts";
 const DATE_FORMAT = "YYYY-MM-DD";
@@ -128,10 +130,14 @@ interface CreateContractFormValues {
 export function ContractsListScreen(): ReactElement {
   const { message } = AntApp.useApp();
   const navigate = useNavigate();
-  const { state, setPage, setPageSize, setSearch, setFilter } = useEntityListState(FILTER_KEYS);
+  const { state, setPage, setPageSize, setSearch, setFilter, clearAll } = useEntityListState(FILTER_KEYS);
   const listQuery = useEntityList(endpoints.contracts, state);
   const divisionOptions = useDivisionOptions();
   const divisionLabelById = new Map(divisionOptions.map((o) => [o.value, o.label]));
+  const filters: SchemaTableFilter[] = [
+    { key: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
+    { key: "divisionId", label: "Division", type: "select", options: divisionOptions },
+  ];
   const templateOptions = useTemplateOptions();
   const [createOpen, setCreateOpen] = useState(false);
   const [purchaseSearch, setPurchaseSearch] = useState("");
@@ -183,33 +189,16 @@ export function ContractsListScreen(): ReactElement {
         </Can>
       </Flex>
 
-      <Space wrap>
-        <Input
-          placeholder="Search"
-          prefix={<SearchOutlined />}
-          style={{ width: 220 }}
-          defaultValue={state.search}
-          onPressEnter={(e) => setSearch(e.currentTarget.value || undefined)}
-          allowClear
-          onClear={() => setSearch(undefined)}
-        />
-        <Select
-          placeholder="Status"
-          allowClear
-          style={{ width: 160 }}
-          value={state.filters.status ?? null}
-          onChange={(value) => setFilter("status", value ?? undefined)}
-          options={STATUS_OPTIONS}
-        />
-        <Select
-          placeholder="Division"
-          allowClear
-          style={{ width: 180 }}
-          value={state.filters.divisionId ?? null}
-          onChange={(value) => setFilter("divisionId", value ?? undefined)}
-          options={divisionOptions}
-        />
-      </Space>
+      <div
+        style={{
+          background: surface,
+          border: `1px solid ${slate[200]}`,
+          borderRadius: 6,
+          padding: 12,
+        }}
+      >
+        <FilterBar filters={filters} state={state} onSearch={setSearch} onFilterChange={setFilter} onClear={clearAll} />
+      </div>
 
       <Table<EntityRow>
         rowKey="id"
