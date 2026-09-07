@@ -1,7 +1,7 @@
-import { and, asc, eq, gte, ilike, isNull, lte, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gte, ilike, isNull, lte, sql } from "drizzle-orm";
 import type { PaginatedRows } from "../../core/masters/types.js";
 import type { TenantTx } from "../../database/get-db.js";
-import { salesItems, salesPricing, salesShipments, sales } from "../../database/tenant/schema.js";
+import { salesShipments, sales } from "../../database/tenant/schema.js";
 
 export type SalesRow = typeof sales.$inferSelect;
 export type SalesInsert = typeof sales.$inferInsert;
@@ -106,27 +106,6 @@ export async function transitionSalesStatus(
     .where(and(eq(sales.id, id), eq(sales.companyId, companyId), eq(sales.status, input.from), isNull(sales.deletedAt)))
     .returning();
   return row;
-}
-
-/** Sum of salesAmountUsd across the customer's OTHER currently-approved sales - the "open order exposure" credit-limit proxy (see sales.service.ts's computeCreditExposure). Excludes `excludeSalesId` so re-approving (impossible today, but defensive) or checking-before-insert never double-counts the sale itself. */
-export async function sumApprovedSalesValueForCustomer(
-  tx: TenantTx,
-  companyId: string,
-  customerId: string,
-  excludeSalesId: string | undefined,
-): Promise<string> {
-  const conditions = [eq(sales.companyId, companyId), eq(sales.customerId, customerId), eq(sales.status, "approved"), isNull(sales.deletedAt)];
-  if (excludeSalesId) {
-    conditions.push(ne(sales.id, excludeSalesId));
-  }
-
-  const [row] = await tx
-    .select({ total: sql<string>`coalesce(sum(${salesPricing.salesAmountUsd}), 0)` })
-    .from(sales)
-    .leftJoin(salesItems, and(eq(salesItems.salesId, sales.id), isNull(salesItems.deletedAt)))
-    .leftJoin(salesPricing, and(eq(salesPricing.salesItemId, salesItems.id), isNull(salesPricing.deletedAt)))
-    .where(and(...conditions));
-  return row?.total ?? "0";
 }
 
 export async function findShipmentBySalesId(tx: TenantTx, companyId: string, salesId: string): Promise<SalesShipmentRow | undefined> {

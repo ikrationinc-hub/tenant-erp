@@ -245,3 +245,57 @@ export async function sumReservedAndConsumedBySalesItemForSalesOrders(
     .groupBy(salesItems.salesId, salesItemLots.salesItemId);
   return rows;
 }
+
+export interface DeliveredQuantityRow {
+  salesItemId: string;
+  deliveredQuantity: string;
+}
+
+/**
+ * SUM(delivered_quantity) per sales_item, across every CONFIRMED delivery
+ * for the given sale - only confirmed counts (a draft delivery hasn't
+ * actually shipped anything yet, mirrors purchase-receipts.repository.ts's
+ * own "only CONFIRMED receipts count" precedent, unlike sumBilledQuantities
+ * ByItem's own "draft AND approved both count" rule for bills, since
+ * billing itself - not shipping - is the financial fact there). This is
+ * sales-invoices.service.ts's own over-invoicing ceiling: an invoice
+ * should only ever bill what actually shipped (docs/adr/0028).
+ */
+export async function sumDeliveredQuantitiesByItem(tx: TenantTx, companyId: string, salesId: string): Promise<DeliveredQuantityRow[]> {
+  const rows = await tx
+    .select({
+      salesItemId: deliveryItems.salesItemId,
+      deliveredQuantity: sql<string>`sum(${deliveryItems.deliveredQuantity})`.as("delivered_quantity"),
+    })
+    .from(deliveryItems)
+    .innerJoin(deliveries, eq(deliveries.id, deliveryItems.deliveryId))
+    .where(and(eq(deliveries.salesId, salesId), eq(deliveries.companyId, companyId), isNull(deliveries.deletedAt), eq(deliveries.status, "confirmed")))
+    .groupBy(deliveryItems.salesItemId);
+  return rows;
+}
+
+export interface DeliveredQuantityRowForSales extends DeliveredQuantityRow {
+  salesId: string;
+}
+
+/** Batched, list-screen version of sumDeliveredQuantitiesByItem above - one query for every sale on the current page, mirroring sumReservedAndConsumedBySalesItemForSalesOrders exactly. */
+export async function sumDeliveredQuantitiesByItemForSalesOrders(
+  tx: TenantTx,
+  companyId: string,
+  salesIds: string[],
+): Promise<DeliveredQuantityRowForSales[]> {
+  if (salesIds.length === 0) {
+    return [];
+  }
+  const rows = await tx
+    .select({
+      salesId: deliveries.salesId,
+      salesItemId: deliveryItems.salesItemId,
+      deliveredQuantity: sql<string>`sum(${deliveryItems.deliveredQuantity})`.as("delivered_quantity"),
+    })
+    .from(deliveryItems)
+    .innerJoin(deliveries, eq(deliveries.id, deliveryItems.deliveryId))
+    .where(and(inArray(deliveries.salesId, salesIds), eq(deliveries.companyId, companyId), isNull(deliveries.deletedAt), eq(deliveries.status, "confirmed")))
+    .groupBy(deliveries.salesId, deliveryItems.salesItemId);
+  return rows;
+}

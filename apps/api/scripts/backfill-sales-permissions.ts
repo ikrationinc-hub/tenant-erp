@@ -19,9 +19,11 @@ import { grantPermissionToRole } from "../src/core/rbac/mutations.js";
  * script was written, per that file's own convention), skipping any
  * role+permission pair already granted.
  *
- * S-4 extended this same list with sales.delivery.{create,confirm} rather
- * than a new script - this script is idempotent (grantedSet skip) and safe
- * to re-run against tenants that already got the S-3 keys.
+ * S-4 extended this same list with sales.delivery.{create,confirm}, and
+ * S-5 extends it again with sales.invoice.{create,update,approve} and
+ * sales.receipt.record, rather than a new script each time - this script
+ * is idempotent (grantedSet skip) and safe to re-run against tenants that
+ * already got the earlier phases' keys.
  */
 const NEW_KEYS = [
   "sales.order.create",
@@ -31,6 +33,10 @@ const NEW_KEYS = [
   "sales.order.cancel",
   "sales.delivery.create",
   "sales.delivery.confirm",
+  "sales.invoice.create",
+  "sales.invoice.update",
+  "sales.invoice.approve",
+  "sales.receipt.record",
 ] as const;
 const ROLE_ACTION_FILTERS: Record<string, (action: string) => boolean> = {
   Viewer: (action) => action === "read",

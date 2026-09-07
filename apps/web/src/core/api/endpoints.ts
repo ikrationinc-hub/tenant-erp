@@ -101,6 +101,18 @@ export const endpoints = {
   salesDeliveries: (salesId: string) => `/sales/${salesId}/deliveries`,
   confirmSalesDelivery: (salesId: string, deliveryId: string) => `/sales/${salesId}/deliveries/${deliveryId}/confirm`,
   allSalesDeliveries: "/sales-deliveries",
+  // S-5 (docs/SALES-MODULE-PLAN.md): Sales Invoice - mirrors purchaseInvoices/
+  // approvePurchaseInvoice/allPurchaseBills exactly.
+  salesInvoices: (salesId: string) => `/sales/${salesId}/invoices`,
+  salesInvoice: (salesId: string, invoiceId: string) => `/sales/${salesId}/invoices/${invoiceId}`,
+  approveSalesInvoice: (salesId: string, invoiceId: string) => `/sales/${salesId}/invoices/${invoiceId}/approve`,
+  allSalesInvoices: "/sales-invoices",
+  // Payment Received - never nested under /sales/:id at all (it's scoped
+  // to a customer, potentially settling invoices across several sales in
+  // one record), mirrors payments/outstandingBillsForSupplier exactly.
+  paymentsReceived: "/payments-received",
+  paymentReceived: (id: string) => `/payments-received/${id}`,
+  outstandingInvoicesForCustomer: (customerId: string) => `/payments-received/outstanding-invoices/${customerId}`,
 
   uploadAttachment: (entity: string, entityId: string, fieldKey: string) =>
     `/attachments/${entity}/${entityId}/${fieldKey}`,

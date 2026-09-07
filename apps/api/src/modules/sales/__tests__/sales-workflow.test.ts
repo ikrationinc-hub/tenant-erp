@@ -477,7 +477,7 @@ describe("modules/sales - S-3 (docs/SALES-MODULE-PLAN.md): Draft -> Approved res
   );
 
   it(
-    "credit-limit warning appears in the approve response when this sale pushes open-order exposure over the limit, but never blocks approval",
+    "credit-limit warning appears in the approve response when this sale pushes outstanding receivables over the limit, but never blocks approval",
     async () => {
       const tenant = await seedTenant("credit-warning");
       const app = createApp();
@@ -499,7 +499,7 @@ describe("modules/sales - S-3 (docs/SALES-MODULE-PLAN.md): Draft -> Approved res
       const body = approveRes.body as { status: string; warnings?: string[] };
       expect(body.status).toBe("approved");
       expect(body.warnings?.length).toBeGreaterThan(0);
-      expect(body.warnings?.[0]).toMatch(/open Sales Order value/);
+      expect(body.warnings?.[0]).toMatch(/outstanding receivables/);
     },
     TEST_TIMEOUT_MS,
   );

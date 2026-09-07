@@ -13,6 +13,7 @@ import { StatusTag } from "../../core/status-tag/StatusTag";
 import { SALES_STATUS_COLORS } from "../../core/status-tag/status-colors";
 import { SALES_LIST_PATH } from "./SalesListScreen";
 import { SalesFulfilmentActions, SalesFulfilmentDrawer } from "./SalesFulfilmentPanels";
+import { SalesInvoiceAction, SalesInvoiceDrawer } from "./SalesReceivablesPanels";
 
 /** Same pattern as PurchaseDetailScreen's useMasterLabels - a select field backed by a masters:X optionsSource stores the master's row id, not a label. */
 function useMasterLabels(master: string): Map<string, string> {
@@ -109,6 +110,7 @@ export function SalesDetailScreen({
   const canUpdate = useHasPermission("sales.order.update");
   const canEditHeader = mode === "create" ? canCreate : canUpdate;
   const [deliverOpen, setDeliverOpen] = useState(false);
+  const [invoiceOpen, setInvoiceOpen] = useState(false);
 
   const salesQuery = useQuery({
     queryKey: ["sales", salesId],
@@ -190,6 +192,7 @@ export function SalesDetailScreen({
                 onDeliver={() => setDeliverOpen(true)}
               />
             )}
+            {approved && <SalesInvoiceAction approved={approved} onInvoice={() => setInvoiceOpen(true)} />}
             {draft && (
               <Can permission="sales.order.approve">
                 <Tooltip title={hasItems ? undefined : "Add at least one item and pick its lots before approving"}>
@@ -232,7 +235,7 @@ export function SalesDetailScreen({
           message="This sales order is approved. Its picked lots are reserved. Header and costs are now locked. Items stay editable until the sale closes or is cancelled."
           description={
             salesOrder?.deliveredStatus
-              ? `Delivery status: ${asDisplayString(salesOrder.deliveredStatus).replace(/_/g, " ")}`
+              ? `Delivery status: ${asDisplayString(salesOrder.deliveredStatus).replace(/_/g, " ")} · Invoiced: ${asDisplayString(salesOrder.invoicedStatus).replace(/_/g, " ")} · Paid: ${asDisplayString(salesOrder.paidStatus).replace(/_/g, " ")}`
               : undefined
           }
         />
@@ -265,6 +268,20 @@ export function SalesDetailScreen({
             onClose={() => setDeliverOpen(false)}
             onDone={() => {
               setDeliverOpen(false);
+              refresh();
+            }}
+          />
+          <SalesInvoiceDrawer
+            open={invoiceOpen}
+            salesId={salesId}
+            items={rowsOf(salesOrder.items).map((item) => ({
+              id: asDisplayString(item.id),
+              deliveredQty: asDisplayString(item.deliveredQty) || "0",
+              invoicedQty: asDisplayString(item.invoicedQty) || "0",
+            }))}
+            onClose={() => setInvoiceOpen(false)}
+            onDone={() => {
+              setInvoiceOpen(false);
               refresh();
             }}
           />

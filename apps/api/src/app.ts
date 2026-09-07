@@ -22,7 +22,7 @@ import { inventoryRouter } from "./modules/inventory/inventory.routes.js";
 import { menusRouter } from "./modules/menus/menus.routes.js";
 import { platformRouter } from "./modules/platform/platform.routes.js";
 import { purchaseBillsListRouter, purchasePaymentsRouter, purchaseReceiptsListRouter, purchaseRouter } from "./modules/purchase/purchase.routes.js";
-import { salesDeliveriesListRouter, salesRouter } from "./modules/sales/sales.routes.js";
+import { salesDeliveriesListRouter, salesInvoicesListRouter, salesPaymentsReceivedRouter, salesRouter } from "./modules/sales/sales.routes.js";
 import { brokersRouter } from "./modules/brokers/brokers.routes.js";
 import { customersRouter } from "./modules/customers/customers.routes.js";
 import { suppliersRouter } from "./modules/suppliers/suppliers.routes.js";
@@ -59,6 +59,8 @@ export function createApp(): Express {
   app.use("/api/v1/purchases", purchaseRouter);
   app.use("/api/v1/sales", salesRouter);
   app.use("/api/v1/sales-deliveries", salesDeliveriesListRouter);
+  app.use("/api/v1/sales-invoices", salesInvoicesListRouter);
+  app.use("/api/v1/payments-received", salesPaymentsReceivedRouter);
   app.use("/api/v1/purchase-receipts", purchaseReceiptsListRouter);
   app.use("/api/v1/purchase-bills", purchaseBillsListRouter);
   app.use("/api/v1/payments", purchasePaymentsRouter);

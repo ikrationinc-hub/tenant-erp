@@ -3,6 +3,8 @@ import type { FlatMenuEntry } from "../../core/navigation/menu-tree-utils";
 import { SalesListScreen, SALES_LIST_PATH } from "./SalesListScreen";
 import { SalesDetailScreen } from "./SalesDetailScreen";
 import { SalesDeliveriesListScreen, SALES_DELIVERIES_LIST_PATH } from "./SalesDeliveriesListScreen";
+import { SalesInvoicesListScreen, SALES_INVOICES_LIST_PATH } from "./SalesInvoicesListScreen";
+import { SalesPaymentsReceivedListScreen, SALES_PAYMENTS_RECEIVED_LIST_PATH } from "./SalesPaymentsReceivedListScreen";
 
 const NEW_PATH = `${SALES_LIST_PATH}/new`;
 const DETAIL_PATH_PATTERN = new RegExp(`^${SALES_LIST_PATH}/([^/]+)$`);
@@ -31,4 +33,20 @@ export function resolveSalesDeliveriesScreen(entry: FlatMenuEntry, pathname: str
     return null;
   }
   return <SalesDeliveriesListScreen />;
+}
+
+/** S-5: the standalone "Invoices" list screen - mirrors resolveSalesDeliveriesScreen exactly. */
+export function resolveSalesInvoicesScreen(entry: FlatMenuEntry, pathname: string): ReactElement | null {
+  if (entry.path !== SALES_INVOICES_LIST_PATH || pathname !== SALES_INVOICES_LIST_PATH) {
+    return null;
+  }
+  return <SalesInvoicesListScreen />;
+}
+
+/** S-5: the standalone "Payments Received" list screen - mirrors resolveSalesDeliveriesScreen exactly. */
+export function resolveSalesPaymentsReceivedScreen(entry: FlatMenuEntry, pathname: string): ReactElement | null {
+  if (entry.path !== SALES_PAYMENTS_RECEIVED_LIST_PATH || pathname !== SALES_PAYMENTS_RECEIVED_LIST_PATH) {
+    return null;
+  }
+  return <SalesPaymentsReceivedListScreen />;
 }

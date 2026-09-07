@@ -344,6 +344,13 @@
       "when": 1788754333118,
       "tag": "0048_s4_delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1788758514595,
+      "tag": "0049_s5_invoice_payment",
+      "breakpoints": true
     }
   ]
 }

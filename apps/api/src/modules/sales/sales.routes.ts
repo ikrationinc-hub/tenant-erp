@@ -4,8 +4,10 @@ import { requirePermission } from "../../common/middleware/rbac.js";
 import { scopeResolverMiddleware } from "../../common/middleware/scope-resolver.js";
 import * as deliveriesController from "./deliveries.controller.js";
 import * as salesCostsController from "./sales-costs.controller.js";
+import * as salesInvoicesController from "./sales-invoices.controller.js";
 import * as salesItemLotsController from "./sales-item-lots.controller.js";
 import * as salesItemsController from "./sales-items.controller.js";
+import * as salesPaymentsReceivedController from "./sales-payments-received.controller.js";
 import * as salesController from "./sales.controller.js";
 
 export const salesRouter: Router = Router();
@@ -18,6 +20,9 @@ const approvePermission = requirePermission("sales.order.approve");
 const cancelPermission = requirePermission("sales.order.cancel");
 const deliveryCreatePermission = requirePermission("sales.delivery.create");
 const deliveryConfirmPermission = requirePermission("sales.delivery.confirm");
+const invoiceCreatePermission = requirePermission("sales.invoice.create");
+const invoiceUpdatePermission = requirePermission("sales.invoice.update");
+const invoiceApprovePermission = requirePermission("sales.invoice.approve");
 
 salesRouter.get("/", scopeResolverMiddleware, requireSalesModule, readPermission, salesController.list);
 // Registered BEFORE "/:id" - a literal path segment, not a nested sub-
@@ -90,3 +95,48 @@ salesRouter.patch(
  */
 export const salesDeliveriesListRouter: Router = Router();
 salesDeliveriesListRouter.get("/", scopeResolverMiddleware, requireSalesModule, readPermission, deliveriesController.listAll);
+
+// S-5 (docs/SALES-MODULE-PLAN.md): the Sales Invoice - own lifecycle
+// (Draft -> Approved), own permissions, own numbering. Purely financial,
+// no stock/reservation interaction (unlike Delivery) - mirrors
+// purchase.routes.ts's /:id/invoices exactly.
+salesRouter.post("/:id/invoices", scopeResolverMiddleware, requireSalesModule, invoiceCreatePermission, salesInvoicesController.create);
+salesRouter.patch("/:id/invoices/:invoiceId", scopeResolverMiddleware, requireSalesModule, invoiceUpdatePermission, salesInvoicesController.update);
+salesRouter.patch(
+  "/:id/invoices/:invoiceId/approve",
+  scopeResolverMiddleware,
+  requireSalesModule,
+  invoiceApprovePermission,
+  salesInvoicesController.approve,
+);
+// A sale can have MULTIPLE invoices (partial invoicing) - a real GET list
+// here too, same reasoning as deliveries above.
+salesRouter.get("/:id/invoices", scopeResolverMiddleware, requireSalesModule, readPermission, salesInvoicesController.list);
+
+/** The standalone "Sales Invoices" list screen - mirrors salesDeliveriesListRouter exactly. */
+export const salesInvoicesListRouter: Router = Router();
+salesInvoicesListRouter.get("/", scopeResolverMiddleware, requireSalesModule, readPermission, salesInvoicesController.listAll);
+
+/**
+ * S-5: Payment Received - unlike Invoice, never nested under a single sale
+ * at all (it's scoped to a CUSTOMER, potentially settling invoices across
+ * several sales in one record), so its own top-level router from the
+ * start, mirroring purchase.routes.ts's own purchasePaymentsRouter
+ * exactly. "record" (not "create") is the permission action, matching
+ * Purchase Payment's own Manager-tier bar for money actually changing
+ * hands (see manifests.ts's doc comment on this permission entry) - here
+ * money coming IN rather than going out, same tier reasoning either way.
+ */
+const receiptRecordPermission = requirePermission("sales.receipt.record");
+
+export const salesPaymentsReceivedRouter: Router = Router();
+salesPaymentsReceivedRouter.get("/", scopeResolverMiddleware, requireSalesModule, readPermission, salesPaymentsReceivedController.listAll);
+salesPaymentsReceivedRouter.get("/:id", scopeResolverMiddleware, requireSalesModule, readPermission, salesPaymentsReceivedController.getById);
+salesPaymentsReceivedRouter.post("/", scopeResolverMiddleware, requireSalesModule, receiptRecordPermission, salesPaymentsReceivedController.create);
+salesPaymentsReceivedRouter.get(
+  "/outstanding-invoices/:customerId",
+  scopeResolverMiddleware,
+  requireSalesModule,
+  readPermission,
+  salesPaymentsReceivedController.listOutstandingInvoices,
+);

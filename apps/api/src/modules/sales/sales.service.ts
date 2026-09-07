@@ -9,11 +9,27 @@ import { requireAtLeastOneValidLine } from "../../core/workflow/guards.js";
 import { findTransition, runGuards, type WorkflowTransition } from "../../core/workflow/transitions.js";
 import { withTenantDb, type TenantTx } from "../../database/get-db.js";
 import { findCustomerById } from "../customers/customers.repository.js";
-import { sumReservedAndConsumedBySalesItem, sumReservedAndConsumedBySalesItemForSalesOrders } from "./deliveries.repository.js";
-import { computeDeliveredStatus, computeRealized, type DeliveredStatus } from "./sales-lifecycle.js";
+import {
+  sumDeliveredQuantitiesByItem,
+  sumDeliveredQuantitiesByItemForSalesOrders,
+  sumReservedAndConsumedBySalesItem,
+  sumReservedAndConsumedBySalesItemForSalesOrders,
+} from "./deliveries.repository.js";
+import { sumInvoicedQuantitiesByItem, sumInvoicedQuantitiesByItemForSalesOrders } from "./sales-invoices.repository.js";
+import { sumOutstandingReceivablesForCustomer, sumPaidAmountsByInvoiceForSalesOrders } from "./sales-payments-received.repository.js";
+import {
+  computeDeliveredStatus,
+  computeInvoicedStatus,
+  computePaidStatus,
+  computeRealized,
+  type DeliveredStatus,
+  type InvoicedStatus,
+  type PaidStatus,
+} from "./sales-lifecycle.js";
 import { findCostsBySalesId, type SalesAdditionalCostsRow } from "./sales-costs.repository.js";
 import { listLotsForSales, listLotsForSalesItem, updateSalesItemLot, type SalesItemLotRow } from "./sales-item-lots.repository.js";
 import { listItemsWithPricingForSales, type SalesItemWithPricing } from "./sales-items.repository.js";
+import { listInvoicesForSalesOrders } from "./sales-invoices.repository.js";
 import type { CreateSalesInput, SalesListQuery, UpdateSalesInput } from "./sales.validator.js";
 import {
   findSalesById,
@@ -21,7 +37,6 @@ import {
   insertSales,
   insertSalesShipment,
   listSales,
-  sumApprovedSalesValueForCustomer,
   transitionSalesStatus,
   updateSales,
   updateSalesShipment,
@@ -74,18 +89,24 @@ export interface SalesWithShipment extends SalesRow {
   shipment: SalesShipmentRow;
   items?: SalesItemWithLots[];
   additionalCosts?: SalesAdditionalCostsRow | undefined;
-  /** Non-blocking, informational only (docs/SALES-MODULE-PLAN.md's locked decision: WARN, never hard-block). Present on the approve() response when this sale would push the customer's open-order exposure over their creditLimit - see computeCreditExposure's own doc comment for exactly what this does and does not represent. */
+  /** Non-blocking, informational only (docs/SALES-MODULE-PLAN.md's locked decision: WARN, never hard-block). Present on the approve() response when this sale would push the customer's outstanding receivables over their creditLimit - see computeCreditExposure's own doc comment for exactly what this does and does not represent. */
   warnings?: string[];
   /** S-4: derived from stock_lot_reservations (reserved vs consumed), never stored - see sales-lifecycle.ts's own doc comment for why the denominator is reserved qty, not ordered qty. */
   deliveredStatus?: DeliveredStatus;
   /** deliveredStatus !== "not_delivered" - the plan's own "realized profit flips true on delivery" trigger. */
   realized?: boolean;
+  /** S-5: derived from sales_invoice_items (invoiced vs delivered), never stored - see sales-lifecycle.ts's computeInvoicedStatus doc comment for why the denominator is delivered qty, not ordered or reserved qty. */
+  invoicedStatus?: InvoicedStatus;
+  /** S-5: derived from sales_payment_allocations against each invoice's own amount, never stored - mirrors purchase.service.ts's paidStatus exactly. */
+  paidStatus?: PaidStatus;
 }
 
-/** S-3/S-4: the Sales Order list's own row shape - mirrors purchase.service.ts's PurchaseRowWithFulfilment (deliveredStatus/realized is Sales' one fulfilment axis so far, vs Purchase's three). */
-export interface SalesRowWithDeliveryStatus extends SalesRow {
+/** S-3/S-4/S-5: the Sales Order list's own row shape - mirrors purchase.service.ts's PurchaseRowWithFulfilment. */
+export interface SalesRowWithFulfilmentStatus extends SalesRow {
   deliveredStatus: DeliveredStatus;
   realized: boolean;
+  invoicedStatus: InvoicedStatus;
+  paidStatus: PaidStatus;
 }
 
 export interface SalesItemWithLots extends SalesItemWithPricing {
@@ -93,6 +114,9 @@ export interface SalesItemWithLots extends SalesItemWithPricing {
   /** S-4: this item's own reserved-vs-consumed figures (stock_lot_reservations, excluding released) - "0" when nothing has been reserved yet (e.g. a still-Draft sale). Drives SalesFulfilmentPanels.tsx's Deliver form outstanding-qty cap. */
   reservedQty: string;
   consumedQty: string;
+  /** S-5: this item's own delivered-vs-invoiced figures - "0" when nothing has shipped/been invoiced yet. Drives SalesReceivablesPanels.tsx's Invoice form outstanding-qty cap. */
+  deliveredQty: string;
+  invoicedQty: string;
 }
 
 function requireTenantScope(ctx: RequestContext) {
@@ -132,61 +156,94 @@ export function assertItemsEditable(_tx: TenantTx, _companyId: string, salesOrde
 }
 
 /**
- * The "open order exposure" proxy the plan's own §4 leaves as an
- * unresolved client question (outstanding receivables vs outstanding +
- * open orders) - resolved for THIS phase as: this sale's own value plus
- * the sum of the customer's OTHER currently-approved sales orders'
- * salesAmountUsd, compared against customers.creditLimit. This is
- * deliberately NOT "outstanding receivables" - there is no invoice/
- * payment data at all until S-5 exists, so nothing today can represent a
- * true receivable balance. WARN only (docs/SALES-MODULE-PLAN.md's locked
- * decision) - this function never throws, it only returns a warning
- * string or undefined; the caller decides whether/how to surface it, and
- * approval proceeds either way.
+ * S-5 (docs/adr/0028): now that real invoice/payment data exists, this
+ * checks the customer's REAL outstanding receivables - the sum of every
+ * approved, not-fully-paid sales invoice's own outstanding balance
+ * (invoiceAmountUsd - paid), plus this sale's own value (not yet invoiced,
+ * so it isn't in that sum yet) - compared against customers.creditLimit.
+ * Before S-5 this summed "other approved sales orders' value" instead
+ * (S-3 ADR 0026's own documented stopgap, since no receivables existed
+ * yet). WARN only (docs/SALES-MODULE-PLAN.md's locked decision, unchanged)
+ * - this function never throws, it only returns a warning string or
+ * undefined; the caller decides whether/how to surface it, and approval
+ * proceeds either way.
  */
-function computeCreditExposure(input: { creditLimit: string; otherApprovedValue: string; thisSaleValue: string; customerName: string }): string | undefined {
-  const exposure = parseMoney(input.otherApprovedValue).plus(input.thisSaleValue);
+function computeCreditExposure(input: { creditLimit: string; outstandingReceivables: string; thisSaleValue: string; customerName: string }): string | undefined {
+  const exposure = parseMoney(input.outstandingReceivables).plus(input.thisSaleValue);
   const limit = parseMoney(input.creditLimit);
   if (limit.gt(0) && exposure.gt(limit)) {
-    return `This sale would bring ${input.customerName}'s open Sales Order value to ${exposure.toString()}, over their credit limit of ${limit.toString()}. This reflects open orders only, not full outstanding receivables (payment tracking isn't built yet) - allowed, not blocked.`;
+    return `This sale would bring ${input.customerName}'s outstanding receivables to ${exposure.toString()}, over their credit limit of ${limit.toString()}. This reflects this sale plus their existing unpaid/partially-paid invoices - allowed, not blocked.`;
   }
   return undefined;
 }
 
 /**
- * S-4: batched, not per-row - ONE extra query for reserved-vs-consumed
- * sums, scoped to just the sales IDs on THIS page, then computeDeliveredStatus
- * runs per row from an in-memory Map lookup - mirrors purchase.service.ts's
- * own list() batching discipline (PL-4) exactly, minus the ordered-quantity
- * query since sumReservedAndConsumedBySalesItemForSalesOrders already
- * carries each item's own reservedQty (the denominator here), unlike
- * Purchase's own received/billed axes which compare against a SEPARATE
- * ordered-quantity query.
+ * S-4/S-5: batched, not per-row - a handful of extra queries, each scoped
+ * to just the sales IDs on THIS page, then computeDeliveredStatus/
+ * computeInvoicedStatus/computePaidStatus all run per row from in-memory
+ * Map lookups - mirrors purchase.service.ts's own list() batching
+ * discipline (PL-4) exactly.
  */
-export async function list(ctx: RequestContext, params: SalesListQuery): Promise<PaginatedRows<SalesRowWithDeliveryStatus>> {
+export async function list(ctx: RequestContext, params: SalesListQuery): Promise<PaginatedRows<SalesRowWithFulfilmentStatus>> {
   const scope = requireTenantScope(ctx);
   return withTenantDb(ctx, async (tx) => {
     const page = await listSales(tx, scope.companyId, params);
     const salesIds = page.items.map((row) => row.id);
 
     const reservedAndConsumedRows = await sumReservedAndConsumedBySalesItemForSalesOrders(tx, scope.companyId, salesIds);
-    const bySales = new Map<string, { reservedItems: { id: string; reservedQty: string }[]; deliveredByItemId: Map<string, string> }>();
+    const reservedBySales = new Map<string, { reservedItems: { id: string; reservedQty: string }[]; deliveredByItemId: Map<string, string> }>();
     for (const row of reservedAndConsumedRows) {
-      const bucket = bySales.get(row.salesId) ?? { reservedItems: [], deliveredByItemId: new Map<string, string>() };
+      const bucket = reservedBySales.get(row.salesId) ?? { reservedItems: [], deliveredByItemId: new Map<string, string>() };
       bucket.reservedItems.push({ id: row.salesItemId, reservedQty: row.reservedQty });
       bucket.deliveredByItemId.set(row.salesItemId, row.consumedQty);
-      bySales.set(row.salesId, bucket);
+      reservedBySales.set(row.salesId, bucket);
+    }
+
+    const deliveredRows = await sumDeliveredQuantitiesByItemForSalesOrders(tx, scope.companyId, salesIds);
+    const deliveredBySales = new Map<string, { id: string; deliveredQty: string }[]>();
+    for (const row of deliveredRows) {
+      const bucket = deliveredBySales.get(row.salesId) ?? [];
+      bucket.push({ id: row.salesItemId, deliveredQty: row.deliveredQuantity });
+      deliveredBySales.set(row.salesId, bucket);
+    }
+
+    const invoicedRows = await sumInvoicedQuantitiesByItemForSalesOrders(tx, scope.companyId, salesIds);
+    const invoicedBySales = new Map<string, Map<string, string>>();
+    for (const row of invoicedRows) {
+      const bucket = invoicedBySales.get(row.salesId) ?? new Map<string, string>();
+      bucket.set(row.salesItemId, row.invoicedQuantity);
+      invoicedBySales.set(row.salesId, bucket);
+    }
+
+    const invoices = await listInvoicesForSalesOrders(tx, scope.companyId, salesIds);
+    const invoicesBySales = new Map<string, { id: string; invoiceAmountUsd: string }[]>();
+    for (const invoice of invoices) {
+      const bucket = invoicesBySales.get(invoice.salesId) ?? [];
+      bucket.push({ id: invoice.id, invoiceAmountUsd: invoice.invoiceAmountUsd });
+      invoicesBySales.set(invoice.salesId, bucket);
+    }
+
+    const paidRows = await sumPaidAmountsByInvoiceForSalesOrders(tx, scope.companyId, salesIds);
+    const paidBySales = new Map<string, Map<string, string>>();
+    for (const row of paidRows) {
+      const bucket = paidBySales.get(row.salesId) ?? new Map<string, string>();
+      bucket.set(row.invoiceId, row.paidAmountUsd);
+      paidBySales.set(row.salesId, bucket);
     }
 
     return {
       ...page,
       items: page.items.map((row) => {
-        const bucket = bySales.get(row.id) ?? { reservedItems: [], deliveredByItemId: new Map<string, string>() };
-        const deliveredStatus = computeDeliveredStatus(bucket.reservedItems, bucket.deliveredByItemId);
+        const reservedBucket = reservedBySales.get(row.id) ?? { reservedItems: [], deliveredByItemId: new Map<string, string>() };
+        const deliveredStatus = computeDeliveredStatus(reservedBucket.reservedItems, reservedBucket.deliveredByItemId);
+        const invoicedStatus = computeInvoicedStatus(deliveredBySales.get(row.id) ?? [], invoicedBySales.get(row.id) ?? new Map<string, string>());
+        const paidStatus = computePaidStatus(invoicesBySales.get(row.id) ?? [], paidBySales.get(row.id) ?? new Map<string, string>());
         return {
           ...row,
           deliveredStatus,
           realized: computeRealized(deliveredStatus),
+          invoicedStatus,
+          paidStatus,
         };
       }),
     };
@@ -221,6 +278,22 @@ export async function getById(ctx: RequestContext, id: string): Promise<SalesWit
     // way it already reads pricing/lots off each item.
     const reservedAndConsumedByItemId = new Map(reservedAndConsumed.map((row) => [row.salesItemId, row]));
 
+    const deliveredRows = await sumDeliveredQuantitiesByItem(tx, scope.companyId, id);
+    const deliveredItems = deliveredRows.map((row) => ({ id: row.salesItemId, deliveredQty: row.deliveredQuantity }));
+    // Per-item deliveredQty too (not just the sale-level aggregate) -
+    // SalesReceivablesPanels.tsx's Invoice form needs each item's own
+    // delivered-minus-invoiced figure to cap its outstanding-qty input.
+    const deliveredQtyByItemId = new Map(deliveredRows.map((row) => [row.salesItemId, row.deliveredQuantity]));
+    const invoicedRows = await sumInvoicedQuantitiesByItem(tx, scope.companyId, id);
+    const invoicedByItemId = new Map(invoicedRows.map((row) => [row.salesItemId, row.invoicedQuantity]));
+    const invoicedStatus = computeInvoicedStatus(deliveredItems, invoicedByItemId);
+
+    const invoicesForSale = await listInvoicesForSalesOrders(tx, scope.companyId, [id]);
+    const invoicesForCompute = invoicesForSale.map((invoice) => ({ id: invoice.id, invoiceAmountUsd: invoice.invoiceAmountUsd }));
+    const paidRows = await sumPaidAmountsByInvoiceForSalesOrders(tx, scope.companyId, [id]);
+    const paidByInvoiceId = new Map(paidRows.map((row) => [row.invoiceId, row.paidAmountUsd]));
+    const paidStatus = computePaidStatus(invoicesForCompute, paidByInvoiceId);
+
     return {
       ...salesOrder,
       shipment,
@@ -229,10 +302,14 @@ export async function getById(ctx: RequestContext, id: string): Promise<SalesWit
         lots: lotsByItemId.get(item.id) ?? [],
         reservedQty: reservedAndConsumedByItemId.get(item.id)?.reservedQty ?? "0",
         consumedQty: reservedAndConsumedByItemId.get(item.id)?.consumedQty ?? "0",
+        deliveredQty: deliveredQtyByItemId.get(item.id) ?? "0",
+        invoicedQty: invoicedByItemId.get(item.id) ?? "0",
       })),
       additionalCosts,
       deliveredStatus,
       realized: computeRealized(deliveredStatus),
+      invoicedStatus,
+      paidStatus,
     };
   });
 }
@@ -402,10 +479,13 @@ export async function approve(ctx: RequestContext, id: string): Promise<SalesWit
     const customer = await findCustomerById(tx, scope.companyId, row.customerId);
     if (customer) {
       const thisSaleValue = items.reduce((sum, item) => sum.plus(item.pricing.salesAmountUsd), parseMoney("0")).toString();
-      const otherApprovedValue = await sumApprovedSalesValueForCustomer(tx, scope.companyId, row.customerId, id);
+      const outstandingRows = await sumOutstandingReceivablesForCustomer(tx, scope.companyId, row.customerId);
+      const outstandingReceivables = outstandingRows
+        .reduce((sum, invoice) => sum.plus(parseMoney(invoice.invoiceAmountUsd).minus(invoice.paidAmountUsd)), parseMoney("0"))
+        .toString();
       const warning = computeCreditExposure({
         creditLimit: customer.creditLimit,
-        otherApprovedValue,
+        outstandingReceivables,
         thisSaleValue,
         customerName: customer.name,
       });

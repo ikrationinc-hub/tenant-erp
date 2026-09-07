@@ -165,9 +165,7 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
       },
     ],
   },
-  // S-3/S-4 (docs/SALES-MODULE-PLAN.md): mirrors "purchase"'s own shape.
-  // Invoices/Payments children are added in S-5, once those documents
-  // exist.
+  // S-3/S-4/S-5 (docs/SALES-MODULE-PLAN.md): mirrors "purchase"'s own shape.
   {
     key: "sales",
     label: "Sales",
@@ -191,6 +189,25 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
         label: "Deliveries",
         path: "/sales/deliveries",
         icon: "file-done",
+        requiredPermission: "sales.order.read",
+      },
+      // S-5: Zoho's own "Invoices" nav item - reuses sales.order.read, same
+      // reasoning as above (no sales.invoice.read exists).
+      {
+        key: "sales.invoices",
+        label: "Invoices",
+        path: "/sales/invoices",
+        icon: "account-book",
+        requiredPermission: "sales.order.read",
+      },
+      // S-5: Zoho's own "Payments Received" nav item - reuses
+      // sales.order.read, same reasoning as above (no sales.receipt.read
+      // exists).
+      {
+        key: "sales.receipts",
+        label: "Payments Received",
+        path: "/sales/receipts",
+        icon: "dollar",
         requiredPermission: "sales.order.read",
       },
     ],

@@ -27,6 +27,11 @@ const DEFAULT_SERIES: DefaultSeries[] = [
   // document too - same {FY} pattern as SO/PURCHASE_RECEIPT, numbered
   // independently of the sales order it's linked to.
   { docType: "DELIVERY", prefixPattern: "DEL-{FY}-{0000}", padding: 4 },
+  // S-5 (docs/SALES-MODULE-PLAN.md): the Sales Invoice and Payment
+  // Received are their own fiscal documents too - same {FY} pattern as
+  // BILL/PAYMENT, numbered independently of the sales order and delivery.
+  { docType: "INVOICE", prefixPattern: "INV-{FY}-{0000}", padding: 4 },
+  { docType: "RECEIPT", prefixPattern: "REC-{FY}-{0000}", padding: 4 },
   // FR-002 (docs/spec/Purchase-V2.md Sub Tab 1): supplier code is auto-generated,
   // company-wide (no fiscal year in the pattern - a supplier isn't a fiscal document).
   { docType: "SUPPLIER", prefixPattern: "SUP-{0000}", padding: 4 },

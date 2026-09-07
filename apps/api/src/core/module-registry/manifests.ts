@@ -340,6 +340,18 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       // what moves stock out (core/inventory-lots' consumeReservation).
       permissionEntry("sales", "delivery", "create", "Create a delivery against an approved sales order"),
       permissionEntry("sales", "delivery", "confirm", "Confirm a delivery - this is what moves stock out"),
+      // S-5 (docs/SALES-MODULE-PLAN.md): the Sales Invoice - own lifecycle,
+      // own permission surface, mirroring purchase.invoice.*. Purely
+      // financial, no stock effect.
+      permissionEntry("sales", "invoice", "create", "Create a sales invoice against an approved sales order"),
+      permissionEntry("sales", "invoice", "update", "Edit a draft sales invoice"),
+      permissionEntry("sales", "invoice", "approve", "Approve a sales invoice"),
+      // Payment Received, the 4th and final lifecycle document - its own
+      // permission surface. Action is "record", not "create" - money
+      // actually coming in deserves the same Manager-tier bar as approve/
+      // confirm (seed-roles.ts), mirroring purchase.payment.record's own
+      // reasoning exactly, just for the opposite direction of money.
+      permissionEntry("sales", "receipt", "record", "Record a payment received against one or more sales invoices"),
     ],
     // "customers": sales.customerId FK (S-1). "inventory": sales_item_lots.
     // stockLotId FKs into stock_lots, which only exists once a Purchase
@@ -349,7 +361,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     // to be enabled first, same reasoning purchase's own dependency on
     // "suppliers" mirrors.
     dependsOn: ["auth", "roles", "masters", "customers", "inventory"],
-    migrations: ["0047_s3_sales_order", "0048_s4_delivery"],
+    migrations: ["0047_s3_sales_order", "0048_s4_delivery", "0049_s5_invoice_payment"],
   },
   {
     key: "contract",

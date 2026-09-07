@@ -2053,6 +2053,209 @@ export const deliveryItemsRelations = relations(deliveryItems, ({ one }) => ({
   }),
 }));
 
+// --- S-5 (docs/SALES-MODULE-PLAN.md): Sales Invoice + Payment Received
+// (accounts receivable) - mirrors Purchase's own Bill + Payment (PL-2/
+// PL-5) field-for-field except where noted. Financial-only documents, no
+// stock/reservation interaction at all (unlike Delivery). "Payment
+// Received" (not "Payment") per CLAUDE.md's own vocabulary table - the
+// sell-side mirror of Purchase's Payment is named for what it IS from
+// this company's perspective (money coming in), not copy-pasted.
+export const salesInvoiceStatusEnum = pgEnum("sales_invoice_status", ["draft", "approved", "reversed", "paid"]);
+
+/**
+ * Own lifecycle, independent of Delivery (docs/SALES-MODULE-PLAN.md's own
+ * S-5 prompt: "a sale can be delivered-not-invoiced or invoiced-not-
+ * delivered") - mirrors purchase_bills exactly. Nothing here moves stock;
+ * "paid" is set only once payments_received.service.ts's own auto-pay
+ * loop sees this invoice's outstanding balance reach zero (mirrors
+ * purchase-payments.service.ts's own inline auto-transition - no separate
+ * maybeAutoPayInvoice helper, same reasoning Purchase used).
+ */
+export const salesInvoices = pgTable(
+  "sales_invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    salesId: uuid("sales_id")
+      .notNull()
+      .references(() => sales.id, { onDelete: "restrict" }),
+    /** Own gapless series (docType "INVOICE", rule 7) - an invoice is its own fiscal document, numbered independently of the sale and any delivery. */
+    invoiceNumber: text("invoice_number").notNull(),
+    /** The customer's own PO/reference number, if they gave one - free text, distinct from invoiceNumber (this system's own gapless number). Mirrors purchase_bills.supplierInvoiceNo. */
+    customerReferenceNo: text("customer_reference_no"),
+    invoiceDate: date("invoice_date").notNull(),
+    /** When payment is due - informational only (no dunning/ageing logic). Nullable - not every invoice's due date is known/entered at create time. Mirrors purchase_bills.dueDate. */
+    dueDate: date("due_date"),
+    status: salesInvoiceStatusEnum("status").notNull().default("draft"),
+    invoiceAmountUsd: numeric("invoice_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    /** S-5 item 4: a clean seam only - tax is multi-country and an open client question (CLAUDE.md's "Do NOT import from Zoho" - no TDS/TCS mechanics). Nullable, reference-only, never computed or enforced. Mirrors purchase_bills.taxAmount / ADR 0017 exactly. */
+    taxAmount: numeric("tax_amount", { precision: 18, scale: 2 }),
+    approvedBy: uuid("approved_by").references(() => users.id, { onDelete: "restrict" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("sales_invoices_company_id_invoice_number_key")
+      .on(table.companyId, table.invoiceNumber)
+      .where(sql`${table.deletedAt} is null`),
+    index("sales_invoices_sales_id_idx").on(table.salesId),
+  ],
+);
+
+/**
+ * Which sales_item(s) this invoice covers and how much of each is being
+ * invoiced - mirrors purchase_bill_items' shape exactly, except the
+ * ceiling this system enforces (sales-invoices.service.ts) is DELIVERED
+ * quantity, not ordered quantity - a deliberate Sales-specific choice
+ * (see docs/adr/0028): an invoice should only ever bill what actually
+ * shipped. A header-only invoice (no items) is still allowed, same as
+ * purchase_bills' own optional-items pattern - this is what makes
+ * "invoice independent of delivery" possible.
+ */
+export const salesInvoiceItems = pgTable(
+  "sales_invoice_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => salesInvoices.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    salesItemId: uuid("sales_item_id")
+      .notNull()
+      .references(() => salesItems.id, { onDelete: "restrict" }),
+    invoicedQuantity: numeric("invoiced_quantity", { precision: 18, scale: 6 }).notNull(),
+    invoicedAmountUsd: numeric("invoiced_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    ...auditColumns(),
+  },
+  (table) => [index("sales_invoice_items_invoice_id_idx").on(table.invoiceId), index("sales_invoice_items_sales_item_id_idx").on(table.salesItemId)],
+);
+
+export const salesInvoicesRelations = relations(salesInvoices, ({ one, many }) => ({
+  sales: one(sales, {
+    fields: [salesInvoices.salesId],
+    references: [sales.id],
+  }),
+  branch: one(branches, {
+    fields: [salesInvoices.branchId],
+    references: [branches.id],
+  }),
+  items: many(salesInvoiceItems),
+}));
+
+export const salesInvoiceItemsRelations = relations(salesInvoiceItems, ({ one }) => ({
+  invoice: one(salesInvoices, {
+    fields: [salesInvoiceItems.invoiceId],
+    references: [salesInvoices.id],
+  }),
+  salesItem: one(salesItems, {
+    fields: [salesInvoiceItems.salesItemId],
+    references: [salesItems.id],
+  }),
+}));
+
+// Deliberately its own enum, not a reuse of purchase's paymentModeEnum -
+// rule 9 (no FK from a tenant schema to platform) extends in spirit to
+// "a tenant schema stays self-contained" - schema.ts's own precedent
+// (salesPricingTypeEnum duplicating rather than sharing purchase's pricing
+// type enum) is followed here too.
+export const salesPaymentModeEnum = pgEnum("sales_payment_mode", ["cash", "cheque", "bank_transfer", "other"]);
+
+/**
+ * A payment is received FROM a customer, not against a single invoice/
+ * sale - the invoice(s) it settles are named in sales_payment_allocations
+ * below, which can span multiple sales for the same customer. Mirrors
+ * `payments` exactly, renamed per CLAUDE.md's vocabulary table ("Receipt
+ * of payment" is the canonical sell-side term for money we're paid).
+ */
+export const paymentsReceived = pgTable(
+  "payments_received",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    /** Own gapless series (docType "RECEIPT", rule 7) - a payment received is its own fiscal document. */
+    paymentNumber: text("payment_number").notNull(),
+    paymentDate: date("payment_date").notNull(),
+    paymentMode: salesPaymentModeEnum("payment_mode").notNull(),
+    /** Free text - a cheque number, a wire transfer reference, etc. Mirrors payments.referenceNumber. */
+    referenceNumber: text("reference_number"),
+    /** The payment's own total - always USD (matches sales_invoices.invoiceAmountUsd). Must equal the sum of this payment's own allocations (enforced at the service layer, same discipline as payments.paymentAmountUsd). */
+    paymentAmountUsd: numeric("payment_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    notes: text("notes"),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("payments_received_company_id_payment_number_key")
+      .on(table.companyId, table.paymentNumber)
+      .where(sql`${table.deletedAt} is null`),
+    index("payments_received_customer_id_idx").on(table.customerId),
+  ],
+);
+
+/**
+ * The join between a payment received and the invoice(s) it settles - one
+ * row per invoice a payment is applied to. `appliedAmountUsd` may be less
+ * than the invoice's own outstanding balance (partial payment), and an
+ * invoice can appear across multiple payments' own allocation rows over
+ * time. Named salesPaymentAllocations (not paymentAllocations) to avoid
+ * colliding with Purchase's own export of the same concept - mirrors
+ * payment_allocations exactly otherwise.
+ */
+export const salesPaymentAllocations = pgTable(
+  "sales_payment_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paymentId: uuid("payment_id")
+      .notNull()
+      .references(() => paymentsReceived.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => salesInvoices.id, { onDelete: "restrict" }),
+    appliedAmountUsd: numeric("applied_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    ...auditColumns(),
+  },
+  (table) => [
+    index("sales_payment_allocations_payment_id_idx").on(table.paymentId),
+    index("sales_payment_allocations_invoice_id_idx").on(table.invoiceId),
+  ],
+);
+
+export const paymentsReceivedRelations = relations(paymentsReceived, ({ one, many }) => ({
+  customer: one(customers, {
+    fields: [paymentsReceived.customerId],
+    references: [customers.id],
+  }),
+  branch: one(branches, {
+    fields: [paymentsReceived.branchId],
+    references: [branches.id],
+  }),
+  allocations: many(salesPaymentAllocations),
+}));
+
+export const salesPaymentAllocationsRelations = relations(salesPaymentAllocations, ({ one }) => ({
+  payment: one(paymentsReceived, {
+    fields: [salesPaymentAllocations.paymentId],
+    references: [paymentsReceived.id],
+  }),
+  invoice: one(salesInvoices, {
+    fields: [salesPaymentAllocations.invoiceId],
+    references: [salesInvoices.id],
+  }),
+}));
+
 // --- Platform Hedging / LME Records (docs/spec/Purchase-V2.md Sub Tab 3, A-B)
 // Session (d) of the Purchase build. "LME (FR-201/202) - prices go into
 // market_prices first, NEVER straight onto a transaction" (this task's own
