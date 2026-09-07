@@ -361,7 +361,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     // to be enabled first, same reasoning purchase's own dependency on
     // "suppliers" mirrors.
     dependsOn: ["auth", "roles", "masters", "customers", "inventory"],
-    migrations: ["0047_s3_sales_order", "0048_s4_delivery", "0049_s5_invoice_payment"],
+    migrations: ["0047_s3_sales_order", "0048_s4_delivery", "0049_s5_invoice_payment", "0050_s6_dashboard_cache"],
   },
   {
     key: "contract",

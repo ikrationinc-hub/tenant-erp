@@ -49,6 +49,8 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   // resolveSalesPaymentsReceivedScreen.
   "/sales/invoices",
   "/sales/receipts",
+  // S-6 - modules/sales/sales-registry.tsx's resolveSalesDashboardScreen.
+  "/sales/dashboard",
   "/purchase/receipts",
   "/purchase/bills",
   "/purchase/payments",

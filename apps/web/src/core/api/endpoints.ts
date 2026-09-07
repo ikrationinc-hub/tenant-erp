@@ -113,6 +113,9 @@ export const endpoints = {
   paymentsReceived: "/payments-received",
   paymentReceived: (id: string) => `/payments-received/${id}`,
   outstandingInvoicesForCustomer: (customerId: string) => `/payments-received/outstanding-invoices/${customerId}`,
+  // S-6 (docs/SALES-MODULE-PLAN.md): the dashboard's own endpoint - a
+  // literal path segment under /sales, not nested under a sale id.
+  salesDashboard: "/sales/dashboard",
 
   uploadAttachment: (entity: string, entityId: string, fieldKey: string) =>
     `/attachments/${entity}/${entityId}/${fieldKey}`,

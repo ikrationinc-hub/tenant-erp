@@ -65,6 +65,7 @@ const REAL_MIGRATION_VERSIONS = [
   "0047_s3_sales_order",
   "0048_s4_delivery",
   "0049_s5_invoice_payment",
+  "0050_s6_dashboard_cache",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

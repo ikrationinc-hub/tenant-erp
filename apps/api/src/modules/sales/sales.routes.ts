@@ -4,6 +4,7 @@ import { requirePermission } from "../../common/middleware/rbac.js";
 import { scopeResolverMiddleware } from "../../common/middleware/scope-resolver.js";
 import * as deliveriesController from "./deliveries.controller.js";
 import * as salesCostsController from "./sales-costs.controller.js";
+import * as salesDashboardController from "./sales-dashboard.controller.js";
 import * as salesInvoicesController from "./sales-invoices.controller.js";
 import * as salesItemLotsController from "./sales-item-lots.controller.js";
 import * as salesItemsController from "./sales-items.controller.js";
@@ -30,6 +31,12 @@ salesRouter.get("/", scopeResolverMiddleware, requireSalesModule, readPermission
 // route matching "lots-available" as an id (same ordering discipline the
 // standalone Receipts/Bills list routers already follow in purchase.routes.ts).
 salesRouter.get("/lots-available", scopeResolverMiddleware, requireSalesModule, readPermission, salesItemLotsController.listAvailable);
+// S-6 (docs/SALES-MODULE-PLAN.md): the dashboard's own endpoint - also a
+// literal path segment, registered before "/:id" for the same reason as
+// "/lots-available" above. Reuses sales.order.read (no dedicated
+// sales.dashboard.read key - every other Sales list screen has made the
+// same call).
+salesRouter.get("/dashboard", scopeResolverMiddleware, requireSalesModule, readPermission, salesDashboardController.getDashboard);
 salesRouter.get("/:id", scopeResolverMiddleware, requireSalesModule, readPermission, salesController.getById);
 salesRouter.post("/", scopeResolverMiddleware, requireSalesModule, createPermission, salesController.create);
 salesRouter.patch("/:id", scopeResolverMiddleware, requireSalesModule, updatePermission, salesController.update);

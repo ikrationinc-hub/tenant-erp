@@ -198,3 +198,23 @@ export async function sumOutstandingReceivablesForCustomer(tx: TenantTx, company
     .having(sql`${salesInvoices.invoiceAmountUsd} > coalesce(sum(${salesPaymentAllocations.appliedAmountUsd}), 0)`);
   return rows;
 }
+
+/**
+ * S-6 (docs/SALES-MODULE-PLAN.md): company-wide variant of the above, for
+ * the dashboard's Outstanding Receivables KPI - same shape minus the
+ * customer filter (no per-customer grouping needed here since the caller
+ * just sums every row's own outstanding balance into one company total).
+ */
+export async function sumOutstandingReceivablesForCompany(tx: TenantTx, companyId: string): Promise<OutstandingBalanceRow[]> {
+  const rows = await tx
+    .select({
+      invoiceAmountUsd: salesInvoices.invoiceAmountUsd,
+      paidAmountUsd: sql<string>`coalesce(sum(${salesPaymentAllocations.appliedAmountUsd}), 0)`.as("paid_amount_usd"),
+    })
+    .from(salesInvoices)
+    .leftJoin(salesPaymentAllocations, and(eq(salesPaymentAllocations.invoiceId, salesInvoices.id), isNull(salesPaymentAllocations.deletedAt)))
+    .where(and(eq(salesInvoices.companyId, companyId), eq(salesInvoices.status, "approved"), isNull(salesInvoices.deletedAt)))
+    .groupBy(salesInvoices.id)
+    .having(sql`${salesInvoices.invoiceAmountUsd} > coalesce(sum(${salesPaymentAllocations.appliedAmountUsd}), 0)`);
+  return rows;
+}

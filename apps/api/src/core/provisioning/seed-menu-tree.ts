@@ -165,7 +165,7 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
       },
     ],
   },
-  // S-3/S-4/S-5 (docs/SALES-MODULE-PLAN.md): mirrors "purchase"'s own shape.
+  // S-3/S-4/S-5/S-6 (docs/SALES-MODULE-PLAN.md): mirrors "purchase"'s own shape.
   {
     key: "sales",
     label: "Sales",
@@ -173,6 +173,16 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     moduleKey: "sales",
     requiredPermission: "sales.order.read",
     children: [
+      // S-6: Zoho's own dashboard-first convention - ordered before Sales
+      // Orders. Reuses sales.order.read, same reasoning as every other
+      // child here (no sales.dashboard.read exists).
+      {
+        key: "sales.dashboard",
+        label: "Dashboard",
+        path: "/sales/dashboard",
+        icon: "dashboard",
+        requiredPermission: "sales.order.read",
+      },
       {
         key: "sales.orders",
         label: "Sales Orders",

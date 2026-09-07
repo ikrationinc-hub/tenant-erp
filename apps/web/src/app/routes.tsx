@@ -20,6 +20,7 @@ import {
   resolveSalesDeliveriesScreen,
   resolveSalesInvoicesScreen,
   resolveSalesPaymentsReceivedScreen,
+  resolveSalesDashboardScreen,
 } from "../modules/sales/sales-registry";
 import { resolveBrokerScreen } from "../modules/brokers/broker-registry";
 import { resolvePurchaseScreen, resolvePurchaseReceiptsScreen, resolvePurchaseBillsScreen, resolvePurchasePaymentsScreen } from "../modules/purchase/purchase-registry";
@@ -109,6 +110,7 @@ export const routes: RouteObject[] = [
                       resolveSalesDeliveriesScreen(entry, pathname) ??
                       resolveSalesInvoicesScreen(entry, pathname) ??
                       resolveSalesPaymentsReceivedScreen(entry, pathname) ??
+                      resolveSalesDashboardScreen(entry, pathname) ??
                       resolvePurchaseReceiptsScreen(entry, pathname) ??
                       resolvePurchaseBillsScreen(entry, pathname) ??
                       resolvePurchasePaymentsScreen(entry, pathname) ??

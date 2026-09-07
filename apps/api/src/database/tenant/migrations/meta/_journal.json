@@ -351,6 +351,13 @@
       "when": 1788758514595,
       "tag": "0049_s5_invoice_payment",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1788766810687,
+      "tag": "0050_s6_dashboard_cache",
+      "breakpoints": true
     }
   ]
 }

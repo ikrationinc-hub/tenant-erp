@@ -2256,6 +2256,134 @@ export const salesPaymentAllocationsRelations = relations(salesPaymentAllocation
   }),
 }));
 
+// --- S-6 (docs/SALES-MODULE-PLAN.md): Sales Performance Dashboard cache
+// tables - deliberately NOT run against OLTP tables live (the plan's own
+// explicit rule). A BullMQ job (apps/worker/src/workers/sales-dashboard-
+// refresh.worker.ts) periodically recomputes and upserts these, one row
+// per (company, month); GET /sales/dashboard reads only from here. No
+// auditColumns() on any of the five tables below - a deliberate exception
+// (docs/adr/0029): these are pure cache/snapshot rows, not business
+// documents or audit-relevant records (no owner, no soft-delete need, no
+// optimistic-locking need), and the refresh worker has no authenticated
+// RequestContext to supply a real created_by - the codebase has no
+// service-account/system-user convention to invent one from. Just
+// companyId + the aggregate figures + refreshedAt.
+export const salesDashboardSnapshots = pgTable(
+  "sales_dashboard_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    /** Always the 1st of the month - e.g. 2026-03-01 for "March 2026". */
+    periodMonth: date("period_month").notNull(),
+    totalSalesUsd: numeric("total_sales_usd", { precision: 18, scale: 2 }).notNull(),
+    /** First real caller of core/inventory-lots/cost-allocation.ts's grossProfit() - previously a zero-caller pure function (docs/adr/0029). */
+    grossProfitUsd: numeric("gross_profit_usd", { precision: 18, scale: 2 }).notNull(),
+    /** grossProfitUsd minus the month's own sales_additional_costs (freight/insurance/customs/other) - no new formula beyond what's already itemized. */
+    netProfitUsd: numeric("net_profit_usd", { precision: 18, scale: 2 }).notNull(),
+    outstandingReceivablesUsd: numeric("outstanding_receivables_usd", { precision: 18, scale: 2 }).notNull(),
+    /** Count of approved sales where computeDeliveredStatus() !== "fully_delivered" - not a delivery-document-status concept. */
+    shipmentPendingCount: integer("shipment_pending_count").notNull(),
+    /** Company-wide - contracts has no customerId, only a nullable/unconstrained sourceType+sourceId pair, so this isn't joined to a specific sale. */
+    openContractsCount: integer("open_contracts_count").notNull(),
+    completedContractsCount: integer("completed_contracts_count").notNull(),
+    /** purchasePricing.purchaseAmountUsd summed for the same company/month - the Sales vs Purchase Analysis KPI's other half. */
+    totalPurchasesUsd: numeric("total_purchases_usd", { precision: 18, scale: 2 }).notNull(),
+    refreshedAt: timestamp("refreshed_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [uniqueIndex("sales_dashboard_snapshots_company_id_period_month_key").on(table.companyId, table.periodMonth)],
+);
+
+export const salesDashboardCustomerBreakdown = pgTable(
+  "sales_dashboard_customer_breakdown",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    periodMonth: date("period_month").notNull(),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "restrict" }),
+    salesAmountUsd: numeric("sales_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    refreshedAt: timestamp("refreshed_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("sales_dashboard_customer_breakdown_key").on(table.companyId, table.periodMonth, table.customerId),
+    index("sales_dashboard_customer_breakdown_period_idx").on(table.companyId, table.periodMonth),
+  ],
+);
+
+export const salesDashboardItemBreakdown = pgTable(
+  "sales_dashboard_item_breakdown",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    periodMonth: date("period_month").notNull(),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => items.id, { onDelete: "restrict" }),
+    salesAmountUsd: numeric("sales_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    refreshedAt: timestamp("refreshed_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("sales_dashboard_item_breakdown_key").on(table.companyId, table.periodMonth, table.itemId),
+    index("sales_dashboard_item_breakdown_period_idx").on(table.companyId, table.periodMonth),
+  ],
+);
+
+/** Country-wise has no country column on `sales` itself - always joined through customers.countryId at refresh time, then stored flat here. */
+export const salesDashboardCountryBreakdown = pgTable(
+  "sales_dashboard_country_breakdown",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    periodMonth: date("period_month").notNull(),
+    countryId: uuid("country_id")
+      .notNull()
+      .references(() => countries.id, { onDelete: "restrict" }),
+    salesAmountUsd: numeric("sales_amount_usd", { precision: 18, scale: 2 }).notNull(),
+    refreshedAt: timestamp("refreshed_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("sales_dashboard_country_breakdown_key").on(table.companyId, table.periodMonth, table.countryId),
+    index("sales_dashboard_country_breakdown_period_idx").on(table.companyId, table.periodMonth),
+  ],
+);
+
+export const salesDashboardSnapshotsRelations = relations(salesDashboardSnapshots, ({ one }) => ({
+  company: one(companies, {
+    fields: [salesDashboardSnapshots.companyId],
+    references: [companies.id],
+  }),
+}));
+
+export const salesDashboardCustomerBreakdownRelations = relations(salesDashboardCustomerBreakdown, ({ one }) => ({
+  customer: one(customers, {
+    fields: [salesDashboardCustomerBreakdown.customerId],
+    references: [customers.id],
+  }),
+}));
+
+export const salesDashboardItemBreakdownRelations = relations(salesDashboardItemBreakdown, ({ one }) => ({
+  item: one(items, {
+    fields: [salesDashboardItemBreakdown.itemId],
+    references: [items.id],
+  }),
+}));
+
+export const salesDashboardCountryBreakdownRelations = relations(salesDashboardCountryBreakdown, ({ one }) => ({
+  country: one(countries, {
+    fields: [salesDashboardCountryBreakdown.countryId],
+    references: [countries.id],
+  }),
+}));
+
 // --- Platform Hedging / LME Records (docs/spec/Purchase-V2.md Sub Tab 3, A-B)
 // Session (d) of the Purchase build. "LME (FR-201/202) - prices go into
 // market_prices first, NEVER straight onto a transaction" (this task's own

@@ -5,6 +5,9 @@ import { SalesDetailScreen } from "./SalesDetailScreen";
 import { SalesDeliveriesListScreen, SALES_DELIVERIES_LIST_PATH } from "./SalesDeliveriesListScreen";
 import { SalesInvoicesListScreen, SALES_INVOICES_LIST_PATH } from "./SalesInvoicesListScreen";
 import { SalesPaymentsReceivedListScreen, SALES_PAYMENTS_RECEIVED_LIST_PATH } from "./SalesPaymentsReceivedListScreen";
+import { SalesDashboardScreen } from "./SalesDashboardScreen";
+
+export const SALES_DASHBOARD_PATH = "/sales/dashboard";
 
 const NEW_PATH = `${SALES_LIST_PATH}/new`;
 const DETAIL_PATH_PATTERN = new RegExp(`^${SALES_LIST_PATH}/([^/]+)$`);
@@ -49,4 +52,12 @@ export function resolveSalesPaymentsReceivedScreen(entry: FlatMenuEntry, pathnam
     return null;
   }
   return <SalesPaymentsReceivedListScreen />;
+}
+
+/** S-6: the dashboard screen - mirrors resolveSalesDeliveriesScreen exactly. */
+export function resolveSalesDashboardScreen(entry: FlatMenuEntry, pathname: string): ReactElement | null {
+  if (entry.path !== SALES_DASHBOARD_PATH || pathname !== SALES_DASHBOARD_PATH) {
+    return null;
+  }
+  return <SalesDashboardScreen />;
 }
