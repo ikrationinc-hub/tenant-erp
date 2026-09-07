@@ -335,6 +335,11 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       // an Approved sale is holding.
       permissionEntry("sales", "order", "approve", "Approve a sales order - reserves its picked stock lots"),
       permissionEntry("sales", "order", "cancel", "Cancel a sales order, releasing any reserved lots"),
+      // S-4 (docs/SALES-MODULE-PLAN.md): the Delivery - its own lifecycle,
+      // own permission surface, mirroring purchase.receipt.*. Confirm is
+      // what moves stock out (core/inventory-lots' consumeReservation).
+      permissionEntry("sales", "delivery", "create", "Create a delivery against an approved sales order"),
+      permissionEntry("sales", "delivery", "confirm", "Confirm a delivery - this is what moves stock out"),
     ],
     // "customers": sales.customerId FK (S-1). "inventory": sales_item_lots.
     // stockLotId FKs into stock_lots, which only exists once a Purchase
@@ -344,7 +349,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     // to be enabled first, same reasoning purchase's own dependency on
     // "suppliers" mirrors.
     dependsOn: ["auth", "roles", "masters", "customers", "inventory"],
-    migrations: ["0047_s3_sales_order"],
+    migrations: ["0047_s3_sales_order", "0048_s4_delivery"],
   },
   {
     key: "contract",

@@ -96,6 +96,11 @@ export const endpoints = {
   salesCosts: (salesId: string) => `/sales/${salesId}/costs`,
   /** The lot-picker's own read - available stock_lots filtered by item/grade, live/unlocked (the real lock only happens at Approve). */
   availableStockLots: "/sales/lots-available",
+  // S-4 (docs/SALES-MODULE-PLAN.md): Delivery - mirrors purchaseReceipts/
+  // confirmPurchaseReceipt/allPurchaseReceipts exactly.
+  salesDeliveries: (salesId: string) => `/sales/${salesId}/deliveries`,
+  confirmSalesDelivery: (salesId: string, deliveryId: string) => `/sales/${salesId}/deliveries/${deliveryId}/confirm`,
+  allSalesDeliveries: "/sales-deliveries",
 
   uploadAttachment: (entity: string, entityId: string, fieldKey: string) =>
     `/attachments/${entity}/${entityId}/${fieldKey}`,

@@ -18,8 +18,20 @@ import { grantPermissionToRole } from "../src/core/rbac/mutations.js";
  * copy of seed-roles.ts's ROLE_PERMISSION_FILTERS as it existed when this
  * script was written, per that file's own convention), skipping any
  * role+permission pair already granted.
+ *
+ * S-4 extended this same list with sales.delivery.{create,confirm} rather
+ * than a new script - this script is idempotent (grantedSet skip) and safe
+ * to re-run against tenants that already got the S-3 keys.
  */
-const NEW_KEYS = ["sales.order.create", "sales.order.read", "sales.order.update", "sales.order.approve", "sales.order.cancel"] as const;
+const NEW_KEYS = [
+  "sales.order.create",
+  "sales.order.read",
+  "sales.order.update",
+  "sales.order.approve",
+  "sales.order.cancel",
+  "sales.delivery.create",
+  "sales.delivery.confirm",
+] as const;
 const ROLE_ACTION_FILTERS: Record<string, (action: string) => boolean> = {
   Viewer: (action) => action === "read",
   Officer: (action) => ["read", "create", "update", "version", "edit", "generate"].includes(action),

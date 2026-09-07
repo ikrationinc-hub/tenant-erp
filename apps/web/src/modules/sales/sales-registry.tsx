@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import type { FlatMenuEntry } from "../../core/navigation/menu-tree-utils";
 import { SalesListScreen, SALES_LIST_PATH } from "./SalesListScreen";
 import { SalesDetailScreen } from "./SalesDetailScreen";
+import { SalesDeliveriesListScreen, SALES_DELIVERIES_LIST_PATH } from "./SalesDeliveriesListScreen";
 
 const NEW_PATH = `${SALES_LIST_PATH}/new`;
 const DETAIL_PATH_PATTERN = new RegExp(`^${SALES_LIST_PATH}/([^/]+)$`);
@@ -22,4 +23,12 @@ export function resolveSalesScreen(entry: FlatMenuEntry, pathname: string): Reac
     return <SalesDetailScreen mode="edit" salesId={detailMatch[1]} />;
   }
   return null;
+}
+
+/** S-4: the standalone "Deliveries" list screen - a single seeded menu row with no sub-paths of its own, mirroring resolvePurchaseReceiptsScreen exactly. */
+export function resolveSalesDeliveriesScreen(entry: FlatMenuEntry, pathname: string): ReactElement | null {
+  if (entry.path !== SALES_DELIVERIES_LIST_PATH || pathname !== SALES_DELIVERIES_LIST_PATH) {
+    return null;
+  }
+  return <SalesDeliveriesListScreen />;
 }

@@ -337,6 +337,13 @@
       "when": 1788535579608,
       "tag": "0047_s3_sales_order",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1788754333118,
+      "tag": "0048_s4_delivery",
+      "breakpoints": true
     }
   ]
 }

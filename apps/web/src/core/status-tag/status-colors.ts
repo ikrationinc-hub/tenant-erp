@@ -35,6 +35,9 @@ export const RECEIPT_STATUS_COLORS: Record<string, string> = {
   reversed: semantic.error,
 };
 
+/** S-4 (docs/SALES-MODULE-PLAN.md): Delivery shares the exact same draft/confirmed/reversed vocabulary as Purchase Receipt - same color roles, same reasoning as BILL_STATUS_COLORS reusing INVOICE_STATUS_COLORS above. */
+export const DELIVERY_STATUS_COLORS: Record<string, string> = RECEIPT_STATUS_COLORS;
+
 export const USER_STATUS_COLORS: Record<string, string> = {
   invited: semantic.warning,
   active: semantic.success,

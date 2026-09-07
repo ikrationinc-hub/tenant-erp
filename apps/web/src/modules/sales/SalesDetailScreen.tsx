@@ -12,6 +12,7 @@ import { useHasPermission } from "../../core/permissions/use-permissions";
 import { StatusTag } from "../../core/status-tag/StatusTag";
 import { SALES_STATUS_COLORS } from "../../core/status-tag/status-colors";
 import { SALES_LIST_PATH } from "./SalesListScreen";
+import { SalesFulfilmentActions, SalesFulfilmentDrawer } from "./SalesFulfilmentPanels";
 
 /** Same pattern as PurchaseDetailScreen's useMasterLabels - a select field backed by a masters:X optionsSource stores the master's row id, not a label. */
 function useMasterLabels(master: string): Map<string, string> {
@@ -107,6 +108,7 @@ export function SalesDetailScreen({
   const canCreate = useHasPermission("sales.order.create");
   const canUpdate = useHasPermission("sales.order.update");
   const canEditHeader = mode === "create" ? canCreate : canUpdate;
+  const [deliverOpen, setDeliverOpen] = useState(false);
 
   const salesQuery = useQuery({
     queryKey: ["sales", salesId],
@@ -181,6 +183,13 @@ export function SalesDetailScreen({
         </Space>
         {mode === "edit" && salesId && (
           <Space>
+            {approved && (
+              <SalesFulfilmentActions
+                approved={approved}
+                deliveredStatus={asDisplayString(salesOrder?.deliveredStatus)}
+                onDeliver={() => setDeliverOpen(true)}
+              />
+            )}
             {draft && (
               <Can permission="sales.order.approve">
                 <Tooltip title={hasItems ? undefined : "Add at least one item and pick its lots before approving"}>
@@ -221,6 +230,11 @@ export function SalesDetailScreen({
           type="info"
           showIcon
           message="This sales order is approved. Its picked lots are reserved. Header and costs are now locked. Items stay editable until the sale closes or is cancelled."
+          description={
+            salesOrder?.deliveredStatus
+              ? `Delivery status: ${asDisplayString(salesOrder.deliveredStatus).replace(/_/g, " ")}`
+              : undefined
+          }
         />
       )}
       {closed && <Alert type="success" showIcon message="This sales order is closed. It is now immutable; corrections require a reversal and re-entry." />}
@@ -239,6 +253,21 @@ export function SalesDetailScreen({
         <>
           <SalesCostsPanel salesId={salesId} readOnly={!draft || !canUpdate} onSaved={refresh} costs={salesOrder.additionalCosts} />
           <SalesItemsPanel salesId={salesId} readOnly={terminal} onAdded={refresh} items={rowsOf(salesOrder.items)} />
+          <SalesFulfilmentDrawer
+            open={deliverOpen}
+            salesId={salesId}
+            items={rowsOf(salesOrder.items).map((item) => ({
+              id: asDisplayString(item.id),
+              quantity: asDisplayString(item.quantity) || "0",
+              reservedQty: asDisplayString(item.reservedQty) || "0",
+              consumedQty: asDisplayString(item.consumedQty) || "0",
+            }))}
+            onClose={() => setDeliverOpen(false)}
+            onDone={() => {
+              setDeliverOpen(false);
+              refresh();
+            }}
+          />
         </>
       )}
     </Space>

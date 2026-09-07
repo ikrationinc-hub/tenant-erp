@@ -165,9 +165,9 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
       },
     ],
   },
-  // S-3 (docs/SALES-MODULE-PLAN.md): mirrors "purchase"'s own shape.
-  // Deliveries/Invoices/Payments children are added in S-4/S-5, once
-  // those documents exist - only Sales Orders is real in this phase.
+  // S-3/S-4 (docs/SALES-MODULE-PLAN.md): mirrors "purchase"'s own shape.
+  // Invoices/Payments children are added in S-5, once those documents
+  // exist.
   {
     key: "sales",
     label: "Sales",
@@ -180,6 +180,17 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
         label: "Sales Orders",
         path: "/sales/orders",
         icon: "file-text",
+        requiredPermission: "sales.order.read",
+      },
+      // S-4: reuses sales.order.read, same reasoning as purchase.
+      // receipts reusing purchase.po.read (no sales.delivery.read exists -
+      // the backend route this list screen calls gates on sales.order.read
+      // too, see sales.routes.ts's salesDeliveriesListRouter).
+      {
+        key: "sales.deliveries",
+        label: "Deliveries",
+        path: "/sales/deliveries",
+        icon: "file-done",
         requiredPermission: "sales.order.read",
       },
     ],

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireModuleEnabled } from "../../common/middleware/require-module-enabled.js";
 import { requirePermission } from "../../common/middleware/rbac.js";
 import { scopeResolverMiddleware } from "../../common/middleware/scope-resolver.js";
+import * as deliveriesController from "./deliveries.controller.js";
 import * as salesCostsController from "./sales-costs.controller.js";
 import * as salesItemLotsController from "./sales-item-lots.controller.js";
 import * as salesItemsController from "./sales-items.controller.js";
@@ -15,6 +16,8 @@ const createPermission = requirePermission("sales.order.create");
 const updatePermission = requirePermission("sales.order.update");
 const approvePermission = requirePermission("sales.order.approve");
 const cancelPermission = requirePermission("sales.order.cancel");
+const deliveryCreatePermission = requirePermission("sales.delivery.create");
+const deliveryConfirmPermission = requirePermission("sales.delivery.confirm");
 
 salesRouter.get("/", scopeResolverMiddleware, requireSalesModule, readPermission, salesController.list);
 // Registered BEFORE "/:id" - a literal path segment, not a nested sub-
@@ -58,3 +61,32 @@ salesRouter.delete(
 // One flat row per sale - a single upsert-style PATCH, mirrors
 // purchase.routes.ts's /:id/costs.
 salesRouter.patch("/:id/costs", scopeResolverMiddleware, requireSalesModule, updatePermission, salesCostsController.setAdditionalCosts);
+
+// S-4 (docs/SALES-MODULE-PLAN.md): Delivery - its own lifecycle (Draft ->
+// Confirmed), own permissions, own numbering. This is where stock actually
+// leaves (deliveries.service.ts's confirm, via core/inventory-lots'
+// consumeReservation) - mirrors purchase.routes.ts's /:id/receipts exactly.
+// A sale can have MULTIPLE deliveries (partial), so a real GET list here
+// too, not just via GET /:id.
+salesRouter.get("/:id/deliveries", scopeResolverMiddleware, requireSalesModule, readPermission, deliveriesController.list);
+salesRouter.post("/:id/deliveries", scopeResolverMiddleware, requireSalesModule, deliveryCreatePermission, deliveriesController.create);
+salesRouter.patch(
+  "/:id/deliveries/:deliveryId/confirm",
+  scopeResolverMiddleware,
+  requireSalesModule,
+  deliveryConfirmPermission,
+  deliveriesController.confirm,
+);
+
+/**
+ * The standalone "Deliveries" list screen (Zoho's own top-level nav item
+ * shape) needs a cross-sale GET spanning every sale in the company -
+ * `salesRouter` itself can't host that at a path like "/deliveries"
+ * without colliding with its own "/:id" param route. A small standalone
+ * router instead, mounted at its own top-level path in app.ts
+ * ("/sales-deliveries"), same requireSalesModule/readPermission gating as
+ * everything else here - mirrors purchase.routes.ts's own
+ * purchaseReceiptsListRouter precedent exactly.
+ */
+export const salesDeliveriesListRouter: Router = Router();
+salesDeliveriesListRouter.get("/", scopeResolverMiddleware, requireSalesModule, readPermission, deliveriesController.listAll);

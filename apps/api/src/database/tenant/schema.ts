@@ -1932,6 +1932,127 @@ export const salesAdditionalCostsRelations = relations(salesAdditionalCosts, ({ 
   }),
 }));
 
+// --- Delivery (S-4, docs/SALES-MODULE-PLAN.md) - mirrors Purchase Receipt's
+// pattern exactly (Receipt = stock in; Delivery = stock out), per CLAUDE.md's
+// own vocabulary table. Confirming a delivery CONSUMES the reservation
+// core/inventory-lots' consumeReservation already knows how to do (S-2) -
+// this table is the document/audit trail around that call, not a
+// replacement for stock_lot_reservations' own consumedQty counter (which
+// remains the authoritative "how much delivered so far" figure - see
+// deliveries.repository.ts's sumConsumedQtyBySalesItem/
+// sumReservedQtyBySalesItem, which read stock_lot_reservations directly
+// rather than re-summing delivery_items). No auto-close of the sale on
+// delivery - sales.status's own comment already anticipates this requires
+// BOTH S-4 and S-5 (Delivered AND Invoiced), mirroring maybeAutoClosePurchase's
+// own two-axis requirement; S-4 alone only computes deliveredStatus.
+export const deliveryStatusEnum = pgEnum("delivery_status", ["draft", "confirmed", "reversed"]);
+
+/**
+ * One sale can have MULTIPLE deliveries (partial shipments) - salesId is a
+ * plain FK, not unique, same shape as purchase_receipts.purchaseId. The
+ * extra fields below (dispatch/vehicle/driver/gate-pass/POD/acknowledgement)
+ * have no Purchase Receipt equivalent - confirmed by direct comparison,
+ * genuinely new for Sales (docs/SALES-MODULE-PLAN.md's own S-4 Sub Tab 4
+ * field list) - kept as plain Tier-1 typed columns, not Tier-2 configurable
+ * fields, matching Purchase Receipt's own precedent (its fields aren't
+ * Tier-2 either).
+ */
+export const deliveries = pgTable(
+  "deliveries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, { onDelete: "restrict" }),
+    salesId: uuid("sales_id")
+      .notNull()
+      .references(() => sales.id, { onDelete: "restrict" }),
+    /** Own gapless series (docType "DELIVERY", rule 7) - a delivery is its own fiscal document, numbered independently of the sale. */
+    deliveryOrderNo: text("delivery_order_no").notNull(),
+    dispatchDate: date("dispatch_date").notNull(),
+    vehicleNumber: text("vehicle_number"),
+    transportCompany: text("transport_company"),
+    driverName: text("driver_name"),
+    gatePassNo: text("gate_pass_no"),
+    podReceived: boolean("pod_received").notNull().default(false),
+    /** Free-text note/reference (e.g. a signed-copy filename or reference number) - not a file upload in this phase. */
+    customerAcknowledgement: text("customer_acknowledgement"),
+    warehouseId: uuid("warehouse_id")
+      .notNull()
+      .references(() => warehouses.id, { onDelete: "restrict" }),
+    status: deliveryStatusEnum("status").notNull().default("draft"),
+    confirmedBy: uuid("confirmed_by").references(() => users.id, { onDelete: "restrict" }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    ...auditColumns(),
+  },
+  (table) => [
+    uniqueIndex("deliveries_company_id_delivery_order_no_key")
+      .on(table.companyId, table.deliveryOrderNo)
+      .where(sql`${table.deletedAt} is null`),
+    index("deliveries_sales_id_idx").on(table.salesId),
+  ],
+);
+
+/**
+ * Which sales_item(s) this delivery covers and how much of each actually
+ * shipped - `deliveredQuantity` can be less than what's reserved for that
+ * item (a partial delivery). The over-delivery guard (deliveredQuantity
+ * summed across all deliveries <= reserved qty) lives in the service
+ * layer (deliveries.service.ts), backed by stock_lot_reservations.
+ * consumedQty (the authoritative counter consumeReservation itself
+ * maintains) - not re-derived from this table, matching purchase_receipt_
+ * items' own "cross-row invariants live outside the schema" convention.
+ */
+export const deliveryItems = pgTable(
+  "delivery_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    deliveryId: uuid("delivery_id")
+      .notNull()
+      .references(() => deliveries.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "restrict" }),
+    salesItemId: uuid("sales_item_id")
+      .notNull()
+      .references(() => salesItems.id, { onDelete: "restrict" }),
+    deliveredQuantity: numeric("delivered_quantity", { precision: 18, scale: 6 }).notNull(),
+    ...auditColumns(),
+  },
+  (table) => [
+    index("delivery_items_delivery_id_idx").on(table.deliveryId),
+    index("delivery_items_sales_item_id_idx").on(table.salesItemId),
+  ],
+);
+
+export const deliveriesRelations = relations(deliveries, ({ one, many }) => ({
+  sales: one(sales, {
+    fields: [deliveries.salesId],
+    references: [sales.id],
+  }),
+  branch: one(branches, {
+    fields: [deliveries.branchId],
+    references: [branches.id],
+  }),
+  warehouse: one(warehouses, {
+    fields: [deliveries.warehouseId],
+    references: [warehouses.id],
+  }),
+  items: many(deliveryItems),
+}));
+
+export const deliveryItemsRelations = relations(deliveryItems, ({ one }) => ({
+  delivery: one(deliveries, {
+    fields: [deliveryItems.deliveryId],
+    references: [deliveries.id],
+  }),
+  salesItem: one(salesItems, {
+    fields: [deliveryItems.salesItemId],
+    references: [salesItems.id],
+  }),
+}));
+
 // --- Platform Hedging / LME Records (docs/spec/Purchase-V2.md Sub Tab 3, A-B)
 // Session (d) of the Purchase build. "LME (FR-201/202) - prices go into
 // market_prices first, NEVER straight onto a transaction" (this task's own

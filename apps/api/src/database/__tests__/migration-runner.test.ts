@@ -63,6 +63,7 @@ const REAL_MIGRATION_VERSIONS = [
   "0045_s1_customer_required_fields_not_null",
   "0046_s2_lot_allocation_and_costing",
   "0047_s3_sales_order",
+  "0048_s4_delivery",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

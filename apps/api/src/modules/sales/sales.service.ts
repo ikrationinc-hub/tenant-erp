@@ -9,6 +9,8 @@ import { requireAtLeastOneValidLine } from "../../core/workflow/guards.js";
 import { findTransition, runGuards, type WorkflowTransition } from "../../core/workflow/transitions.js";
 import { withTenantDb, type TenantTx } from "../../database/get-db.js";
 import { findCustomerById } from "../customers/customers.repository.js";
+import { sumReservedAndConsumedBySalesItem, sumReservedAndConsumedBySalesItemForSalesOrders } from "./deliveries.repository.js";
+import { computeDeliveredStatus, computeRealized, type DeliveredStatus } from "./sales-lifecycle.js";
 import { findCostsBySalesId, type SalesAdditionalCostsRow } from "./sales-costs.repository.js";
 import { listLotsForSales, listLotsForSalesItem, updateSalesItemLot, type SalesItemLotRow } from "./sales-item-lots.repository.js";
 import { listItemsWithPricingForSales, type SalesItemWithPricing } from "./sales-items.repository.js";
@@ -74,10 +76,23 @@ export interface SalesWithShipment extends SalesRow {
   additionalCosts?: SalesAdditionalCostsRow | undefined;
   /** Non-blocking, informational only (docs/SALES-MODULE-PLAN.md's locked decision: WARN, never hard-block). Present on the approve() response when this sale would push the customer's open-order exposure over their creditLimit - see computeCreditExposure's own doc comment for exactly what this does and does not represent. */
   warnings?: string[];
+  /** S-4: derived from stock_lot_reservations (reserved vs consumed), never stored - see sales-lifecycle.ts's own doc comment for why the denominator is reserved qty, not ordered qty. */
+  deliveredStatus?: DeliveredStatus;
+  /** deliveredStatus !== "not_delivered" - the plan's own "realized profit flips true on delivery" trigger. */
+  realized?: boolean;
+}
+
+/** S-3/S-4: the Sales Order list's own row shape - mirrors purchase.service.ts's PurchaseRowWithFulfilment (deliveredStatus/realized is Sales' one fulfilment axis so far, vs Purchase's three). */
+export interface SalesRowWithDeliveryStatus extends SalesRow {
+  deliveredStatus: DeliveredStatus;
+  realized: boolean;
 }
 
 export interface SalesItemWithLots extends SalesItemWithPricing {
   lots: SalesItemLotRow[];
+  /** S-4: this item's own reserved-vs-consumed figures (stock_lot_reservations, excluding released) - "0" when nothing has been reserved yet (e.g. a still-Draft sale). Drives SalesFulfilmentPanels.tsx's Deliver form outstanding-qty cap. */
+  reservedQty: string;
+  consumedQty: string;
 }
 
 function requireTenantScope(ctx: RequestContext) {
@@ -138,9 +153,44 @@ function computeCreditExposure(input: { creditLimit: string; otherApprovedValue:
   return undefined;
 }
 
-export async function list(ctx: RequestContext, params: SalesListQuery): Promise<PaginatedRows<SalesRow>> {
+/**
+ * S-4: batched, not per-row - ONE extra query for reserved-vs-consumed
+ * sums, scoped to just the sales IDs on THIS page, then computeDeliveredStatus
+ * runs per row from an in-memory Map lookup - mirrors purchase.service.ts's
+ * own list() batching discipline (PL-4) exactly, minus the ordered-quantity
+ * query since sumReservedAndConsumedBySalesItemForSalesOrders already
+ * carries each item's own reservedQty (the denominator here), unlike
+ * Purchase's own received/billed axes which compare against a SEPARATE
+ * ordered-quantity query.
+ */
+export async function list(ctx: RequestContext, params: SalesListQuery): Promise<PaginatedRows<SalesRowWithDeliveryStatus>> {
   const scope = requireTenantScope(ctx);
-  return withTenantDb(ctx, (tx) => listSales(tx, scope.companyId, params));
+  return withTenantDb(ctx, async (tx) => {
+    const page = await listSales(tx, scope.companyId, params);
+    const salesIds = page.items.map((row) => row.id);
+
+    const reservedAndConsumedRows = await sumReservedAndConsumedBySalesItemForSalesOrders(tx, scope.companyId, salesIds);
+    const bySales = new Map<string, { reservedItems: { id: string; reservedQty: string }[]; deliveredByItemId: Map<string, string> }>();
+    for (const row of reservedAndConsumedRows) {
+      const bucket = bySales.get(row.salesId) ?? { reservedItems: [], deliveredByItemId: new Map<string, string>() };
+      bucket.reservedItems.push({ id: row.salesItemId, reservedQty: row.reservedQty });
+      bucket.deliveredByItemId.set(row.salesItemId, row.consumedQty);
+      bySales.set(row.salesId, bucket);
+    }
+
+    return {
+      ...page,
+      items: page.items.map((row) => {
+        const bucket = bySales.get(row.id) ?? { reservedItems: [], deliveredByItemId: new Map<string, string>() };
+        const deliveredStatus = computeDeliveredStatus(bucket.reservedItems, bucket.deliveredByItemId);
+        return {
+          ...row,
+          deliveredStatus,
+          realized: computeRealized(deliveredStatus),
+        };
+      }),
+    };
+  });
 }
 
 export async function getById(ctx: RequestContext, id: string): Promise<SalesWithShipment> {
@@ -161,11 +211,28 @@ export async function getById(ctx: RequestContext, id: string): Promise<SalesWit
     }
     const additionalCosts = await findCostsBySalesId(tx, scope.companyId, id);
 
+    const reservedAndConsumed = await sumReservedAndConsumedBySalesItem(tx, scope.companyId, id);
+    const reservedItems = reservedAndConsumed.map((row) => ({ id: row.salesItemId, reservedQty: row.reservedQty }));
+    const deliveredByItemId = new Map(reservedAndConsumed.map((row) => [row.salesItemId, row.consumedQty]));
+    const deliveredStatus = computeDeliveredStatus(reservedItems, deliveredByItemId);
+    // Per-item figures too, not just the sale-level aggregate above -
+    // SalesFulfilmentPanels.tsx's Deliver form needs each item's own
+    // reservedQty/consumedQty to cap its outstanding-qty input, the same
+    // way it already reads pricing/lots off each item.
+    const reservedAndConsumedByItemId = new Map(reservedAndConsumed.map((row) => [row.salesItemId, row]));
+
     return {
       ...salesOrder,
       shipment,
-      items: items.map((item) => ({ ...item, lots: lotsByItemId.get(item.id) ?? [] })),
+      items: items.map((item) => ({
+        ...item,
+        lots: lotsByItemId.get(item.id) ?? [],
+        reservedQty: reservedAndConsumedByItemId.get(item.id)?.reservedQty ?? "0",
+        consumedQty: reservedAndConsumedByItemId.get(item.id)?.consumedQty ?? "0",
+      })),
       additionalCosts,
+      deliveredStatus,
+      realized: computeRealized(deliveredStatus),
     };
   });
 }
