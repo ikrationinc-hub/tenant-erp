@@ -46,10 +46,23 @@ import {
 
 interface ApproveGuardContext {
   items: SalesItemWithPricing[];
+  lotPicksByItemId: Map<string, SalesItemLotRow[]>;
 }
 
-/** What makes one sales item "valid" to approve - domain-specific, mirrors purchase.service.ts's validatePurchaseItemForApproval. */
-function validateSalesItemForApproval(item: SalesItemWithPricing): string | undefined {
+/**
+ * What makes one sales item "valid" to approve - domain-specific, mirrors
+ * purchase.service.ts's validatePurchaseItemForApproval, plus a check
+ * Purchase has no equivalent of: at least one lot must actually be picked.
+ * Without this, approve()'s own reservation loop (which only ever
+ * iterates whatever sales_item_lots rows exist) silently reserves
+ * nothing for an unpicked item, and the sale transitions to "approved"
+ * with zero real holds - the two-step model's whole point (Approval
+ * RESERVES lot quantity) silently fails to happen. Caught via manual
+ * testing: a sale approved with no lot picks at all, leaving Deliver's
+ * own outstanding-qty table empty and misreporting "already fully
+ * delivered" instead of "nothing was ever reserved."
+ */
+function validateSalesItemForApproval(item: SalesItemWithPricing, lotPicksByItemId: Map<string, SalesItemLotRow[]>): string | undefined {
   if (parseMoney(item.quantity).lte(0)) {
     return `Cannot approve: item ${item.id} has quantity ${item.quantity}, must be greater than 0`;
   }
@@ -58,6 +71,9 @@ function validateSalesItemForApproval(item: SalesItemWithPricing): string | unde
   }
   if (parseMoney(item.pricing.exchangeRate).lte(0)) {
     return `Cannot approve: item ${item.id} has exchange rate ${item.pricing.exchangeRate}, must be greater than 0`;
+  }
+  if ((lotPicksByItemId.get(item.id) ?? []).length === 0) {
+    return `Cannot approve: item ${item.id} has no stock lot picked - pick at least one lot before approving`;
   }
   return undefined;
 }
@@ -78,7 +94,14 @@ const SALES_WORKFLOW: WorkflowTransition<SalesRow["status"], ApproveGuardContext
     from: "draft",
     to: "approved",
     permission: "sales.order.approve",
-    guards: [(context) => requireAtLeastOneValidLine(context.items, validateSalesItemForApproval, "Cannot approve: sales order has no items")],
+    guards: [
+      (context) =>
+        requireAtLeastOneValidLine(
+          context.items,
+          (item) => validateSalesItemForApproval(item, context.lotPicksByItemId),
+          "Cannot approve: sales order has no items",
+        ),
+    ],
   },
 ];
 
@@ -439,8 +462,16 @@ export async function approve(ctx: RequestContext, id: string): Promise<SalesWit
       throw new Error(`Sales order ${id} has no shipment row - the 1:1 invariant was violated`);
     }
     const items = await listItemsWithPricingForSales(tx, scope.companyId, id);
+    const itemIds = items.map((item) => item.id);
+    const lotPicks = await listLotsForSales(tx, scope.companyId, itemIds);
+    const lotPicksByItemId = new Map<string, SalesItemLotRow[]>();
+    for (const pick of lotPicks) {
+      const bucket = lotPicksByItemId.get(pick.salesItemId) ?? [];
+      bucket.push(pick);
+      lotPicksByItemId.set(pick.salesItemId, bucket);
+    }
 
-    runGuards(transition, { items });
+    runGuards(transition, { items, lotPicksByItemId });
 
     const row = await transitionSalesStatus(tx, scope.companyId, id, {
       from: transition.from,
@@ -451,8 +482,6 @@ export async function approve(ctx: RequestContext, id: string): Promise<SalesWit
       throw new ConflictError(`Sales order ${existing.salesNumber} is "${existing.status}", not "${transition.from}" - cannot approve`);
     }
 
-    const itemIds = items.map((item) => item.id);
-    const lotPicks = await listLotsForSales(tx, scope.companyId, itemIds);
     for (const pick of lotPicks) {
       const reservation = await reserveFromLot(tx, {
         lotId: pick.stockLotId,

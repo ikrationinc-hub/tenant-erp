@@ -425,6 +425,28 @@ describe("modules/sales - S-3 (docs/SALES-MODULE-PLAN.md): Draft -> Approved res
   );
 
   it(
+    "cannot approve a sales order whose item has no lot picked - real bug caught in manual testing: this used to succeed and reserve nothing",
+    async () => {
+      const tenant = await seedTenant("approve-no-lot-picked");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+      const salesId = await createDraftSales(app, authHeader, tenant);
+      // A real item with valid quantity/rate/exchange-rate, but deliberately
+      // no pickLot() call - this is exactly the gap validateSalesItemForApproval
+      // now closes.
+      await addSalesItem(app, authHeader, salesId, tenant, "20");
+
+      const approveRes = await request(app).patch(`/api/v1/sales/${salesId}/approve`).set("Authorization", authHeader);
+      expect(approveRes.status).toBe(409);
+      expect((approveRes.body as { error: { message: string } }).error.message).toMatch(/no stock lot picked/);
+
+      const stillDraft = salesStatusSchema.parse((await request(app).get(`/api/v1/sales/${salesId}`).set("Authorization", authHeader)).body);
+      expect(stillDraft.status).toBe("draft");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "two concurrent approvals of the same sales order - exactly one succeeds",
     async () => {
       const tenant = await seedTenant("concurrent-approve");

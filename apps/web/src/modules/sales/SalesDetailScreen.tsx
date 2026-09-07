@@ -168,7 +168,12 @@ export function SalesDetailScreen({
   const terminal = closed || cancelled;
   const approved = status === "approved";
   const draft = status === "draft";
-  const hasItems = rowsOf(salesOrder?.items).length > 0;
+  const itemRows = rowsOf(salesOrder?.items);
+  // Mirrors sales.service.ts's own approve() guard (validateSalesItemForApproval):
+  // every item must have at least one lot picked, not just exist - an
+  // unpicked item silently reserves nothing on approve, which used to
+  // succeed and leave the sale "approved" with zero real holds.
+  const hasItems = itemRows.length > 0 && itemRows.every((item) => rowsOf(item.lots).length > 0);
   const headerInitialValues =
     salesOrder && typeof salesOrder.shipment === "object" && salesOrder.shipment !== null
       ? { ...salesOrder, ...(salesOrder.shipment as Record<string, unknown>) }

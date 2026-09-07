@@ -218,27 +218,26 @@ function SalesOrderPicker({ value, onChange }: { value: string | undefined; onCh
   const [searchInput, setSearchInput] = useState("");
   const debouncedSearch = useDebouncedValue(searchInput, 300);
 
-  const notDeliveredQuery = useQuery({
+  // deliveredStatus is a computed field (sales.service.ts's list() batches
+  // it per row from stock_lot_reservations, never a real `sales` column),
+  // so it can't be pushed down as a WHERE clause the way status/customerId
+  // can - GET /sales's own query schema has no such param, and silently
+  // dropped unknown params (the schema isn't .strict()) is exactly why
+  // this used to fire two separate "filtered" queries that both came back
+  // unfiltered and identical, duplicating every approved sale in the
+  // dropdown. One query, filtered client-side on the already-returned
+  // deliveredStatus instead.
+  const salesQuery = useQuery({
     queryKey: ["entity-list", endpoints.sales, "fulfilment-picker", debouncedSearch],
     queryFn: () =>
       apiFetch(
-        withQuery(endpoints.sales, { status: "approved", deliveredStatus: "not_delivered", search: debouncedSearch || undefined, pageSize: "20" }),
+        withQuery(endpoints.sales, { status: "approved", search: debouncedSearch || undefined, pageSize: "50" }),
         {},
         { schema: paginatedRowsResponseSchema },
       ),
   });
 
-  const partialQuery = useQuery({
-    queryKey: ["entity-list", endpoints.sales, "fulfilment-picker-partial", debouncedSearch],
-    queryFn: () =>
-      apiFetch(
-        withQuery(endpoints.sales, { status: "approved", deliveredStatus: "partial", search: debouncedSearch || undefined, pageSize: "20" }),
-        {},
-        { schema: paginatedRowsResponseSchema },
-      ),
-  });
-
-  const rawRows = [...(notDeliveredQuery.data?.items ?? []), ...(partialQuery.data?.items ?? [])];
+  const rawRows = (salesQuery.data?.items ?? []).filter((row) => asDisplayString(row.deliveredStatus) !== "fully_delivered");
   const options = rawRows
     .map((row): SalesOptionRow | undefined => {
       const id = asDisplayString(row.id);
@@ -258,8 +257,8 @@ function SalesOrderPicker({ value, onChange }: { value: string | undefined; onCh
       onSearch={setSearchInput}
       onChange={onChange}
       options={options}
-      loading={notDeliveredQuery.isFetching || partialQuery.isFetching}
-      notFoundContent={notDeliveredQuery.isFetching || partialQuery.isFetching ? "Searching…" : "No matching sales orders"}
+      loading={salesQuery.isFetching}
+      notFoundContent={salesQuery.isFetching ? "Searching…" : "No matching sales orders"}
     />
   );
 }
