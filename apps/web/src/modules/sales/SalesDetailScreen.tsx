@@ -8,7 +8,7 @@ import { apiFetch } from "../../core/api/client";
 import { endpoints, withQuery } from "../../core/api/endpoints";
 import { SchemaForm } from "../../core/schema-form/SchemaForm";
 import { NumericStringInput } from "../../core/schema-form/field-types/NumericStringInput";
-import { isPartialNumericString } from "../../core/schema-form/numeric-string";
+import { isPartialNumericString, NUMERIC_STRING_PATTERN } from "../../core/schema-form/numeric-string";
 import { Can } from "../../core/permissions/Can";
 import { useHasPermission } from "../../core/permissions/use-permissions";
 import { StatusTag } from "../../core/status-tag/StatusTag";
@@ -80,6 +80,20 @@ function rowsOf(value: unknown): Record<string, unknown>[] {
 
 function asDisplayString(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+
+/** decimal.js would be overkill for a plain subtraction/min of already-server-computed decimal strings with the same scale - display-only outstanding qty, re-enforced server-side regardless (sales-item-lots.service.ts's own "qty > available" guard). Never used for anything that posts a value on its own. Mirrors SalesFulfilmentPanels.tsx's own subtractDecimalStrings exactly. */
+function subtractDecimalStrings(a: string, b: string): string {
+  const result = Number(a || "0") - Number(b || "0");
+  return (Number.isFinite(result) ? Math.max(result, 0) : 0).toString();
+}
+
+function minDecimalStrings(a: string, b: string): string {
+  const left = Number(a || "0");
+  const right = Number(b || "0");
+  if (!Number.isFinite(left)) return b;
+  if (!Number.isFinite(right)) return a;
+  return (left < right ? left : right).toString();
 }
 
 function pricingField(pricing: unknown, key: string): unknown {
@@ -496,6 +510,20 @@ function SalesItemLotsDrawer({
   const [selectedLotId, setSelectedLotId] = useState<string | undefined>(undefined);
   const [qty, setQty] = useState("");
 
+  const availableLots = availableLotsQuery.data?.options ?? [];
+  const selectedLot = availableLots.find((lot) => lot.id === selectedLotId);
+  // The two real ceilings on a pick: this item's own remaining-to-pick
+  // quantity (ordered qty minus what's already picked across every lot,
+  // not just this one), and the selected lot's own availableQty. Neither
+  // alone is the answer - a lot can have more stock than the item still
+  // needs, or an item can still need more than one lot has left. Display-
+  // only (frontend rule 3's documented exception, mirrors SalesFulfilment
+  // Panels.tsx's own OutstandingQtyTable) - sales-item-lots.service.ts's
+  // addLot still re-checks the real ceiling server-side regardless.
+  const alreadyPickedQty = lots.reduce((sum, lot) => sum + Number(asDisplayString(lot.qty) || "0"), 0).toString();
+  const itemRemainingQty = subtractDecimalStrings(asDisplayString(item.quantity), alreadyPickedQty);
+  const maxPickQty = selectedLot ? minDecimalStrings(itemRemainingQty, selectedLot.availableQty) : itemRemainingQty;
+
   async function handlePick(): Promise<void> {
     if (!selectedLotId || !qty) {
       return;
@@ -513,8 +541,6 @@ function SalesItemLotsDrawer({
     void message.success("Lot pick removed");
     onChanged();
   }
-
-  const availableLots = availableLotsQuery.data?.options ?? [];
 
   return (
     <Drawer title="Manage Lot Picks" open onClose={onClose} width={480} destroyOnHidden>
@@ -573,8 +599,17 @@ function SalesItemLotsDrawer({
                     setQty(next);
                   }
                 }}
-                onBlur={() => undefined}
+                onBlur={() => {
+                  if (qty !== "" && NUMERIC_STRING_PATTERN.test(qty) && Number(qty) > Number(maxPickQty)) {
+                    setQty(maxPickQty);
+                  }
+                }}
               />
+              {selectedLotId && (
+                <Typography.Text type="secondary">
+                  Max: {maxPickQty} (item needs {itemRemainingQty} more, this lot has {selectedLot?.availableQty ?? "0"} available)
+                </Typography.Text>
+              )}
               <Button type="primary" disabled={!selectedLotId || !qty} onClick={() => void handlePick()}>
                 Add Pick
               </Button>
