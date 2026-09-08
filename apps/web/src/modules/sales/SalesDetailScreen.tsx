@@ -374,7 +374,15 @@ function SalesItemsPanel({
   items: Record<string, unknown>[];
 }): ReactElement {
   const [addOpen, setAddOpen] = useState(false);
-  const [lotsDrawerItem, setLotsDrawerItem] = useState<Record<string, unknown> | null>(null);
+  // Tracks only the id, not a snapshot of the row itself - onAdded()
+  // invalidates and refetches the parent sales query, producing a NEW
+  // `items` array each time, but a `useState<Row>` capture taken at click
+  // time would never see that refetch (a plain snapshot, not a
+  // subscription). Re-deriving the current row from the live `items` prop
+  // on every render is what makes "Add Pick"/"Remove" reflect immediately
+  // without closing and reopening the drawer.
+  const [lotsDrawerItemId, setLotsDrawerItemId] = useState<string | null>(null);
+  const lotsDrawerItem = lotsDrawerItemId ? (items.find((row) => asDisplayString(row.id) === lotsDrawerItemId) ?? null) : null;
   const { message } = AntApp.useApp();
   const itemLabels = useMasterLabels("items");
   const gradeLabels = useMasterLabels("item-grades");
@@ -433,7 +441,7 @@ function SalesItemsPanel({
               return (
                 <Space>
                   <Typography.Text type="secondary">{lots.length} picked</Typography.Text>
-                  <Button size="small" onClick={() => setLotsDrawerItem(row)}>
+                  <Button size="small" onClick={() => setLotsDrawerItemId(asDisplayString(row.id))}>
                     {readOnly ? "View Lots" : "Manage Lots"}
                   </Button>
                 </Space>
@@ -450,7 +458,7 @@ function SalesItemsPanel({
           salesId={salesId}
           item={lotsDrawerItem}
           readOnly={readOnly}
-          onClose={() => setLotsDrawerItem(null)}
+          onClose={() => setLotsDrawerItemId(null)}
           onChanged={onAdded}
         />
       )}
@@ -510,7 +518,14 @@ function SalesItemLotsDrawer({
   const [selectedLotId, setSelectedLotId] = useState<string | undefined>(undefined);
   const [qty, setQty] = useState("");
 
-  const availableLots = availableLotsQuery.data?.options ?? [];
+  // Excludes lots with nothing left to pick (the server-side query itself
+  // still returns them - it's a live snapshot of stock_lots, not filtered
+  // to "still pickable" - so a lot another sale just fully consumed can
+  // otherwise sit in this list showing "available 0" and still be
+  // selectable). Caught in manual testing: a 0-available lot appeared
+  // selectable and its stale-cached "available 2" mismatched the server's
+  // real rejection at pick time.
+  const availableLots = (availableLotsQuery.data?.options ?? []).filter((lot) => Number(lot.availableQty) > 0);
   const selectedLot = availableLots.find((lot) => lot.id === selectedLotId);
   // The two real ceilings on a pick: this item's own remaining-to-pick
   // quantity (ordered qty minus what's already picked across every lot,
@@ -552,7 +567,20 @@ function SalesItemLotsDrawer({
           size="small"
           locale={{ emptyText: "No lots picked yet" }}
           columns={[
-            { title: "Lot", dataIndex: "stockLotId", render: (value: unknown) => asDisplayString(value).slice(0, 8) },
+            {
+              title: "Lot",
+              dataIndex: "stockLotId",
+              render: (value: unknown) => {
+                const stockLotId = asDisplayString(value);
+                const matchingLot = availableLots.find((lot) => lot.id === stockLotId);
+                // Falls back to a short id when the lot no longer appears
+                // in the "available" set (e.g. fully consumed elsewhere) -
+                // that endpoint only ever returns lots with real capacity
+                // left, so a fully-picked lot legitimately can't resolve
+                // a friendly name through it.
+                return matchingLot ? resolvedLabel(warehouseLabels, matchingLot.warehouseId) : stockLotId.slice(0, 8);
+              },
+            },
             { title: "Qty", dataIndex: "qty" },
             {
               title: "Reserved",
