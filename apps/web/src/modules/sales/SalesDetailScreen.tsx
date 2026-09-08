@@ -566,6 +566,7 @@ function SalesItemLotsDrawer({
               <NumericStringInput
                 id="lot-pick-qty"
                 ariaLabel="Lot pick quantity"
+                placeholder="Quantity"
                 value={qty}
                 onChange={(next) => {
                   if (next === "" || isPartialNumericString(next)) {
