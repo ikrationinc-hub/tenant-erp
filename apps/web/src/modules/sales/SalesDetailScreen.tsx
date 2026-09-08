@@ -634,12 +634,15 @@ function SalesItemLotsDrawer({
                   }
                 }}
               />
-              {selectedLotId && (
+              {selectedLotId && Number(maxPickQty) <= 0 && (
+                <Typography.Text type="danger">This item has nothing left to pick - its ordered quantity is already fully picked.</Typography.Text>
+              )}
+              {selectedLotId && Number(maxPickQty) > 0 && (
                 <Typography.Text type="secondary">
                   Max: {maxPickQty} (item needs {itemRemainingQty} more, this lot has {selectedLot?.availableQty ?? "0"} available)
                 </Typography.Text>
               )}
-              <Button type="primary" disabled={!selectedLotId || !qty} onClick={() => void handlePick()}>
+              <Button type="primary" disabled={!selectedLotId || !qty || Number(maxPickQty) <= 0} onClick={() => void handlePick()}>
                 Add Pick
               </Button>
             </Space>
