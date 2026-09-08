@@ -10,12 +10,13 @@ import { findTransition, runGuards, type WorkflowTransition } from "../../core/w
 import { withTenantDb, type TenantTx } from "../../database/get-db.js";
 import { findCustomerById } from "../customers/customers.repository.js";
 import {
+  hasAnyDeliveryForSales,
   sumDeliveredQuantitiesByItem,
   sumDeliveredQuantitiesByItemForSalesOrders,
   sumReservedAndConsumedBySalesItem,
   sumReservedAndConsumedBySalesItemForSalesOrders,
 } from "./deliveries.repository.js";
-import { sumInvoicedQuantitiesByItem, sumInvoicedQuantitiesByItemForSalesOrders } from "./sales-invoices.repository.js";
+import { hasAnyInvoiceForSales, sumInvoicedQuantitiesByItem, sumInvoicedQuantitiesByItemForSalesOrders } from "./sales-invoices.repository.js";
 import { sumOutstandingReceivablesForCustomer, sumPaidAmountsByInvoiceForSalesOrders } from "./sales-payments-received.repository.js";
 import {
   computeDeliveredStatus,
@@ -107,6 +108,30 @@ const SALES_WORKFLOW: WorkflowTransition<SalesRow["status"], ApproveGuardContext
 
 /** Not a WorkflowTransition entry - mirrors purchase.service.ts's CANCELLABLE_FROM_STATUSES exactly (reachable from two starting states, which the engine's static from->to lookup can't model). */
 const CANCELLABLE_FROM_STATUSES: ReadonlyArray<SalesRow["status"]> = ["draft", "approved"];
+
+interface CancelGuardContext {
+  hasAnyDelivery: boolean;
+  hasAnyInvoice: boolean;
+}
+
+/**
+ * Mirrors purchase.service.ts's requireNothingFulfilledForCancel exactly -
+ * a real, previously-missing guard: cancel() had no check at all for
+ * whether a delivery or invoice already existed against the sale, so a
+ * sale could be cancelled after stock had physically shipped (Delivery)
+ * or an invoice had been raised (financial fact already in motion),
+ * leaving those documents orphaned against a cancelled parent. Caught in
+ * manual testing: a cancelled sale still showing up under Invoices and on
+ * the dashboard.
+ */
+function requireNothingFulfilledForCancel(context: CancelGuardContext): void {
+  if (context.hasAnyDelivery) {
+    throw new ConflictError("Cannot cancel: this sales order already has a delivery against it");
+  }
+  if (context.hasAnyInvoice) {
+    throw new ConflictError("Cannot cancel: this sales order already has an invoice against it");
+  }
+}
 
 export interface SalesWithShipment extends SalesRow {
   shipment: SalesShipmentRow;
@@ -546,6 +571,10 @@ export async function cancel(ctx: RequestContext, id: string): Promise<SalesRow>
     if (!CANCELLABLE_FROM_STATUSES.includes(existing.status)) {
       throw new ConflictError(`Sales order ${existing.salesNumber} is "${existing.status}" - cannot cancel`);
     }
+
+    const hasAnyDelivery = await hasAnyDeliveryForSales(tx, scope.companyId, id);
+    const hasAnyInvoice = await hasAnyInvoiceForSales(tx, scope.companyId, id);
+    requireNothingFulfilledForCancel({ hasAnyDelivery, hasAnyInvoice });
 
     const items = await listItemsWithPricingForSales(tx, scope.companyId, id);
     const itemIds = items.map((item) => item.id);

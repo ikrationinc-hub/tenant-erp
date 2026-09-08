@@ -82,6 +82,16 @@ export async function listInvoicesForSales(tx: TenantTx, companyId: string, sale
     .orderBy(asc(salesInvoices.createdAt));
 }
 
+/** sales.service.ts's cancel guard: a sale with any invoice against it (draft or approved - an invoice existing at all is a financial fact already in motion) can no longer be cancelled, mirroring purchase-bills.repository.ts's hasAnyBillForPurchase. */
+export async function hasAnyInvoiceForSales(tx: TenantTx, companyId: string, salesId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: salesInvoices.id })
+    .from(salesInvoices)
+    .where(and(eq(salesInvoices.salesId, salesId), eq(salesInvoices.companyId, companyId), isNull(salesInvoices.deletedAt)))
+    .limit(1);
+  return row !== undefined;
+}
+
 /** Batched, list-screen version of listInvoicesForSales above - one query for every sale on the current page, needed for computePaidStatus (which needs each sale's own invoices' ids/amounts, not just a per-item quantity sum). Mirrors purchase-bills.repository.ts's listBillsForPurchases. */
 export async function listInvoicesForSalesOrders(tx: TenantTx, companyId: string, salesIds: string[]): Promise<SalesInvoiceRow[]> {
   if (salesIds.length === 0) {

@@ -37,6 +37,7 @@ import {
 const TEST_TIMEOUT_MS = 120_000;
 
 const invoiceStatusSchema = z.object({ id: z.string(), status: z.enum(["draft", "approved", "reversed", "paid"]) });
+const salesStatusSchema = z.object({ id: z.string(), status: z.enum(["draft", "approved", "closed", "cancelled"]) });
 
 async function findPermissionId(schemaName: string, key: string): Promise<string> {
   const [row] = await withTenantSchema(schemaName, (tx) => tx.select().from(permissions).where(eq(permissions.key, key)).limit(1));
@@ -677,6 +678,33 @@ describe("modules/sales - S-5 (docs/SALES-MODULE-PLAN.md): Invoice + Payment Rec
           allocations: [{ invoiceId: draftInvoiceId, appliedAmountUsd: "90000.01" }],
         });
       expect(overpayRes.status).toBe(409);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "cannot cancel a sales order that already has an invoice against it, even with nothing delivered yet",
+    async () => {
+      const tenant = await seedTenant("cancel-blocked-by-invoice");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+      const lotId = await createConfirmedReceiptLot(app, authHeader, tenant, "50");
+      const salesId = await createDraftSales(app, authHeader, tenant);
+      const itemId = await addSalesItem(app, authHeader, salesId, tenant, "50");
+      await pickLot(app, authHeader, salesId, itemId, lotId, "50");
+      const approveRes = await request(app).patch(`/api/v1/sales/${salesId}/approve`).set("Authorization", authHeader);
+      expect(approveRes.status).toBe(200);
+
+      // Invoice independent of delivery (docs/adr/0028) - nothing delivered
+      // yet, but the invoice itself is enough to block cancel.
+      await createAndApproveInvoice(app, authHeader, salesId, "450000.00");
+
+      const cancelRes = await request(app).patch(`/api/v1/sales/${salesId}/cancel`).set("Authorization", authHeader);
+      expect(cancelRes.status).toBe(409);
+      expect((cancelRes.body as { error: { message: string } }).error.message).toMatch(/already has an invoice/);
+
+      const stillApproved = salesStatusSchema.parse((await request(app).get(`/api/v1/sales/${salesId}`).set("Authorization", authHeader)).body);
+      expect(stillApproved.status).toBe("approved");
     },
     TEST_TIMEOUT_MS,
   );

@@ -38,6 +38,7 @@ import {
 const TEST_TIMEOUT_MS = 120_000;
 
 const deliveryStatusSchema = z.object({ id: z.string(), status: z.enum(["draft", "confirmed", "reversed"]) });
+const salesStatusSchema = z.object({ id: z.string(), status: z.enum(["draft", "approved", "closed", "cancelled"]) });
 
 async function findPermissionId(schemaName: string, key: string): Promise<string> {
   const [row] = await withTenantSchema(schemaName, (tx) => tx.select().from(permissions).where(eq(permissions.key, key)).limit(1));
@@ -528,6 +529,34 @@ describe("modules/sales - S-4 (docs/SALES-MODULE-PLAN.md): Delivery consumes res
       for (let i = 1; i < suffixes.length; i++) {
         expect(suffixes[i]).toBe((suffixes[i - 1] ?? 0) + 1);
       }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "cannot cancel a sales order that already has a delivery against it - real bug caught in manual testing: a cancelled sale still showed up under Invoices and on the dashboard",
+    async () => {
+      const tenant = await seedTenant("cancel-blocked-by-delivery");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+      const { salesId, itemId } = await setupApprovedSales(app, authHeader, tenant, "100", "40");
+
+      const createRes = await request(app)
+        .post(`/api/v1/sales/${salesId}/deliveries`)
+        .set("Authorization", authHeader)
+        .send({ dispatchDate: "2024-06-20", warehouseId: tenant.salesRefs.warehouseId, items: [{ salesItemId: itemId, deliveredQuantity: "40" }] });
+      expect(createRes.status).toBe(201);
+
+      // Blocked even for a Draft (unconfirmed) delivery - a delivery
+      // existing at all means fulfilment is already in motion, mirroring
+      // purchase.service.ts's own requireNothingFulfilledForCancel (which
+      // also gates on "any receipt", not "any CONFIRMED receipt").
+      const cancelRes = await request(app).patch(`/api/v1/sales/${salesId}/cancel`).set("Authorization", authHeader);
+      expect(cancelRes.status).toBe(409);
+      expect((cancelRes.body as { error: { message: string } }).error.message).toMatch(/already has a delivery/);
+
+      const stillApproved = salesStatusSchema.parse((await request(app).get(`/api/v1/sales/${salesId}`).set("Authorization", authHeader)).body);
+      expect(stillApproved.status).toBe("approved");
     },
     TEST_TIMEOUT_MS,
   );

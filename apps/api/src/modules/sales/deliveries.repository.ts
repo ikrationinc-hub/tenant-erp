@@ -89,6 +89,16 @@ export async function listDeliveriesForSales(tx: TenantTx, companyId: string, sa
     .orderBy(asc(deliveries.createdAt));
 }
 
+/** sales.service.ts's cancel guard: a sale with any delivery against it (draft or confirmed - a delivery existing at all means fulfilment is already in motion) can no longer be cancelled, mirroring purchase-receipts.repository.ts's hasAnyReceiptForPurchase. */
+export async function hasAnyDeliveryForSales(tx: TenantTx, companyId: string, salesId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: deliveries.id })
+    .from(deliveries)
+    .where(and(eq(deliveries.salesId, salesId), eq(deliveries.companyId, companyId), isNull(deliveries.deletedAt)))
+    .limit(1);
+  return row !== undefined;
+}
+
 export async function findDeliveryById(tx: TenantTx, companyId: string, salesId: string, id: string): Promise<DeliveryRow | undefined> {
   const [row] = await tx
     .select()

@@ -2,11 +2,13 @@ import type { ReactElement, ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { App as AntApp, Alert, Button, Card, Drawer, Popconfirm, Space, Spin, Table, Tooltip, Typography } from "antd";
+import { App as AntApp, Alert, Button, Card, Drawer, Popconfirm, Select, Space, Spin, Table, Tooltip, Typography } from "antd";
 import { masterOptionsResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints, withQuery } from "../../core/api/endpoints";
 import { SchemaForm } from "../../core/schema-form/SchemaForm";
+import { NumericStringInput } from "../../core/schema-form/field-types/NumericStringInput";
+import { isPartialNumericString } from "../../core/schema-form/numeric-string";
 import { Can } from "../../core/permissions/Can";
 import { useHasPermission } from "../../core/permissions/use-permissions";
 import { StatusTag } from "../../core/status-tag/StatusTag";
@@ -174,6 +176,19 @@ export function SalesDetailScreen({
   // unpicked item silently reserves nothing on approve, which used to
   // succeed and leave the sale "approved" with zero real holds.
   const hasItems = itemRows.length > 0 && itemRows.every((item) => rowsOf(item.lots).length > 0);
+  // Mirrors sales.service.ts's own cancel() guard (requireNothingFulfilledForCancel):
+  // once a delivery or invoice exists against this sale, cancelling would
+  // orphan a real document against a dead parent - the button disables
+  // the moment either exists, matching the backend's own hasAnyDelivery/
+  // hasAnyInvoice check exactly (any document at all, regardless of its
+  // own status).
+  const hasAnyDelivery = asDisplayString(salesOrder?.deliveredStatus) !== "not_delivered" && Boolean(salesOrder?.deliveredStatus);
+  const hasAnyInvoice = asDisplayString(salesOrder?.invoicedStatus) !== "not_invoiced" && Boolean(salesOrder?.invoicedStatus);
+  const cancelBlockedReason = hasAnyDelivery
+    ? "This sale already has a delivery against it - it can no longer be cancelled."
+    : hasAnyInvoice
+      ? "This sale already has an invoice against it - it can no longer be cancelled."
+      : undefined;
   const headerInitialValues =
     salesOrder && typeof salesOrder.shipment === "object" && salesOrder.shipment !== null
       ? { ...salesOrder, ...(salesOrder.shipment as Record<string, unknown>) }
@@ -218,15 +233,20 @@ export function SalesDetailScreen({
             )}
             {(draft || approved) && (
               <Can permission="sales.order.cancel">
-                <Popconfirm
-                  title="Cancel this sales order?"
-                  description={approved ? "Any reserved lots will be released back to available stock." : undefined}
-                  okText="Cancel Sale"
-                  cancelText="Back"
-                  onConfirm={() => void handleCancel()}
-                >
-                  <Button danger>Cancel</Button>
-                </Popconfirm>
+                <Tooltip title={cancelBlockedReason}>
+                  <Popconfirm
+                    title="Cancel this sales order?"
+                    description={approved ? "Any reserved lots will be released back to available stock." : undefined}
+                    okText="Cancel Sale"
+                    cancelText="Back"
+                    disabled={Boolean(cancelBlockedReason)}
+                    onConfirm={() => void handleCancel()}
+                  >
+                    <Button danger disabled={Boolean(cancelBlockedReason)}>
+                      Cancel
+                    </Button>
+                  </Popconfirm>
+                </Tooltip>
               </Can>
             )}
           </Space>
@@ -462,6 +482,7 @@ function SalesItemLotsDrawer({
   const itemItemId = asDisplayString(item.itemId);
   const itemGradeId = typeof item.gradeId === "string" ? item.gradeId : null;
   const lots = rowsOf(item.lots);
+  const warehouseLabels = useMasterLabels("warehouses");
 
   const availableLotsQuery = useQuery({
     queryKey: ["stock-lots-available", itemItemId, itemGradeId],
@@ -531,26 +552,27 @@ function SalesItemLotsDrawer({
         {!readOnly && (
           <Card size="small" title="Pick another lot">
             <Space direction="vertical" style={{ width: "100%" }}>
-              <select
-                value={selectedLotId ?? ""}
-                onChange={(event) => setSelectedLotId(event.target.value || undefined)}
+              <Select
+                style={{ width: "100%" }}
+                placeholder="Select a lot..."
                 aria-label="Stock lot"
-                style={{ width: "100%", padding: 8 }}
-              >
-                <option value="">Select a lot...</option>
-                {availableLots.map((lot) => (
-                  <option key={lot.id} value={lot.id}>
-                    {lot.id.slice(0, 8)} - available {lot.availableQty} - landed rate {lot.landedRate}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="text"
-                placeholder="Quantity"
-                aria-label="Lot pick quantity"
+                value={selectedLotId ?? null}
+                onChange={(value: string) => setSelectedLotId(value || undefined)}
+                options={availableLots.map((lot) => ({
+                  value: lot.id,
+                  label: `${resolvedLabel(warehouseLabels, lot.warehouseId)} - available ${lot.availableQty} - landed rate ${lot.landedRate}`,
+                }))}
+              />
+              <NumericStringInput
+                id="lot-pick-qty"
+                ariaLabel="Lot pick quantity"
                 value={qty}
-                onChange={(event) => setQty(event.target.value)}
-                style={{ width: "100%", padding: 8 }}
+                onChange={(next) => {
+                  if (next === "" || isPartialNumericString(next)) {
+                    setQty(next);
+                  }
+                }}
+                onBlur={() => undefined}
               />
               <Button type="primary" disabled={!selectedLotId || !qty} onClick={() => void handlePick()}>
                 Add Pick
