@@ -332,6 +332,135 @@ describe("SchemaForm - money as strings", () => {
   });
 });
 
+describe("SchemaForm - collapsible sections", () => {
+  function buildTwoSectionFixture(
+    module: string,
+    entity: string,
+    secondSectionFields: FieldDefinition[] = [field({ fieldKey: "city", label: "City", fieldType: "Textbox" })],
+  ): FieldDefinitionsResponse {
+    return {
+      module,
+      entity,
+      version: 1,
+      sections: [
+        {
+          key: "identity",
+          label: "Identity",
+          sortOrder: 1,
+          fields: [field({ fieldKey: "name", label: "Name", fieldType: "Textbox" })],
+        },
+        {
+          key: "address",
+          label: "Address",
+          sortOrder: 2,
+          fields: secondSectionFields,
+        },
+      ],
+    };
+  }
+
+  it("starts with every labeled section expanded, and hides its fields once its header is clicked", async () => {
+    const module = "_dev";
+    const entity = "collapse-toggle-test";
+    mockFieldDefinitions(module, entity, buildTwoSectionFixture(module, entity));
+    const user = userEvent.setup();
+
+    renderWithProviders(<SchemaForm module={module} entity={entity} mode="create" onSubmit={vi.fn()} />);
+
+    const identityHeader = await screen.findByRole("button", { name: "Identity" });
+    expect(screen.getByLabelText("Name")).toBeInTheDocument();
+    expect(identityHeader).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(identityHeader);
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+    expect(identityHeader).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(identityHeader);
+    expect(await screen.findByLabelText("Name")).toBeInTheDocument();
+  });
+
+  it("toggles labeled sections independently - collapsing one leaves the other expanded", async () => {
+    const module = "_dev";
+    const entity = "collapse-independent-test";
+    mockFieldDefinitions(module, entity, buildTwoSectionFixture(module, entity));
+    const user = userEvent.setup();
+
+    renderWithProviders(<SchemaForm module={module} entity={entity} mode="create" onSubmit={vi.fn()} />);
+
+    await screen.findByLabelText("Name");
+    await user.click(screen.getByRole("button", { name: "Identity" }));
+
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("City")).toBeInTheDocument();
+  });
+
+  it("keeps a collapsed section's values on Save - collapsing never drops typed input", async () => {
+    const module = "_dev";
+    const entity = "collapse-preserves-value-test";
+    mockFieldDefinitions(module, entity, buildTwoSectionFixture(module, entity));
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+
+    renderWithProviders(<SchemaForm module={module} entity={entity} mode="create" onSubmit={onSubmit} />);
+
+    await user.type(await screen.findByLabelText("Name"), "ACME Corp");
+    await user.click(screen.getByRole("button", { name: "Identity" }));
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ name: "ACME Corp" });
+  });
+
+  it("auto-expands a collapsed section that holds an invalid field once Save fails validation", async () => {
+    const module = "_dev";
+    const entity = "collapse-auto-expand-test";
+    mockFieldDefinitions(
+      module,
+      entity,
+      buildTwoSectionFixture(module, entity, [
+        field({ fieldKey: "city", label: "City", fieldType: "Textbox", isMandatory: true }),
+      ]),
+    );
+    const user = userEvent.setup();
+
+    renderWithProviders(<SchemaForm module={module} entity={entity} mode="create" onSubmit={vi.fn()} />);
+
+    await screen.findByLabelText("Name");
+    const addressHeader = screen.getByRole("button", { name: "Address" });
+    await user.click(addressHeader);
+    expect(screen.queryByLabelText("City")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByLabelText("City")).toBeInTheDocument();
+    expect(screen.getByText("City is required")).toBeInTheDocument();
+    expect(addressHeader).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("renders no clickable header for the borderless implicit section (unlabeled, flat schema.fields)", async () => {
+    const module = "_dev";
+    const entity = "collapse-unlabeled-test";
+    const fixture: FieldDefinitionsResponse = {
+      module,
+      entity,
+      version: 1,
+      fields: [field({ fieldKey: "name", label: "Name", fieldType: "Textbox" })],
+    };
+    mockFieldDefinitions(module, entity, fixture);
+
+    renderWithProviders(<SchemaForm module={module} entity={entity} mode="create" onSubmit={vi.fn()} />);
+
+    expect(await screen.findByLabelText("Name")).toBeInTheDocument();
+    // No onDiscard passed and mode is "create" - Save is the only button
+    // rendered at all, so any button beyond it would have to be a section
+    // header, which the unlabeled implicit section must never grow one of.
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
+});
+
 describe("SchemaForm - cascading dropdowns", () => {
   it("filters City options by the selected Country, and resets City when Country changes", async () => {
     const module = "_dev";

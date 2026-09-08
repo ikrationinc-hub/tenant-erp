@@ -1,9 +1,10 @@
 import type { ReactElement, ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Card, ConfigProvider, Popconfirm, Space, Spin, Typography, Form as AntForm } from "antd";
+import { RightOutlined } from "@ant-design/icons";
 import { fieldDefinitionsResponseSchema, type FieldDefinitionsResponse } from "@ikration/contracts";
 import { apiFetch } from "../api/client";
 import { endpoints } from "../api/endpoints";
@@ -236,12 +237,52 @@ function SchemaFormBody({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [schema],
   );
+  const sections = useMemo(() => resolveFieldSections(schema), [schema]);
 
   const { control, handleSubmit } = useForm<Record<string, unknown>>({
     resolver: zodResolver(validator),
     defaultValues,
   });
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Empty (nothing collapsed) on first render - every labeled section
+  // starts expanded, matching the screen exactly as it looked before this
+  // existed. Only labeled sections ever get a key added here (see the
+  // `section.label ? ... : undefined` title branch below) - the borderless
+  // implicit single-section case has no header to click, so it can never
+  // end up in this set.
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
+  function toggleSection(key: string): void {
+    setCollapsedSections((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  /**
+   * RHF's onInvalid callback (handleSubmit's 2nd argument) fires with the
+   * errors object instead of calling onSubmit at all - the one hook point
+   * that runs BEFORE the (still-collapsed) form would otherwise strand a
+   * validation error somewhere the user can't see it. Force-expands every
+   * section holding at least one of the invalid field keys.
+   */
+  function expandSectionsWithErrors(errors: FieldErrors<Record<string, unknown>>): void {
+    const invalidKeys = new Set(Object.keys(errors));
+    setCollapsedSections((previous) => {
+      const next = new Set(previous);
+      for (const section of sections) {
+        if (section.fields.some((sectionField) => invalidKeys.has(sectionField.fieldKey))) {
+          next.delete(section.key);
+        }
+      }
+      return next;
+    });
+  }
 
   const submit = handleSubmit(async (values) => {
     setSubmitError(null);
@@ -257,9 +298,7 @@ function SchemaFormBody({
       notifyError(payload);
       setSubmitError(payload.description ?? payload.message);
     }
-  });
-
-  const sections = resolveFieldSections(schema);
+  }, expandSectionsWithErrors);
 
   return (
     <AntForm layout="vertical" onFinish={() => void submit()}>
@@ -272,37 +311,73 @@ function SchemaFormBody({
             own (a Context wrapper only) - one per Card, not one around the
             whole .map(), so each section stays its own item for Space's
             gap to apply between when an entity has more than one section. */}
-        {sections.map((section) => (
-          <ConfigProvider key={section.key} componentSize="large">
-            {/* Borderless (no visible surface) for the common case: a flat
-                response wrapped into one unlabeled implicit section
-                (resolve-sections.ts) - every screen that hasn't been split
-                into real sections yet (everything except purchase/header,
-                for now) keeps looking exactly as it did before. A labeled
-                section gets a real bordered surface with its own shadow
-                (.schema-form-section, theme/global.css) - scoped to this
-                class rather than every Card app-wide, since "Additional
-                Cost"/"LME Records" etc. (PurchaseDetailScreen's own Cards)
-                weren't part of this pass. */}
-            <Card
-              title={section.label || undefined}
-              size="small"
-              variant={section.label ? "outlined" : "borderless"}
-              {...(section.label ? { className: "schema-form-section", styles: { body: { padding: "20px 24px" } } } : {})}
-            >
-              {section.description && (
-                <Typography.Text type="secondary" className="section-description">
-                  {section.description}
-                </Typography.Text>
-              )}
-              <div className="field-grid">
-                {section.fields.map((field) => (
-                  <FieldRenderer key={field.fieldKey} field={field} control={control} mode={mode} uploadContext={uploadContext} />
-                ))}
-              </div>
-            </Card>
-          </ConfigProvider>
-        ))}
+        {sections.map((section) => {
+          // Only a labeled section is collapsible at all - the borderless
+          // implicit single-section case has no title to click, so it's
+          // always treated as expanded regardless of collapsedSections.
+          const isCollapsed = Boolean(section.label) && collapsedSections.has(section.key);
+          return (
+            <ConfigProvider key={section.key} componentSize="large">
+              {/* Borderless (no visible surface) for the common case: a flat
+                  response wrapped into one unlabeled implicit section
+                  (resolve-sections.ts) - every screen that hasn't been split
+                  into real sections yet (everything except purchase/header,
+                  for now) keeps looking exactly as it did before. A labeled
+                  section gets a real bordered surface with its own shadow
+                  (.schema-form-section, theme/global.css) - scoped to this
+                  class rather than every Card app-wide, since "Additional
+                  Cost"/"LME Records" etc. (PurchaseDetailScreen's own Cards)
+                  weren't part of this pass. */}
+              <Card
+                title={
+                  section.label ? (
+                    // aria-label short-circuits accname computation to just
+                    // the section label - without it, RightOutlined's own
+                    // "anticon" aria-label ("right") would get appended to
+                    // this button's accessible name via its child content.
+                    <div
+                      className="schema-form-section-header"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={!isCollapsed}
+                      aria-label={section.label}
+                      onClick={() => toggleSection(section.key)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          toggleSection(section.key);
+                        }
+                      }}
+                    >
+                      <span>{section.label}</span>
+                      <RightOutlined
+                        className={`schema-form-section-chevron${isCollapsed ? "" : " schema-form-section-chevron-expanded"}`}
+                      />
+                    </div>
+                  ) : undefined
+                }
+                size="small"
+                variant={section.label ? "outlined" : "borderless"}
+                {...(section.label ? { className: "schema-form-section", styles: { body: { padding: "20px 24px" } } } : {})}
+              >
+                {!isCollapsed && (
+                  <>
+                    {section.description && (
+                      <Typography.Text type="secondary" className="section-description">
+                        {section.description}
+                      </Typography.Text>
+                    )}
+                    <div className="field-grid">
+                      {section.fields.map((field) => (
+                        <FieldRenderer key={field.fieldKey} field={field} control={control} mode={mode} uploadContext={uploadContext} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </Card>
+            </ConfigProvider>
+          );
+        })}
         {(footer || submitError || mode !== "view") && (
           <div className="schema-form-actions">
             <Space direction="vertical" size="middle" style={{ width: "100%" }}>
