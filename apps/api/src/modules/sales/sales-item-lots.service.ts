@@ -48,11 +48,39 @@ export interface StockLotWithAvailability extends StockLotRow {
   availableQty: string;
 }
 
-/** The lot-picker's own read - every stock_lots row matching the given item/grade, for the frontend to offer as pick candidates. No lock (that's Approve's job via reserveFromLot) - just a live snapshot, with availableQty already computed server-side. */
+/**
+ * The lot-picker's own read - every stock_lots row matching the given
+ * item/grade, for the frontend to offer as pick candidates. No lock
+ * (that's Approve's job via reserveFromLot) - just a live snapshot, with
+ * availableQty already computed server-side.
+ *
+ * When `salesItemId` is given, availableQty ALSO subtracts what that
+ * SAME sales item has already picked from each lot - mirrors addLot's
+ * own alreadyPickedFromThisLot check exactly. Without this, a lot this
+ * item already picked (say, all of it) still reported its full raw
+ * availableQty here, since reservedQty on stock_lots itself doesn't move
+ * until Approve - the dropdown would offer the same lot as pickable
+ * again, only to have addLot correctly reject it moments later with a
+ * "0 available" the read side never showed. Caught in manual testing.
+ */
 export async function listAvailableLots(ctx: RequestContext, query: AvailableStockLotsQuery): Promise<StockLotWithAvailability[]> {
   const scope = requireTenantScope(ctx);
-  const lots = await withTenantDb(ctx, (tx) => listAvailableStockLotsForItem(tx, scope.companyId, query.itemId, query.gradeId ?? null));
-  return lots.map((lot) => ({ ...lot, availableQty: computeAvailable(lot).toString() }));
+  return withTenantDb(ctx, async (tx) => {
+    const lots = await listAvailableStockLotsForItem(tx, scope.companyId, query.itemId, query.gradeId ?? null);
+
+    const alreadyPickedByLotId = new Map<string, ReturnType<typeof parseMoney>>();
+    if (query.salesItemId) {
+      const existingLotsForItem = await listLotsForSalesItem(tx, scope.companyId, query.salesItemId);
+      for (const pick of existingLotsForItem) {
+        alreadyPickedByLotId.set(pick.stockLotId, (alreadyPickedByLotId.get(pick.stockLotId) ?? parseMoney("0")).plus(pick.qty));
+      }
+    }
+
+    return lots.map((lot) => {
+      const alreadyPicked = alreadyPickedByLotId.get(lot.id) ?? parseMoney("0");
+      return { ...lot, availableQty: computeAvailable(lot).minus(alreadyPicked).toString() };
+    });
+  });
 }
 
 /** FR-104: pick a lot for a sales item. Draft or Approved (assertItemsEditable, same gate as items themselves) - not yet reserved (reservationId stays null until Approve). */

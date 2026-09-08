@@ -17,9 +17,18 @@ export const salesItemLotParamsSchema = z.object({
   lotId: z.string().uuid(),
 });
 
-/** The lot-picker's own read - GET /sales/lots-available?itemId=...&gradeId=... */
+/**
+ * The lot-picker's own read - GET /sales/lots-available?itemId=...&gradeId=...&salesItemId=...
+ * `salesItemId` is optional (the endpoint predates it) but should always
+ * be sent by the drawer that's actually picking for one sales item - see
+ * sales-item-lots.service.ts's listAvailableLots for why: without it,
+ * availableQty can't account for what THIS sales item has already picked
+ * from a lot (a real, unreserved pick that addLot's own create-time check
+ * already subtracts, but this read-side query didn't used to).
+ */
 export const availableStockLotsQuerySchema = z.object({
   itemId: z.string().uuid(),
   gradeId: z.string().uuid().optional(),
+  salesItemId: z.string().uuid().optional(),
 });
 export type AvailableStockLotsQuery = z.infer<typeof availableStockLotsQuerySchema>;

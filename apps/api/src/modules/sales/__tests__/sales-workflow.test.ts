@@ -525,4 +525,47 @@ describe("modules/sales - S-3 (docs/SALES-MODULE-PLAN.md): Draft -> Approved res
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "the lot-picker's own availableQty excludes what THIS sales item already picked from a lot - real bug caught in manual testing: picking a lot's full quantity still showed it as fully available, then addLot correctly rejected the second pick with a mismatching '0 available'",
+    async () => {
+      const tenant = await seedTenant("available-lots-excludes-own-picks");
+      const app = createApp();
+      const authHeader = `Bearer ${tenant.accessToken}`;
+      const lotId = await createConfirmedReceiptLot(app, authHeader, tenant, "2");
+      const salesId = await createDraftSales(app, authHeader, tenant);
+      const itemId = await addSalesItem(app, authHeader, salesId, tenant, "5");
+
+      const beforePick = await request(app)
+        .get(`/api/v1/sales/lots-available`)
+        .query({ itemId: tenant.itemRefs.itemId, salesItemId: itemId })
+        .set("Authorization", authHeader);
+      expect(beforePick.status).toBe(200);
+      const beforeOptions = (beforePick.body as { options: { id: string; availableQty: string }[] }).options;
+      expect(Number(beforeOptions.find((o) => o.id === lotId)?.availableQty)).toBe(2);
+
+      await pickLot(app, authHeader, salesId, itemId, lotId, "2");
+
+      const afterPick = await request(app)
+        .get(`/api/v1/sales/lots-available`)
+        .query({ itemId: tenant.itemRefs.itemId, salesItemId: itemId })
+        .set("Authorization", authHeader);
+      expect(afterPick.status).toBe(200);
+      const afterOptions = (afterPick.body as { options: { id: string; availableQty: string }[] }).options;
+      expect(Number(afterOptions.find((o) => o.id === lotId)?.availableQty)).toBe(0);
+
+      // Without salesItemId, the same lot still reports its raw
+      // (unreserved) availability - reservedQty on stock_lots itself only
+      // moves at Approve, so this confirms the subtraction is scoped to
+      // "what THIS query's own salesItemId picked", not a change to the
+      // underlying lot.
+      const withoutSalesItemId = await request(app)
+        .get(`/api/v1/sales/lots-available`)
+        .query({ itemId: tenant.itemRefs.itemId })
+        .set("Authorization", authHeader);
+      const rawOptions = (withoutSalesItemId.body as { options: { id: string; availableQty: string }[] }).options;
+      expect(Number(rawOptions.find((o) => o.id === lotId)?.availableQty)).toBe(2);
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

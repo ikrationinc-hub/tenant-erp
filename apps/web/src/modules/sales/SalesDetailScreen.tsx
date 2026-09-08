@@ -507,10 +507,10 @@ function SalesItemLotsDrawer({
   const warehouseLabels = useMasterLabels("warehouses");
 
   const availableLotsQuery = useQuery({
-    queryKey: ["stock-lots-available", itemItemId, itemGradeId],
+    queryKey: ["stock-lots-available", itemItemId, itemGradeId, itemId],
     queryFn: () =>
       apiFetch<{ options: StockLotOption[] }>(
-        withQuery(endpoints.availableStockLots, { itemId: itemItemId, ...(itemGradeId ? { gradeId: itemGradeId } : {}) }),
+        withQuery(endpoints.availableStockLots, { itemId: itemItemId, salesItemId: itemId, ...(itemGradeId ? { gradeId: itemGradeId } : {}) }),
       ),
     enabled: !readOnly,
   });
@@ -547,13 +547,14 @@ function SalesItemLotsDrawer({
     void message.success("Lot picked");
     setSelectedLotId(undefined);
     setQty("");
-    void queryClient.invalidateQueries({ queryKey: ["stock-lots-available", itemItemId, itemGradeId] });
+    void queryClient.invalidateQueries({ queryKey: ["stock-lots-available", itemItemId, itemGradeId, itemId] });
     onChanged();
   }
 
   async function handleRemove(lotPickId: string): Promise<void> {
     await apiFetch(endpoints.salesItemLot(salesId, itemId, lotPickId), { method: "DELETE" });
     void message.success("Lot pick removed");
+    void queryClient.invalidateQueries({ queryKey: ["stock-lots-available", itemItemId, itemGradeId, itemId] });
     onChanged();
   }
 
