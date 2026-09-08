@@ -58,6 +58,14 @@ const REAL_MIGRATION_VERSIONS = [
   "0040_c3b_contract_document",
   "0041_c4_rules_and_esignature",
   "0042_c4_generated_document_keys",
+  "0043_contract_type_column",
+  "0044_s1_customer_master",
+  "0045_s1_customer_required_fields_not_null",
+  "0046_s2_lot_allocation_and_costing",
+  "0047_s3_sales_order",
+  "0048_s4_delivery",
+  "0049_s5_invoice_payment",
+  "0050_s6_dashboard_cache",
 ];
 const CONFLICT_TABLE = "migration_runner_test_conflict";
 

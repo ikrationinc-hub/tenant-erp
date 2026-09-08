@@ -7,7 +7,9 @@ import { healthRouter } from "../../modules/health/health.routes.js";
 import { inventoryRouter } from "../../modules/inventory/inventory.routes.js";
 import { menusRouter } from "../../modules/menus/menus.routes.js";
 import { purchaseRouter } from "../../modules/purchase/purchase.routes.js";
+import { salesRouter } from "../../modules/sales/sales.routes.js";
 import { brokersRouter } from "../../modules/brokers/brokers.routes.js";
+import { customersRouter } from "../../modules/customers/customers.routes.js";
 import { suppliersRouter } from "../../modules/suppliers/suppliers.routes.js";
 import { usersRouter } from "../../modules/users/users.routes.js";
 import { ALL_MASTER_PERMISSIONS, mastersRouter } from "../masters/registry.js";
@@ -132,15 +134,15 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       // supplier used to be declared here too, but now has a real
       // implementation (see the "suppliers" manifest below) -
       // module="suppliers", not "masters", is its real permission
-      // namespace. customer WAS a stub declared here ahead of its own
-      // module (prompt 16 resolved this: it's now a real instantiated
-      // master, so its create/read/update permissions come from
-      // ALL_MASTER_PERMISSIONS below like every other master - declaring
-      // it here too would be a duplicate permission key.
+      // namespace. customer went through the same graduation (S-1,
+      // docs/SALES-MODULE-PLAN.md): it WAS one of the 16 generic masters
+      // here, now has its own "customers" manifest below with its own
+      // customers.customer.* permission namespace - declaring it here too
+      // would be a duplicate permission key.
       //
-      // The 16 generic masters (countries, cities, currencies, ...,
-      // customers) - create/read/update per entity, generated from
-      // core/masters/registry.ts so a 17th master needs no changes here.
+      // The 15 remaining generic masters (countries, cities, currencies,
+      // ...) - create/read/update per entity, generated from
+      // core/masters/registry.ts so a new generic master needs no changes here.
       ...ALL_MASTER_PERMISSIONS,
     ],
     dependsOn: ["auth", "roles"],
@@ -210,6 +212,24 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     // "masters": suppliers.supplier_type_id/country_id/city_id/payment_term_id/currency_id all FK into core/masters tables.
     dependsOn: ["auth", "roles", "masters"],
     migrations: ["0014_shiny_lilandra"],
+  },
+  {
+    // S-1 (docs/SALES-MODULE-PLAN.md): graduated from a generic masters
+    // entry into its own dedicated module, mirroring "suppliers" above
+    // exactly - own table shape (contacts/banks sub-tables, status enum),
+    // own numbering (docType "CUSTOMER"), own permission namespace.
+    key: "customers",
+    name: "Customer Master",
+    version: "1.0.0",
+    routes: customersRouter,
+    permissions: [
+      permissionEntry("customers", "customer", "create", "Create a customer"),
+      permissionEntry("customers", "customer", "read", "View customers"),
+      permissionEntry("customers", "customer", "update", "Edit a customer, or activate/deactivate it"),
+    ],
+    // "masters": customerTypeId/countryId/cityId/paymentTermId/currencyId all FK into core/masters tables (same reasoning as suppliers).
+    dependsOn: ["auth", "roles", "masters"],
+    migrations: ["0044_s1_customer_master", "0045_s1_customer_required_fields_not_null"],
   },
   {
     key: "brokers",
@@ -292,6 +312,56 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       "0033_nebulous_franklin_storm",
       "0034_nosy_earthquake",
     ],
+  },
+  {
+    // S-3 (docs/SALES-MODULE-PLAN.md): the Sales Order document, mirroring
+    // Purchase's own manifest shape. "closed" has no permission of its own
+    // (derived/automatic, once S-4/S-5 exist - not built in this phase);
+    // "delete" is intentionally NOT declared - no requirement has asked
+    // for one, unlike purchase.po.delete which stays declared-but-
+    // unexercised for forward-compatibility reasons specific to that
+    // module's own history.
+    key: "sales",
+    name: "Sales",
+    version: "1.0.0",
+    routes: salesRouter,
+    permissions: [
+      permissionEntry("sales", "order", "create", "Create a sales order"),
+      permissionEntry("sales", "order", "read", "View sales orders"),
+      permissionEntry("sales", "order", "update", "Edit a draft or approved sales order"),
+      // Draft -> Approved reserves the sales order's picked lots (core/
+      // inventory-lots' reserveFromLot) - the two-step model's step 1
+      // (docs/SALES-MODULE-PLAN.md §0). Cancel releases any reservations
+      // an Approved sale is holding.
+      permissionEntry("sales", "order", "approve", "Approve a sales order - reserves its picked stock lots"),
+      permissionEntry("sales", "order", "cancel", "Cancel a sales order, releasing any reserved lots"),
+      // S-4 (docs/SALES-MODULE-PLAN.md): the Delivery - its own lifecycle,
+      // own permission surface, mirroring purchase.receipt.*. Confirm is
+      // what moves stock out (core/inventory-lots' consumeReservation).
+      permissionEntry("sales", "delivery", "create", "Create a delivery against an approved sales order"),
+      permissionEntry("sales", "delivery", "confirm", "Confirm a delivery - this is what moves stock out"),
+      // S-5 (docs/SALES-MODULE-PLAN.md): the Sales Invoice - own lifecycle,
+      // own permission surface, mirroring purchase.invoice.*. Purely
+      // financial, no stock effect.
+      permissionEntry("sales", "invoice", "create", "Create a sales invoice against an approved sales order"),
+      permissionEntry("sales", "invoice", "update", "Edit a draft sales invoice"),
+      permissionEntry("sales", "invoice", "approve", "Approve a sales invoice"),
+      // Payment Received, the 4th and final lifecycle document - its own
+      // permission surface. Action is "record", not "create" - money
+      // actually coming in deserves the same Manager-tier bar as approve/
+      // confirm (seed-roles.ts), mirroring purchase.payment.record's own
+      // reasoning exactly, just for the opposite direction of money.
+      permissionEntry("sales", "receipt", "record", "Record a payment received against one or more sales invoices"),
+    ],
+    // "customers": sales.customerId FK (S-1). "inventory": sales_item_lots.
+    // stockLotId FKs into stock_lots, which only exists once a Purchase
+    // Receipt has been confirmed (inventory-subscriber.ts) - core/
+    // inventory-lots itself is a core engine, not gated behind its own
+    // module-enabled flag, but the DATA it operates on requires inventory
+    // to be enabled first, same reasoning purchase's own dependency on
+    // "suppliers" mirrors.
+    dependsOn: ["auth", "roles", "masters", "customers", "inventory"],
+    migrations: ["0047_s3_sales_order", "0048_s4_delivery", "0049_s5_invoice_payment", "0050_s6_dashboard_cache"],
   },
   {
     key: "contract",

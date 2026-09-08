@@ -10,7 +10,7 @@ import {
   containers,
   countries,
   currencies,
-  customers,
+  customerTypes,
   divisions,
   hedgePlatforms,
   incoterms,
@@ -26,6 +26,8 @@ import {
   warehouses,
 } from "../src/database/tenant/schema.js";
 import { createMasterRepository } from "../src/core/masters/repository.js";
+import { findCustomerByName } from "../src/modules/customers/customers.repository.js";
+import * as customersService from "../src/modules/customers/customers.service.js";
 import { findSupplierByName } from "../src/modules/suppliers/suppliers.repository.js";
 import * as suppliersService from "../src/modules/suppliers/suppliers.service.js";
 import { findPurchaseByShipmentContainerId } from "../src/modules/purchase/purchase.repository.js";
@@ -141,8 +143,17 @@ export async function seedDevData(tenantSlug: string): Promise<SeedDevResult> {
     const lmeExchangeId = await ensureMaster(schemaName, lmeExchanges, companyId, createdBy, "DEV-LME", "London Metal Exchange");
     const hedgePlatformId = await ensureMaster(schemaName, hedgePlatforms, companyId, createdBy, "DEV-CME", "CME Group");
     const divisionId = await ensureMaster(schemaName, divisions, companyId, createdBy, "DEV-CONTAINER", "Container");
-    await ensureMaster(schemaName, customers, companyId, createdBy, "DEV-CUST-1", "Copperline Industries");
-    await ensureMaster(schemaName, customers, companyId, createdBy, "DEV-CUST-2", "Northgate Metals");
+    const customerTypeId = await ensureMaster(schemaName, customerTypes, companyId, createdBy, "DEV-LOCAL", "Local");
+
+    // --- customers (idempotent by name, mirrors the suppliers loop below -
+    // customers is its own dedicated module now, S-1, not a generic master) ---
+    for (const name of ["Copperline Industries", "Northgate Metals"]) {
+      const existing = await withTenantSchema(schemaName, (tx) => findCustomerByName(tx, companyId, name));
+      if (existing) {
+        continue;
+      }
+      await customersService.create(ctx, { name, customerTypeId, countryId, paymentTermId, currencyId });
+    }
 
     // --- suppliers (idempotent by name - FR-005's own uniqueness rule) -----
     const supplierNames = ["Gulf Metal Traders LLC", "Shanghai Nonferrous Metals Co.", "Rotterdam Commodities BV"];

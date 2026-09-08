@@ -34,6 +34,7 @@ import { MASTER_REGISTRY } from "../modules/masters/master-registry";
 import { mastersHandlers, resolveMasterFieldDefinitions, resolveMasterRowOptions } from "./masters-handlers";
 import { adminHandlers, resolveAdminFieldDefinitions } from "./admin-handlers";
 import { suppliersHandlers, resolveSupplierFieldDefinitions } from "./suppliers-handlers";
+import { customersHandlers, resolveCustomerFieldDefinitions } from "./customers-handlers";
 import { brokersHandlers, resolveBrokerFieldDefinitions } from "./brokers-handlers";
 import { purchaseHandlers, resolvePurchaseFieldDefinitions } from "./purchase-handlers";
 import { purchasePaymentsHandlers, PAYMENT_FIELDS } from "./purchase-payments-handlers";
@@ -151,6 +152,7 @@ const mockFieldDefinitionModules = fieldDefinitionModulesResponseSchema.parse({
     { module: "purchase", entity: "hedge" },
     { module: "purchase", entity: "invoice" },
     { module: "suppliers", entity: "supplier" },
+    { module: "customers", entity: "customer" },
     { module: "brokers", entity: "broker" },
     { module: "admin", entity: "company" },
     { module: "admin", entity: "branch" },
@@ -176,13 +178,13 @@ const MASTER_LAUNCHER_GROUPS: Record<string, string> = {
   "hedge-platforms": "Trading",
   divisions: "Trading",
   "supplier-types": "Trading",
+  "customer-types": "Trading",
   warehouses: "Logistics",
   vessels: "Logistics",
   "transport-modes": "Logistics",
   containers: "Logistics",
   items: "Logistics",
   "item-grades": "Logistics",
-  customers: "Logistics",
 };
 
 /**
@@ -198,14 +200,15 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
   menus: [
     { id: "m-dashboard", key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard", sortOrder: 1, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
     { id: "m-suppliers", key: "suppliers", label: "Suppliers", path: "/suppliers", icon: "shop", sortOrder: 2, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
-    { id: "m-brokers", key: "brokers", label: "Brokers", path: "/brokers", icon: "contacts", sortOrder: 3, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
+    { id: "m-customers", key: "customers", label: "Customers", path: "/customers", icon: "team", sortOrder: 3, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
+    { id: "m-brokers", key: "brokers", label: "Brokers", path: "/brokers", icon: "contacts", sortOrder: 4, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
     {
       id: "m-purchase",
       key: "purchase",
       label: "Purchase",
       path: null,
       icon: "shopping-cart",
-      sortOrder: 4,
+      sortOrder: 5,
       section: "operate",
       launcherSection: null,
       launcherGroup: null,
@@ -266,10 +269,10 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
         },
       ],
     },
-    { id: "m-inventory", key: "inventory", label: "Inventory", path: "/inventory", icon: "inbox", sortOrder: 5, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
+    { id: "m-inventory", key: "inventory", label: "Inventory", path: "/inventory", icon: "inbox", sortOrder: 6, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
     // C-3b (docs/CONTRACT-MODULE-BUILD.md) - must stay in lockstep with
     // seed-menu-tree.ts's own "contracts" node (the recurring drift bug).
-    { id: "m-contracts", key: "contracts", label: "Contracts", path: "/contracts", icon: "file-protect", sortOrder: 6, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
+    { id: "m-contracts", key: "contracts", label: "Contracts", path: "/contracts", icon: "file-protect", sortOrder: 7, section: "operate", launcherSection: null, launcherGroup: null, children: [] },
     // --- Settings (configure) - reached via the header gear, not the main
     // sidebar. See docs/PROMPT-settings-restructure.md.
     {
@@ -278,7 +281,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Companies",
       path: "/settings/companies",
       icon: "bank",
-      sortOrder: 7,
+      sortOrder: 8,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Organization",
@@ -290,7 +293,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Branches",
       path: "/settings/branches",
       icon: "apartment",
-      sortOrder: 8,
+      sortOrder: 9,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Organization",
@@ -302,7 +305,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Users",
       path: "/settings/users",
       icon: "users",
-      sortOrder: 9,
+      sortOrder: 10,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Users & Roles",
@@ -314,7 +317,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Roles",
       path: "/settings/roles",
       icon: "shield",
-      sortOrder: 10,
+      sortOrder: 11,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Users & Roles",
@@ -326,7 +329,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Field Definitions",
       path: "/settings/field-definitions",
       icon: "form",
-      sortOrder: 11,
+      sortOrder: 12,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Setup & Configuration",
@@ -338,7 +341,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Number Series",
       path: "/settings/number-series",
       icon: "ordered-list",
-      sortOrder: 12,
+      sortOrder: 13,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Setup & Configuration",
@@ -350,7 +353,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Masters",
       path: null,
       icon: "database",
-      sortOrder: 13,
+      sortOrder: 14,
       section: "settings",
       launcherSection: null,
       launcherGroup: null,
@@ -381,7 +384,7 @@ const mockMenuTree: MenuTreeResponse = menuTreeResponseSchema.parse({
       label: "Contract",
       path: null,
       icon: "file-protect",
-      sortOrder: 14,
+      sortOrder: 15,
       section: "settings",
       launcherSection: "Organization Settings",
       launcherGroup: "Setup & Configuration",
@@ -486,6 +489,9 @@ const mockPermissions: MyPermissionsResponse = myPermissionsResponseSchema.parse
     "suppliers.supplier.read",
     "suppliers.supplier.create",
     "suppliers.supplier.update",
+    "customers.customer.read",
+    "customers.customer.create",
+    "customers.customer.update",
     "brokers.broker.read",
     "brokers.broker.create",
     "brokers.broker.update",
@@ -567,6 +573,10 @@ export const handlers = [
     if (supplierFields) {
       return HttpResponse.json(supplierFields);
     }
+    const customerFields = resolveCustomerFieldDefinitions(module, entity);
+    if (customerFields) {
+      return HttpResponse.json(customerFields);
+    }
     const brokerFields = resolveBrokerFieldDefinitions(module, entity);
     if (brokerFields) {
       return HttpResponse.json(brokerFields);
@@ -620,6 +630,14 @@ export const handlers = [
 
     return HttpResponse.json(paginatedRowsResponseSchema.parse({ items, total, page, pageSize }));
   }),
+  // Registered BEFORE the generic /masters/:master/options handler below,
+  // exactly mirroring the real backend's deliberate ordering (core/masters/
+  // registry.ts's own doc comment): customers left MASTER_REGISTRY (S-1)
+  // and GET /masters/customers/options must resolve through the dedicated
+  // module's own mock handler, not the generic :master fallback (which
+  // would return an empty list since "customers" is no longer a key
+  // resolveMasterRowOptions/MASTER_OPTIONS knows about).
+  ...customersHandlers,
   http.get(`${API_BASE}${endpoints.masterOptions(":master")}`, ({ params, request }) => {
     const master = typeof params.master === "string" ? params.master : "";
     const all = MASTER_OPTIONS[master] ?? resolveMasterRowOptions(master) ?? [];

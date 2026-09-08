@@ -46,13 +46,13 @@ const MASTER_LAUNCHER_GROUPS: Record<string, string> = {
   "hedge-platforms": "Trading",
   divisions: "Trading",
   "supplier-types": "Trading",
+  "customer-types": "Trading",
   warehouses: "Logistics",
   vessels: "Logistics",
   "transport-modes": "Logistics",
   containers: "Logistics",
   items: "Logistics",
   "item-grades": "Logistics",
-  customers: "Logistics",
 };
 
 /**
@@ -90,8 +90,11 @@ function buildMastersChildren(): DefaultMenuItem[] {
  * never appears, not a crash. Suppliers is its own top-level module
  * (FE-6: contacts/banks sub-tables, activate/deactivate, its own
  * permission namespace "suppliers.supplier.*") - it does NOT live under
- * Masters, unlike the 16 generic masters (which do, including
- * "customers": a real master since prompt 16, not a placeholder).
+ * Masters, unlike the remaining generic masters. Customers (S-1,
+ * docs/SALES-MODULE-PLAN.md) graduated the same way - it USED to be a
+ * generic master (buildMastersChildren() below generated its menu node
+ * automatically), now it's its own top-level entry, exact mirror of
+ * suppliers'.
  */
 const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
   { key: "dashboard", label: "Dashboard", path: "/dashboard", icon: "dashboard" },
@@ -102,6 +105,14 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
     icon: "shop",
     moduleKey: "suppliers",
     requiredPermission: "suppliers.supplier.read",
+  },
+  {
+    key: "customers",
+    label: "Customers",
+    path: "/customers",
+    icon: "team",
+    moduleKey: "customers",
+    requiredPermission: "customers.customer.read",
   },
   {
     key: "brokers",
@@ -151,6 +162,63 @@ const DEFAULT_MENU_TREE: DefaultMenuItem[] = [
         path: "/purchase/payments",
         icon: "dollar",
         requiredPermission: "purchase.po.read",
+      },
+    ],
+  },
+  // S-3/S-4/S-5/S-6 (docs/SALES-MODULE-PLAN.md): mirrors "purchase"'s own shape.
+  {
+    key: "sales",
+    label: "Sales",
+    icon: "dollar",
+    moduleKey: "sales",
+    requiredPermission: "sales.order.read",
+    children: [
+      // S-6: Zoho's own dashboard-first convention - ordered before Sales
+      // Orders. Reuses sales.order.read, same reasoning as every other
+      // child here (no sales.dashboard.read exists).
+      {
+        key: "sales.dashboard",
+        label: "Dashboard",
+        path: "/sales/dashboard",
+        icon: "dashboard",
+        requiredPermission: "sales.order.read",
+      },
+      {
+        key: "sales.orders",
+        label: "Sales Orders",
+        path: "/sales/orders",
+        icon: "file-text",
+        requiredPermission: "sales.order.read",
+      },
+      // S-4: reuses sales.order.read, same reasoning as purchase.
+      // receipts reusing purchase.po.read (no sales.delivery.read exists -
+      // the backend route this list screen calls gates on sales.order.read
+      // too, see sales.routes.ts's salesDeliveriesListRouter).
+      {
+        key: "sales.deliveries",
+        label: "Deliveries",
+        path: "/sales/deliveries",
+        icon: "file-done",
+        requiredPermission: "sales.order.read",
+      },
+      // S-5: Zoho's own "Invoices" nav item - reuses sales.order.read, same
+      // reasoning as above (no sales.invoice.read exists).
+      {
+        key: "sales.invoices",
+        label: "Invoices",
+        path: "/sales/invoices",
+        icon: "account-book",
+        requiredPermission: "sales.order.read",
+      },
+      // S-5: Zoho's own "Payments Received" nav item - reuses
+      // sales.order.read, same reasoning as above (no sales.receipt.read
+      // exists).
+      {
+        key: "sales.receipts",
+        label: "Payments Received",
+        path: "/sales/receipts",
+        icon: "dollar",
+        requiredPermission: "sales.order.read",
       },
     ],
   },

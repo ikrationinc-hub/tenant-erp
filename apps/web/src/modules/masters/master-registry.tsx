@@ -11,8 +11,12 @@ export interface MasterRegistryEntry {
 }
 
 /**
- * The 15 masters docs/spec/Purchase-V2.md §4 needs (FE-5), each a ~1-line
- * entry. This is NOT a route file (frontend rule 2) - which paths exist,
+ * The generic masters docs/spec/Purchase-V2.md §4 needs (FE-5), each a
+ * ~1-line entry. "customer" was here too until S-1 (docs/SALES-MODULE-
+ * PLAN.md) graduated it into its own dedicated module (see
+ * modules/customers/customer-registry.tsx) - "customer_type" replaces it
+ * as the new generic master customers itself now depends on. This is NOT
+ * a route file (frontend rule 2) - which paths exist,
  * their labels, icons, and nesting all come from GET /menus; this only
  * supplies the one thing the menu tree doesn't carry: the mapping from a
  * master's REST urlSegment to its field-definitions entity key. Adding a
@@ -35,7 +39,7 @@ export const MASTER_REGISTRY: MasterRegistryEntry[] = [
   { entity: "lme_exchange", urlSegment: "lme-exchanges", label: "LME Exchanges" },
   { entity: "hedge_platform", urlSegment: "hedge-platforms", label: "Hedge Platforms" },
   { entity: "supplier_type", urlSegment: "supplier-types", label: "Supplier Types" },
-  { entity: "customer", urlSegment: "customers", label: "Customers" },
+  { entity: "customer_type", urlSegment: "customer-types", label: "Customer Types" },
   { entity: "division", urlSegment: "divisions", label: "Divisions" },
   { entity: "container", urlSegment: "containers", label: "Containers" },
 ];

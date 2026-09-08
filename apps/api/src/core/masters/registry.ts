@@ -9,7 +9,7 @@ import {
   containers,
   countries,
   currencies,
-  customers,
+  customerTypes,
   divisions,
   hedgePlatforms,
   incoterms,
@@ -24,6 +24,10 @@ import {
   vessels,
   warehouses,
 } from "../../database/tenant/schema.js";
+import * as customersService from "../../modules/customers/customers.service.js";
+import { customersOptionsQuerySchema } from "../../modules/customers/customers.validator.js";
+import { getRequestContext } from "../../common/context/request-context.js";
+import { UnauthorizedError } from "../../common/errors/index.js";
 import type { PermissionCatalogueEntry } from "../rbac/types.js";
 import type { FieldDefault } from "../field-engine/types.js";
 import { defineMasterModule, type MasterModule } from "./factory.js";
@@ -210,21 +214,12 @@ export const supplierTypeModule = defineMasterModule({
   updateSchema: noExtraUpdateSchema,
 });
 
-/**
- * Prompt 16's resolved decision: "customers" becomes a real (if minimal)
- * master now, not a placeholder until Sales - the customers table (and
- * purchase_allocations.reserved_customer_id's FK into it) already existed
- * from the Purchase build; only the registry instantiation was missing.
- * GET /masters/customers/options replaces apps/web's old bespoke
- * GET /customers/options - reservedCustomerId's optionsSource becomes
- * "masters:customers", same convention as every other Dropdown->Master
- * field.
- */
-export const customerModule = defineMasterModule({
-  entity: "customer",
-  urlSegment: "customers",
-  label: "Customers",
-  table: customers,
+/** S-1 (docs/SALES-MODULE-PLAN.md): the customer-side mirror of supplierTypeModule (Local/Export, per that doc's S-1 prompt) - stays a generic master, unlike `customers` itself which graduated to its own dedicated module. */
+export const customerTypeModule = defineMasterModule({
+  entity: "customer_type",
+  urlSegment: "customer-types",
+  label: "Customer Types",
+  table: customerTypes,
   createSchema: noExtraCreateSchema,
   updateSchema: noExtraUpdateSchema,
 });
@@ -269,7 +264,7 @@ export const MASTER_MODULES: MasterModule[] = [
   lmeExchangeModule,
   hedgePlatformModule,
   supplierTypeModule,
-  customerModule,
+  customerTypeModule,
   divisionModule,
   containerModule,
 ];
@@ -299,6 +294,44 @@ for (const module of MASTER_MODULES) {
     module.listOptions,
   );
 }
+
+/**
+ * DELIBERATE EXCEPTION: customers is no longer a generic master (S-1
+ * graduated it into its own dedicated module, apps/api/src/modules/
+ * customers/, mirroring suppliers - see database/tenant/schema.ts's
+ * customers table doc comment). `customerModule`/`defineMasterModule` no
+ * longer applies (the widened customers table no longer satisfies
+ * MasterTableShape's isActive/sortOrder requirement), so this route is
+ * hand-wired directly at the SAME URL (`GET /masters/customers/options`)
+ * the generic loop above used to generate, backed by the dedicated
+ * module's own service instead. This keeps every existing caller working
+ * unmodified: ContractPartiesForm.tsx, ContractsListScreen.tsx,
+ * PurchaseDetailScreen.tsx's useMasterLabels("customers"), and
+ * purchaseAllocations.reservedCustomerId's optionsSource ("masters:customers")
+ * all still resolve the exact same URL, none of them need to change.
+ * Registered after the generic loop (so it doesn't shadow the loop's own
+ * static routes if this ever gets reordered) but customers is no longer
+ * in MASTER_MODULES, so there's no collision either way.
+ */
+mastersRouter.get(
+  "/customers/options",
+  scopeResolverMiddleware,
+  requireModuleEnabled("customers"),
+  requirePermission("customers.customer.read"),
+  async (req, res, next) => {
+    try {
+      const ctx = getRequestContext();
+      if (!ctx) {
+        throw new UnauthorizedError("Missing bearer token");
+      }
+      const query = customersOptionsQuerySchema.parse(req.query);
+      const options = await customersService.listOptions(ctx, query);
+      res.status(200).json({ options });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 for (const module of MASTER_MODULES) {
   mastersRouter.use(`/${module.urlSegment}`, module.router);

@@ -9,10 +9,11 @@ interface NumericStringInputProps {
   onChange: (value: string) => void;
   onBlur: () => void;
   suffix?: string;
+  placeholder?: string;
 }
 
 /** Backs Decimal/Currency/Percentage - a plain text input, never AntD's InputNumber (which converts to a JS number internally). The value in and out is always a string (frontend rule 3). */
-export function NumericStringInput({ id, ariaLabel, value, onChange, onBlur, suffix }: NumericStringInputProps): ReactElement {
+export function NumericStringInput({ id, ariaLabel, value, onChange, onBlur, suffix, placeholder }: NumericStringInputProps): ReactElement {
   function handleChange(event: ChangeEvent<HTMLInputElement>): void {
     const next = event.target.value;
     if (next === "" || isPartialNumericString(next)) {
@@ -28,6 +29,7 @@ export function NumericStringInput({ id, ariaLabel, value, onChange, onBlur, suf
       onChange={handleChange}
       onBlur={onBlur}
       suffix={suffix}
+      placeholder={placeholder}
       inputMode="decimal"
     />
   );

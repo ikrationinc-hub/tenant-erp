@@ -23,11 +23,12 @@ const TEST_TIMEOUT_MS = 120_000;
  * match that has no specific resolver as a generic PlaceholderScreen, not
  * a 404 - it's never "broken", just unstyled.
  *
- * KNOWN, DELIBERATE EXCEPTION: "/masters/customers" is seeded (customers
- * is a real master as of prompt 16) but apps/web's MASTER_REGISTRY doesn't
- * list "customer" yet - FE-8 is the tracked follow-up that adds it. This
- * is the ONLY path allowed to be seeded-but-not-yet-frontend-resolvable;
- * if this test starts failing on some OTHER path, that's real, new drift.
+ * FE-8 resolved: customers graduated from a generic master into its own
+ * dedicated top-level module (S-1, docs/SALES-MODULE-PLAN.md), exact
+ * mirror of suppliers' own "/customers" resolver - "/masters/customers" is
+ * no longer seeded at all (customers left MASTER_MODULES), and "/customers"
+ * now resolves for real via customer-registry.tsx, so there is no longer
+ * any known exception to this rule.
  */
 const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/dashboard",
@@ -37,8 +38,19 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/settings/roles",
   "/settings/field-definitions",
   "/suppliers",
+  "/customers",
   "/brokers",
   "/purchase/orders",
+  // S-3 (docs/SALES-MODULE-PLAN.md) - modules/sales/sales-registry.tsx.
+  "/sales/orders",
+  // S-4 - modules/sales/sales-registry.tsx's resolveSalesDeliveriesScreen.
+  "/sales/deliveries",
+  // S-5 - modules/sales/sales-registry.tsx's resolveSalesInvoicesScreen/
+  // resolveSalesPaymentsReceivedScreen.
+  "/sales/invoices",
+  "/sales/receipts",
+  // S-6 - modules/sales/sales-registry.tsx's resolveSalesDashboardScreen.
+  "/sales/dashboard",
   "/purchase/receipts",
   "/purchase/bills",
   "/purchase/payments",
@@ -55,14 +67,12 @@ const FRONTEND_RESOLVABLE_PATHS = new Set([
   "/settings/contract/templates",
   // C-4 item 1/2: ClauseRulesScreen (settings) - see contract-registry.tsx.
   "/settings/contract/rules",
-  ...MASTER_MODULES.filter((module) => module.entity !== "customer").map(
-    (module) => `/settings/masters/${module.urlSegment}`,
-  ),
+  ...MASTER_MODULES.map((module) => `/settings/masters/${module.urlSegment}`),
 ]);
 // number-series is a deliberate placeholder slot (no frontend screen yet,
 // per docs/PROMPT-settings-restructure.md's Number Series decision) -
-// PlaceholderScreen renders it, same treatment /masters/customers got below.
-const KNOWN_PENDING_FRONTEND_EXCEPTIONS = new Set(["/settings/masters/customers", "/settings/number-series"]);
+// PlaceholderScreen renders it.
+const KNOWN_PENDING_FRONTEND_EXCEPTIONS = new Set(["/settings/number-series"]);
 
 interface FlatMenuRow {
   path: string | null;
@@ -129,7 +139,7 @@ describe("core/provisioning/seed-menu-tree - the seeded default navigation", () 
   );
 
   it(
-    "every seeded leaf path resolves to a real apps/web screen, with only the one documented FE-8 exception (masters/customers)",
+    "every seeded leaf path resolves to a real apps/web screen, with only the documented number-series placeholder exception",
     async () => {
       const { schemaName } = await seedTenantWithMenus("menu-paths");
       const rows: FlatMenuRow[] = await withTenantSchema(schemaName, (tx) =>

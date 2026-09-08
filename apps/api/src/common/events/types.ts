@@ -37,6 +37,15 @@ export interface InvoiceApprovedEvent {
  * invoice.approved shape) - a receipt is immutable once confirmed
  * (rule 8), so there is no reconciliation/re-approval case to represent
  * here, only a single first-and-only write.
+ *
+ * S-2: each item also carries `landedRate` - purchaseRateUsd plus this
+ * line's allocated share of the purchase's shared freight/insurance/
+ * customs/other charges, per unit (purchase-receipts.service.ts's
+ * confirm(), core/inventory-lots/reserve-allocate.ts's costAllocation).
+ * modules/inventory's subscriber uses it to seed the new stock_lots row
+ * this receipt line creates - the purchase rate alone, dropped before PL-1
+ * ever reached this event, is no longer enough once a lot needs its own
+ * blended per-unit cost for specific-lot costing.
  */
 export interface ReceiptConfirmedEvent {
   receiptId: string;
@@ -45,7 +54,7 @@ export interface ReceiptConfirmedEvent {
   branchId: string | null;
   warehouseId: string;
   confirmedBy: string;
-  items: Array<{ purchaseItemId: string; itemId: string; gradeId: string | null; quantity: string; uomId: string }>;
+  items: Array<{ purchaseItemId: string; itemId: string; gradeId: string | null; quantity: string; uomId: string; landedRate: string }>;
 }
 
 export interface EventMap {

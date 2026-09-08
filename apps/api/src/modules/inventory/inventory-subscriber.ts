@@ -1,6 +1,7 @@
 import { eventBus } from "../../common/events/bus.js";
 import type { ReceiptConfirmedEvent } from "../../common/events/types.js";
 import { insertAuditLog } from "../../core/audit/write.js";
+import { insertStockLot } from "../../core/inventory-lots/stock-lots.repository.js";
 import type { TenantTx } from "../../database/get-db.js";
 import { insertStockMovement } from "./stock-movements.repository.js";
 
@@ -17,6 +18,15 @@ import { insertStockMovement } from "./stock-movements.repository.js";
  * immutable (rule 8 - no re-confirm path exists), so this only ever
  * writes fresh purchase_receipt rows, once, for this one receipt's own
  * lines - never a reversal, never a re-run for the same receiptId.
+ *
+ * S-2: also inserts one stock_lots row per event item, in the SAME loop
+ * and transaction as its stock_movements row - a receipt line IS a lot.
+ * reservedQty/deliveredQty start at '0'; receivedQty/landedRate are fixed
+ * from this event's own payload (the publisher, purchase-receipts.service
+ * .ts's confirm(), already computed landedRate via costAllocation before
+ * emitting - this handler never recomputes it). This is what gives S-2's
+ * own reservation engine (core/inventory-lots) real rows to lock against;
+ * no Sales Order exists yet to create them any other way.
  */
 async function handleReceiptConfirmed(tx: TenantTx, event: ReceiptConfirmedEvent): Promise<void> {
   const movementDate = new Date().toISOString().slice(0, 10);
@@ -50,6 +60,38 @@ async function handleReceiptConfirmed(tx: TenantTx, event: ReceiptConfirmedEvent
         quantity: movement.quantity,
         movementType: movement.movementType,
         receiptId: movement.receiptId,
+      },
+    });
+
+    const lot = await insertStockLot(tx, {
+      companyId: event.companyId,
+      ...(event.branchId ? { branchId: event.branchId } : {}),
+      itemId: item.itemId,
+      ...(item.gradeId ? { gradeId: item.gradeId } : {}),
+      warehouseId: event.warehouseId,
+      receiptId: event.receiptId,
+      purchaseItemId: item.purchaseItemId,
+      uomId: item.uomId,
+      receivedQty: item.quantity,
+      landedRate: item.landedRate,
+      reservedQty: "0",
+      deliveredQty: "0",
+      createdBy: event.confirmedBy,
+    });
+
+    await insertAuditLog(tx, {
+      companyId: event.companyId,
+      changedBy: event.confirmedBy,
+      entity: "stock_lot",
+      entityId: lot.id,
+      action: "stock_lot.created",
+      after: {
+        itemId: lot.itemId,
+        warehouseId: lot.warehouseId,
+        receiptId: lot.receiptId,
+        purchaseItemId: lot.purchaseItemId,
+        receivedQty: lot.receivedQty,
+        landedRate: lot.landedRate,
       },
     });
   }

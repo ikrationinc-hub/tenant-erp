@@ -44,6 +44,12 @@ export const endpoints = {
   supplierOptions: "/suppliers/options",
   activateSupplier: (id: string) => `/suppliers/${id}/activate`,
   deactivateSupplier: (id: string) => `/suppliers/${id}/deactivate`,
+
+  // --- S-1 (docs/SALES-MODULE-PLAN.md): Customer master, mirrors suppliers --
+  customers: "/customers",
+  customerOptions: "/customers/options",
+  activateCustomer: (id: string) => `/customers/${id}/activate`,
+  deactivateCustomer: (id: string) => `/customers/${id}/deactivate`,
   brokers: "/brokers",
   brokerOptions: "/brokers/options",
   activateBroker: (id: string) => `/brokers/${id}/activate`,
@@ -77,6 +83,40 @@ export const endpoints = {
   payments: "/payments",
   payment: (id: string) => `/payments/${id}`,
   outstandingBillsForSupplier: (supplierId: string) => `/payments/outstanding-bills/${supplierId}`,
+
+  // --- S-3 (docs/SALES-MODULE-PLAN.md): Sales Order, mirrors Purchase ------
+  sales: "/sales",
+  salesOrder: (id: string) => `/sales/${id}`,
+  approveSalesOrder: (id: string) => `/sales/${id}/approve`,
+  cancelSalesOrder: (id: string) => `/sales/${id}/cancel`,
+  salesItems: (salesId: string) => `/sales/${salesId}/items`,
+  salesItem: (salesId: string, itemId: string) => `/sales/${salesId}/items/${itemId}`,
+  salesItemLots: (salesId: string, itemId: string) => `/sales/${salesId}/items/${itemId}/lots`,
+  salesItemLot: (salesId: string, itemId: string, lotId: string) => `/sales/${salesId}/items/${itemId}/lots/${lotId}`,
+  salesCosts: (salesId: string) => `/sales/${salesId}/costs`,
+  /** The lot-picker's own read - available stock_lots filtered by item/grade, live/unlocked (the real lock only happens at Approve). */
+  availableStockLots: "/sales/lots-available",
+  // S-4 (docs/SALES-MODULE-PLAN.md): Delivery - mirrors purchaseReceipts/
+  // confirmPurchaseReceipt/allPurchaseReceipts exactly.
+  salesDeliveries: (salesId: string) => `/sales/${salesId}/deliveries`,
+  confirmSalesDelivery: (salesId: string, deliveryId: string) => `/sales/${salesId}/deliveries/${deliveryId}/confirm`,
+  allSalesDeliveries: "/sales-deliveries",
+  // S-5 (docs/SALES-MODULE-PLAN.md): Sales Invoice - mirrors purchaseInvoices/
+  // approvePurchaseInvoice/allPurchaseBills exactly.
+  salesInvoices: (salesId: string) => `/sales/${salesId}/invoices`,
+  salesInvoice: (salesId: string, invoiceId: string) => `/sales/${salesId}/invoices/${invoiceId}`,
+  approveSalesInvoice: (salesId: string, invoiceId: string) => `/sales/${salesId}/invoices/${invoiceId}/approve`,
+  allSalesInvoices: "/sales-invoices",
+  // Payment Received - never nested under /sales/:id at all (it's scoped
+  // to a customer, potentially settling invoices across several sales in
+  // one record), mirrors payments/outstandingBillsForSupplier exactly.
+  paymentsReceived: "/payments-received",
+  paymentReceived: (id: string) => `/payments-received/${id}`,
+  outstandingInvoicesForCustomer: (customerId: string) => `/payments-received/outstanding-invoices/${customerId}`,
+  // S-6 (docs/SALES-MODULE-PLAN.md): the dashboard's own endpoint - a
+  // literal path segment under /sales, not nested under a sale id.
+  salesDashboard: "/sales/dashboard",
+
   uploadAttachment: (entity: string, entityId: string, fieldKey: string) =>
     `/attachments/${entity}/${entityId}/${fieldKey}`,
   attachmentDownloadUrl: (id: string) => `/attachments/${id}/download-url`,

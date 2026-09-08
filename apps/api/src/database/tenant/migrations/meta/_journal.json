@@ -309,6 +309,55 @@
       "when": 1788496225151,
       "tag": "0043_contract_type_column",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1788509702732,
+      "tag": "0044_s1_customer_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1788509976640,
+      "tag": "0045_s1_customer_required_fields_not_null",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1788521197709,
+      "tag": "0046_s2_lot_allocation_and_costing",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1788535579608,
+      "tag": "0047_s3_sales_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1788754333118,
+      "tag": "0048_s4_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1788758514595,
+      "tag": "0049_s5_invoice_payment",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1788766810687,
+      "tag": "0050_s6_dashboard_cache",
+      "breakpoints": true
     }
   ]
 }
