@@ -21,3 +21,10 @@ export const masterOptionsResponseSchema = z.object({
   options: z.array(masterOptionSchema),
 });
 export type MasterOptionsResponse = z.infer<typeof masterOptionsResponseSchema>;
+
+// --- GET /api/v1/masters/:master/suggest-code?name= -------------------------
+
+export const suggestCodeResponseSchema = z.object({
+  code: z.string(),
+});
+export type SuggestCodeResponse = z.infer<typeof suggestCodeResponseSchema>;

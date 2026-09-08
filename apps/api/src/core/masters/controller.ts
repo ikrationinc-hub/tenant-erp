@@ -4,7 +4,7 @@ import { getRequestContext } from "../../common/context/request-context.js";
 import { UnauthorizedError } from "../../common/errors/index.js";
 import type { createMasterService } from "./service.js";
 import type { MasterTable } from "./types.js";
-import { mastersListQuerySchema, mastersOptionsQuerySchema } from "./validators.js";
+import { mastersListQuerySchema, mastersOptionsQuerySchema, suggestCodeQuerySchema } from "./validators.js";
 
 function requireContext() {
   const ctx = getRequestContext();
@@ -56,6 +56,17 @@ export function createMasterController<
       const query = mastersOptionsQuerySchema.parse(req.query);
       const options = await service.listOptions(ctx, query);
       res.status(200).json({ options });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async function suggestCode(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const ctx = requireContext();
+      const query = suggestCodeQuerySchema.parse(req.query);
+      const result = await service.suggestCode(ctx, query.name);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }
@@ -117,5 +128,5 @@ export function createMasterController<
     }
   }
 
-  return { list, listOptions, getById, create, update, activate, deactivate };
+  return { list, listOptions, getById, create, update, activate, deactivate, suggestCode };
 }

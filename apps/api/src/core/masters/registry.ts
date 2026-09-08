@@ -293,6 +293,13 @@ for (const module of MASTER_MODULES) {
     requirePermission(`masters.${module.entity}.read`),
     module.listOptions,
   );
+  mastersRouter.get(
+    `/${module.urlSegment}/suggest-code`,
+    scopeResolverMiddleware,
+    requireMastersModule,
+    requirePermission(`masters.${module.entity}.read`),
+    module.suggestCode,
+  );
 }
 
 /**

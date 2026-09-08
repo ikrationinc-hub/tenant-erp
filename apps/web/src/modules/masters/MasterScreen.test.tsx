@@ -126,6 +126,24 @@ describe("MasterScreen - the generic proof (one component, real masters CRUD)", 
     expect(within(rowFor("Countries 1")).getByRole("button", { name: "Deactivate" })).toBeInTheDocument();
   });
 
+  it("Generate derives a code from Name via the real REST urlSegment, not the field-definitions entity name", async () => {
+    signIn();
+    const user = userEvent.setup();
+    renderApp({ initialEntries: ["/settings/masters/countries"] });
+
+    await screen.findByText("Countries 1", {}, ASYNC);
+    await user.click(await screen.findByRole("button", { name: /New Countries/ }, ASYNC));
+
+    await user.type(drawer().getByLabelText("Name"), "Pakistan");
+    await user.click(await drawer().findByRole("button", { name: /Generate/ }, ASYNC));
+
+    // core/masters/registry.ts mounts this route by urlSegment ("countries"),
+    // not entity ("country") - a regression here previously 404'd because
+    // TextboxField called endpoints.suggestMasterCode(entity, ...) instead
+    // of building the URL from SchemaForm's own endpoint prop.
+    await waitFor(() => expect(drawer().getByLabelText("Code")).toHaveValue("PAKI"), ASYNC);
+  });
+
   it("renders a second, unrelated master through the exact same route/component - proving genericity", async () => {
     signIn();
     renderApp({ initialEntries: ["/settings/masters/uom"] });

@@ -373,4 +373,91 @@ describe("core/masters - generic master-data pattern", () => {
   // resolves (core/masters/registry.ts's deliberate exception, re-pointed
   // at the new module) - equivalent create/deactivate/options coverage now
   // lives in modules/customers/__tests__/customers.test.ts.
+
+  describe("GET /masters/:master/suggest-code", () => {
+    it(
+      "derives an acronym from a multi-word name, the first letters of a single word otherwise",
+      async () => {
+        const admin = await seedTenantWithAdmin("suggest-derive", allPermissionsFor("country"));
+        const app = createApp();
+        const authHeader = `Bearer ${admin.accessToken}`;
+
+        const multiWord = await request(app)
+          .get("/api/v1/masters/countries/suggest-code")
+          .query({ name: "United States" })
+          .set("Authorization", authHeader);
+        expect(multiWord.status).toBe(200);
+        expect((multiWord.body as { code: string }).code).toBe("US");
+
+        const singleWord = await request(app)
+          .get("/api/v1/masters/countries/suggest-code")
+          .query({ name: "Mumbai" })
+          .set("Authorization", authHeader);
+        expect((singleWord.body as { code: string }).code).toBe("MUMB");
+
+        // Punctuation splits words rather than being kept literally - "A-Grade Copper" is 3 words (A, Grade, Copper).
+        const punctuated = await request(app)
+          .get("/api/v1/masters/countries/suggest-code")
+          .query({ name: "A-Grade Copper" })
+          .set("Authorization", authHeader);
+        expect((punctuated.body as { code: string }).code).toBe("AGC");
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "appends a numeric suffix when the derived code is already taken, and never returns a taken code",
+      async () => {
+        const admin = await seedTenantWithAdmin("suggest-collide", allPermissionsFor("country"));
+        const app = createApp();
+        const authHeader = `Bearer ${admin.accessToken}`;
+
+        await request(app)
+          .post("/api/v1/masters/countries")
+          .set("Authorization", authHeader)
+          .send({ code: "US", name: "United States" });
+
+        const firstCollision = await request(app)
+          .get("/api/v1/masters/countries/suggest-code")
+          .query({ name: "United States" })
+          .set("Authorization", authHeader);
+        expect((firstCollision.body as { code: string }).code).toBe("US2");
+
+        await request(app)
+          .post("/api/v1/masters/countries")
+          .set("Authorization", authHeader)
+          .send({ code: "US2", name: "United States (dup)" });
+
+        const secondCollision = await request(app)
+          .get("/api/v1/masters/countries/suggest-code")
+          .query({ name: "United States" })
+          .set("Authorization", authHeader);
+        expect((secondCollision.body as { code: string }).code).toBe("US3");
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "the suggested code is always immediately usable to create the record (round-trips through the real uniqueness check)",
+      async () => {
+        const admin = await seedTenantWithAdmin("suggest-roundtrip", allPermissionsFor("currency"));
+        const app = createApp();
+        const authHeader = `Bearer ${admin.accessToken}`;
+
+        const suggestion = await request(app)
+          .get("/api/v1/masters/currencies/suggest-code")
+          .query({ name: "US Dollar" })
+          .set("Authorization", authHeader);
+        const code = (suggestion.body as { code: string }).code;
+
+        const createRes = await request(app)
+          .post("/api/v1/masters/currencies")
+          .set("Authorization", authHeader)
+          .send({ code, name: "US Dollar" });
+        expect(createRes.status).toBe(201);
+        expect(asMasterRow(createRes).code).toBe(code);
+      },
+      TEST_TIMEOUT_MS,
+    );
+  });
 });

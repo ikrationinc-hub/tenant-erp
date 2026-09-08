@@ -88,10 +88,17 @@ export function RecordScreen({ module, entity, endpoint, label, filters, extraAc
         destroyOnHidden
       >
         {drawer?.mode === "create" && (
-          <SchemaForm module={module} entity={entity} mode="create" onSubmit={handleSubmit} />
+          <SchemaForm module={module} entity={entity} mode="create" endpoint={endpoint} onSubmit={handleSubmit} />
         )}
         {drawer?.mode === "edit" && (
-          <SchemaForm module={module} entity={entity} mode="edit" initialValues={drawer.row} onSubmit={handleSubmit} />
+          <SchemaForm
+            module={module}
+            entity={entity}
+            mode="edit"
+            endpoint={endpoint}
+            initialValues={drawer.row}
+            onSubmit={handleSubmit}
+          />
         )}
       </Drawer>
     </Space>

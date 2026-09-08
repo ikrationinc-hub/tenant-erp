@@ -11,6 +11,7 @@ import {
   myPermissionsResponseSchema,
   paginatedRowsResponseSchema,
   refreshResponseSchema,
+  suggestCodeResponseSchema,
   validateInvitationResponseSchema,
   type ChangePasswordResponse,
   type FieldDefinitionsResponse,
@@ -31,7 +32,7 @@ import {
   type DevEntityRow,
 } from "../core/schema-table/dev-fixture";
 import { MASTER_REGISTRY } from "../modules/masters/master-registry";
-import { mastersHandlers, resolveMasterFieldDefinitions, resolveMasterRowOptions } from "./masters-handlers";
+import { mastersHandlers, resolveMasterFieldDefinitions, resolveMasterRowOptions, resolveSuggestedCode } from "./masters-handlers";
 import { adminHandlers, resolveAdminFieldDefinitions } from "./admin-handlers";
 import { suppliersHandlers, resolveSupplierFieldDefinitions } from "./suppliers-handlers";
 import { customersHandlers, resolveCustomerFieldDefinitions } from "./customers-handlers";
@@ -654,6 +655,11 @@ export const handlers = [
     }
 
     return HttpResponse.json(masterOptionsResponseSchema.parse({ options: filtered }));
+  }),
+  http.get(`${API_BASE}/masters/:master/suggest-code`, ({ params, request }) => {
+    const master = typeof params.master === "string" ? params.master : "";
+    const name = new URL(request.url).searchParams.get("name") ?? "";
+    return HttpResponse.json(suggestCodeResponseSchema.parse({ code: resolveSuggestedCode(master, name) }));
   }),
   ...mastersHandlers,
   ...adminHandlers,

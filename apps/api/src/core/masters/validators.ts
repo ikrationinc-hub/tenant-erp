@@ -36,3 +36,8 @@ export type MasterCreateBase = z.infer<typeof masterCreateBaseSchema>;
 export const masterIdParamsSchema = z.object({
   id: z.string().uuid(),
 });
+
+export const suggestCodeQuerySchema = z.object({
+  name: z.string().min(1),
+});
+export type SuggestCodeQuery = z.infer<typeof suggestCodeQuerySchema>;

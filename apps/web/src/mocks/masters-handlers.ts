@@ -41,6 +41,25 @@ export function resolveMasterRowOptions(urlSegment: string): MasterOption[] | un
   return rows?.map((row) => ({ value: row.id, label: row.name }));
 }
 
+/** Mirrors core/masters/service.ts's deriveBaseCode + collision-suffix loop exactly, against this mock's own in-memory rows - consulted by handlers.ts's generic /masters/:master/suggest-code handler. */
+export function resolveSuggestedCode(urlSegment: string, name: string): string {
+  const words = name
+    .split(/[^\p{L}\p{N}]+/u)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 0);
+  const base = words.length > 1 ? words.map((word) => word[0]).join("") : (words[0] ?? "").slice(0, 4);
+  const cleaned = base.toUpperCase().replace(/[^A-Z0-9]/g, "") || "CODE";
+
+  const rows = rowsByUrlSegment.get(urlSegment) ?? [];
+  let candidate = cleaned;
+  let suffix = 2;
+  while (rows.some((row) => row.code === candidate)) {
+    candidate = `${cleaned}${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
 /**
  * Mirrors core/masters/factory.ts's buildFieldDefaults: every master gets
  * code/name/isActive; cities additionally gets a countryId select (the ONE

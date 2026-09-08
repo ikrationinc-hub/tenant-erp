@@ -111,6 +111,16 @@ export interface SchemaFormProps {
   entity: string;
   mode: SchemaFormMode;
   /**
+   * The REST endpoint this entity's records live at (e.g. "/masters/countries")
+   * - RecordScreen/MasterScreen already have this in scope for their own
+   * create/update calls. Optional: only masters' TextboxField Generate
+   * button needs it (to build .../suggest-code without re-deriving the
+   * REST urlSegment from `entity`, which core/schema-form must not know
+   * how to do - that mapping is modules/masters/master-registry.tsx's, and
+   * core/ never imports from modules/). Every other field type ignores it.
+   */
+  endpoint?: string;
+  /**
    * C-3a (docs/CONTRACT-MODULE-BUILD.md): when the entity's field
    * definitions are division-scoped (e.g. contract/header), the caller
    * passes the currently-selected division's id so the form renders that
@@ -176,6 +186,7 @@ export function SchemaForm({
   hiddenFields,
   footer,
   onDiscard,
+  endpoint,
 }: SchemaFormProps): ReactElement {
   const schemaQuery = useQuery({
     // divisionId in the query key (not just the URL) - a stale cached
@@ -208,6 +219,7 @@ export function SchemaForm({
       uploadContext={uploadContext}
       footer={footer}
       onDiscard={onDiscard}
+      endpoint={endpoint}
     />
   );
 }
@@ -220,12 +232,14 @@ function SchemaFormBody({
   uploadContext,
   footer,
   onDiscard,
+  endpoint,
 }: {
   schema: FieldDefinitionsResponse;
   mode: SchemaFormMode;
   initialValues: Record<string, unknown> | undefined;
   onSubmit: (values: Record<string, unknown>) => void | Promise<void>;
   uploadContext: UploadContext | undefined;
+  endpoint: string | undefined;
   footer: ReactNode;
   onDiscard: (() => void) | undefined;
 }): ReactElement {
@@ -369,7 +383,16 @@ function SchemaFormBody({
                     )}
                     <div className="field-grid">
                       {section.fields.map((field) => (
-                        <FieldRenderer key={field.fieldKey} field={field} control={control} mode={mode} uploadContext={uploadContext} />
+                        <FieldRenderer
+                          key={field.fieldKey}
+                          field={field}
+                          control={control}
+                          mode={mode}
+                          uploadContext={uploadContext}
+                          module={schema.module}
+                          entity={schema.entity}
+                          endpoint={endpoint}
+                        />
                       ))}
                     </div>
                   </>

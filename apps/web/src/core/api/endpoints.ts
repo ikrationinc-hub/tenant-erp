@@ -15,6 +15,8 @@ export const endpoints = {
   myCompanies: "/users/me/companies",
   myPermissions: "/users/me/permissions",
   masterOptions: (master: string) => `/masters/${master}/options`,
+  /** `endpoint` is the record's own REST endpoint (e.g. "/masters/countries", SchemaFormProps.endpoint) - not the entity name (core/masters/registry.ts keeps urlSegment and entity deliberately distinct, and core/schema-form must not know that mapping). */
+  suggestMasterCode: (endpoint: string, name: string) => withQuery(`${endpoint}/suggest-code`, { name }),
   menus: "/menus",
 
   // --- FE-5.5: tenant-admin surface -----------------------------------------

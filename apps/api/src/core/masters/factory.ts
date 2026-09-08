@@ -46,6 +46,8 @@ export interface MasterModule {
   router: Router;
   /** The GET .../options handler, mounted separately by registry.ts at the shared GET /api/v1/masters/:master/options route (dispatched by urlSegment), not nested under `router`. */
   listOptions: RequestHandler;
+  /** The GET .../suggest-code handler, mounted the same way as listOptions - a read-only suggestion endpoint, not nested under `router`. */
+  suggestCode: RequestHandler;
   permissions: PermissionCatalogueEntry[];
   fieldDefaults: FieldDefault[];
 }
@@ -146,6 +148,7 @@ export function defineMasterModule<
     label: config.label,
     router,
     listOptions: controller.listOptions,
+    suggestCode: controller.suggestCode,
     permissions,
     fieldDefaults: buildFieldDefaults(config.entity, config.extraFieldDefaults ?? []),
   };

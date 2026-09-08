@@ -17,11 +17,17 @@ export function FieldRenderer({
   control,
   mode,
   uploadContext,
+  module,
+  entity,
+  endpoint,
 }: {
   field: FieldDefinition;
   control: Control<Record<string, unknown>>;
   mode: SchemaFormMode;
   uploadContext: UploadContext | undefined;
+  module: string;
+  entity: string;
+  endpoint: string | undefined;
 }): ReactElement | null {
   const watchedValue = useWatch({
     control,
@@ -42,7 +48,15 @@ export function FieldRenderer({
   // SchemaForm.tsx's .field-grid.
   return (
     <div className={FULL_WIDTH_FIELD_TYPES.has(fieldType) ? "field-grid-item field-grid-item--full" : "field-grid-item"}>
-      <Component field={field} control={control} readOnly={readOnly} {...(uploadContext ? { uploadContext } : {})} />
+      <Component
+        field={field}
+        control={control}
+        readOnly={readOnly}
+        module={module}
+        entity={entity}
+        endpoint={endpoint}
+        {...(uploadContext ? { uploadContext } : {})}
+      />
     </div>
   );
 }

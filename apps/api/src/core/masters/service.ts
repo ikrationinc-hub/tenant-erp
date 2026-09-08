@@ -32,6 +32,29 @@ function requireTenantScope(ctx: RequestContext) {
 }
 
 /**
+ * Turns a name into a short mnemonic code: one letter per word for a
+ * multi-word name ("United States" -> "US"), the first few letters of a
+ * single word otherwise ("Mumbai" -> "MUM") - matches how country/currency
+ * codes read today (ISO-style initials), not an arbitrary slug. Anything
+ * that isn't a letter/digit is dropped rather than kept, so punctuation in
+ * the name ("A-Grade Copper") doesn't leak into the code.
+ */
+function deriveBaseCode(name: string): string {
+  const words = name
+    .split(/[^\p{L}\p{N}]+/u)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 0);
+
+  const base =
+    words.length > 1
+      ? words.map((word) => word[0]).join("")
+      : (words[0] ?? "").slice(0, 4);
+
+  const cleaned = base.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return cleaned.length > 0 ? cleaned : "CODE";
+}
+
+/**
  * The service half of the generic master-data pattern
  * (core/masters/factory.ts's defineMasterModule wires this to a concrete
  * table's repository). CRUD + activate/deactivate + search + pagination +
@@ -149,6 +172,28 @@ export function createMasterService<T extends MasterTable>(config: MasterService
     });
   }
 
+  /**
+   * Read-only suggestion, not a reservation - no lock, no row written. The
+   * existing create()/update() ConflictError check above remains the real
+   * source of truth at save time; a second user could in principle grab the
+   * suggested code between this call and Save, same race manual entry
+   * already has today.
+   */
+  async function suggestCode(ctx: RequestContext, name: string): Promise<{ code: string }> {
+    const scope = requireTenantScope(ctx);
+    const base = deriveBaseCode(name);
+
+    return withTenantDb(ctx, async (tx) => {
+      let candidate = base;
+      let suffix = 2;
+      while (await repository.findByCode(tx, scope.companyId, candidate)) {
+        candidate = `${base}${suffix}`;
+        suffix += 1;
+      }
+      return { code: candidate };
+    });
+  }
+
   async function setActive(ctx: RequestContext, id: string, isActive: boolean): Promise<MasterRow> {
     const scope = requireTenantScope(ctx);
 
@@ -180,7 +225,7 @@ export function createMasterService<T extends MasterTable>(config: MasterService
     });
   }
 
-  return { list, listOptions, getById, create, update, setActive };
+  return { list, listOptions, getById, create, update, setActive, suggestCode };
 }
 
 function pick(source: MasterRow, keys: string[]): Record<string, unknown> {
