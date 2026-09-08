@@ -1,12 +1,12 @@
 import type { ReactElement } from "react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, Col, DatePicker, Row, Space, Statistic, Typography } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
-import { masterOptionsResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints } from "../../core/api/endpoints";
+import { useMasterLabels } from "./master-labels";
 
 function asDisplayString(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
@@ -43,17 +43,6 @@ interface SalesDashboardResponse {
   customerBreakdown: CustomerBreakdownRow[];
   itemBreakdown: ItemBreakdownRow[];
   countryBreakdown: CountryBreakdownRow[];
-}
-
-function useMasterLabels(master: string): Map<string, string> {
-  const query = useQuery({
-    queryKey: ["field-options", master],
-    queryFn: () => apiFetch(endpoints.masterOptions(master), {}, { schema: masterOptionsResponseSchema }),
-    staleTime: 5 * 60_000,
-  });
-  const options = query.data?.options ?? [];
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- options is a fresh array every render; re-keying on it would rebuild the Map every render for no reason.
-  return useMemo(() => new Map(options.map((option) => [option.value, option.label])), [query.data]);
 }
 
 /** Reads the amount as-is (rule 3: the frontend never calculates money) - every figure here is already server-computed by the S-6 refresh job, this component only ever displays strings. */

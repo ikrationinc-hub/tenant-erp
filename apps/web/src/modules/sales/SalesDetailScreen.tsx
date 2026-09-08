@@ -1,9 +1,8 @@
 import type { ReactElement, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { App as AntApp, Alert, Button, Card, Drawer, Popconfirm, Select, Space, Spin, Table, Tooltip, Typography } from "antd";
-import { masterOptionsResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints, withQuery } from "../../core/api/endpoints";
 import { SchemaForm } from "../../core/schema-form/SchemaForm";
@@ -16,23 +15,7 @@ import { SALES_STATUS_COLORS } from "../../core/status-tag/status-colors";
 import { SALES_LIST_PATH } from "./SalesListScreen";
 import { SalesFulfilmentActions, SalesFulfilmentDrawer } from "./SalesFulfilmentPanels";
 import { SalesInvoiceAction, SalesInvoiceDrawer } from "./SalesReceivablesPanels";
-
-/** Same pattern as PurchaseDetailScreen's useMasterLabels - a select field backed by a masters:X optionsSource stores the master's row id, not a label. */
-function useMasterLabels(master: string): Map<string, string> {
-  const query = useQuery({
-    queryKey: ["field-options", master],
-    queryFn: () => apiFetch(endpoints.masterOptions(master), {}, { schema: masterOptionsResponseSchema }),
-    staleTime: 5 * 60_000,
-  });
-  const options = query.data?.options ?? [];
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- options is a fresh array every render; re-keying on it would rebuild the Map every render for no reason.
-  return useMemo(() => new Map(options.map((option) => [option.value, option.label])), [query.data]);
-}
-
-function resolvedLabel(labels: Map<string, string>, value: unknown): string {
-  const id = typeof value === "string" || typeof value === "number" ? String(value) : "";
-  return labels.get(id) ?? id;
-}
+import { resolvedLabel, useMasterLabels } from "./master-labels";
 
 const SHIPMENT_KEYS = new Set([
   "lotNumber",
@@ -300,6 +283,8 @@ export function SalesDetailScreen({
             salesId={salesId}
             items={rowsOf(salesOrder.items).map((item) => ({
               id: asDisplayString(item.id),
+              itemId: asDisplayString(item.itemId),
+              gradeId: typeof item.gradeId === "string" ? item.gradeId : null,
               quantity: asDisplayString(item.quantity) || "0",
               reservedQty: asDisplayString(item.reservedQty) || "0",
               consumedQty: asDisplayString(item.consumedQty) || "0",
@@ -315,6 +300,8 @@ export function SalesDetailScreen({
             salesId={salesId}
             items={rowsOf(salesOrder.items).map((item) => ({
               id: asDisplayString(item.id),
+              itemId: asDisplayString(item.itemId),
+              gradeId: typeof item.gradeId === "string" ? item.gradeId : null,
               deliveredQty: asDisplayString(item.deliveredQty) || "0",
               invoicedQty: asDisplayString(item.invoicedQty) || "0",
             }))}

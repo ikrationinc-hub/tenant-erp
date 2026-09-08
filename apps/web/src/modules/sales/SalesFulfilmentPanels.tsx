@@ -10,6 +10,7 @@ import { SchemaForm } from "../../core/schema-form/SchemaForm";
 import { NumericStringInput } from "../../core/schema-form/field-types/NumericStringInput";
 import { isPartialNumericString, NUMERIC_STRING_PATTERN } from "../../core/schema-form/numeric-string";
 import { useDebouncedValue } from "../../core/schema-form/use-debounced-value";
+import { resolvedLabel, useMasterLabels } from "./master-labels";
 
 function asDisplayString(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
@@ -17,6 +18,8 @@ function asDisplayString(value: unknown): string {
 
 interface FulfilmentItemRow {
   id: string;
+  itemId: string;
+  gradeId: string | null;
   quantity: string;
   reservedQty: string;
   consumedQty: string;
@@ -42,6 +45,8 @@ interface OutstandingQtyTableProps {
  * doc comment). Hand-built, not SchemaForm - same reasoning as Purchase's.
  */
 function OutstandingQtyTable({ items, quantities, onChange }: OutstandingQtyTableProps): ReactElement {
+  const itemLabels = useMasterLabels("items");
+  const gradeLabels = useMasterLabels("item-grades");
   return (
     <Table
       dataSource={items}
@@ -49,7 +54,15 @@ function OutstandingQtyTable({ items, quantities, onChange }: OutstandingQtyTabl
       pagination={false}
       size="small"
       columns={[
-        { title: "Item", dataIndex: "id", render: (value: string) => value.slice(0, 8) },
+        {
+          title: "Item",
+          dataIndex: "itemId",
+          render: (value: unknown, row: FulfilmentItemRow) => {
+            const item = resolvedLabel(itemLabels, value);
+            const grade = row.gradeId ? resolvedLabel(gradeLabels, row.gradeId) : undefined;
+            return grade ? `${item} (${grade})` : item;
+          },
+        },
         { title: "Reserved", dataIndex: "reservedQty" },
         { title: "Already Delivered", dataIndex: "consumedQty" },
         {
@@ -271,6 +284,8 @@ interface SalesAggregateForDelivery {
 function toFulfilmentItems(items: Record<string, unknown>[]): FulfilmentItemRow[] {
   return items.map((item) => ({
     id: asDisplayString(item.id),
+    itemId: asDisplayString(item.itemId),
+    gradeId: typeof item.gradeId === "string" ? item.gradeId : null,
     quantity: asDisplayString(item.quantity) || "0",
     reservedQty: asDisplayString(item.reservedQty) || "0",
     consumedQty: asDisplayString(item.consumedQty) || "0",

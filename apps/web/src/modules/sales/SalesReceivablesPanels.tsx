@@ -7,9 +7,12 @@ import { Can } from "../../core/permissions/Can";
 import { SchemaForm } from "../../core/schema-form/SchemaForm";
 import { NumericStringInput } from "../../core/schema-form/field-types/NumericStringInput";
 import { isPartialNumericString, NUMERIC_STRING_PATTERN } from "../../core/schema-form/numeric-string";
+import { resolvedLabel, useMasterLabels } from "./master-labels";
 
 interface FulfilmentItemRow {
   id: string;
+  itemId: string;
+  gradeId: string | null;
   deliveredQty: string;
   invoicedQty: string;
 }
@@ -39,6 +42,8 @@ interface OutstandingQtyTableProps {
  * delivered yet.
  */
 function OutstandingQtyTable({ items, quantities, onChange, amounts, onAmountChange }: OutstandingQtyTableProps): ReactElement {
+  const itemLabels = useMasterLabels("items");
+  const gradeLabels = useMasterLabels("item-grades");
   return (
     <Table
       dataSource={items}
@@ -46,7 +51,15 @@ function OutstandingQtyTable({ items, quantities, onChange, amounts, onAmountCha
       pagination={false}
       size="small"
       columns={[
-        { title: "Item", dataIndex: "id", render: (value: string) => value.slice(0, 8) },
+        {
+          title: "Item",
+          dataIndex: "itemId",
+          render: (value: unknown, row: FulfilmentItemRow) => {
+            const item = resolvedLabel(itemLabels, value);
+            const grade = row.gradeId ? resolvedLabel(gradeLabels, row.gradeId) : undefined;
+            return grade ? `${item} (${grade})` : item;
+          },
+        },
         { title: "Delivered", dataIndex: "deliveredQty" },
         { title: "Already Invoiced", dataIndex: "invoicedQty" },
         {
