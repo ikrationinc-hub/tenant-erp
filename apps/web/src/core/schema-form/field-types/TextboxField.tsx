@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useState } from "react";
 import { useController, useWatch, type Control } from "react-hook-form";
-import { App, Button, Input } from "antd";
+import { App, Button, Input, Tooltip } from "antd";
 import { ThunderboltOutlined } from "@ant-design/icons";
 import { suggestCodeResponseSchema } from "@ikration/contracts";
 import type { FieldComponentProps } from "./types";
@@ -46,17 +46,24 @@ function GenerateCodeButton({
     }
   }
 
+  const isDisabled = trimmedName.length === 0;
+
   return (
-    <Button
-      type="link"
-      size="small"
-      icon={<ThunderboltOutlined />}
-      loading={isGenerating}
-      disabled={trimmedName.length === 0}
-      onClick={() => void handleClick()}
-    >
-      Generate
-    </Button>
+    <Tooltip title={isDisabled ? "Enter a name first to auto-generate a code" : undefined}>
+      {/* Tooltip needs a hoverable wrapper - a native disabled button swallows pointer events, so no hover would ever reach it without this span. */}
+      <span>
+        <Button
+          type="link"
+          size="small"
+          icon={<ThunderboltOutlined />}
+          loading={isGenerating}
+          disabled={isDisabled}
+          onClick={() => void handleClick()}
+        >
+          Generate
+        </Button>
+      </span>
+    </Tooltip>
   );
 }
 

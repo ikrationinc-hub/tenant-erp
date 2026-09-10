@@ -144,6 +144,24 @@ describe("MasterScreen - the generic proof (one component, real masters CRUD)", 
     await waitFor(() => expect(drawer().getByLabelText("Code")).toHaveValue("PAKI"), ASYNC);
   });
 
+  it("Generate is disabled with a hover explanation until Name has a value", async () => {
+    signIn();
+    const user = userEvent.setup();
+    renderApp({ initialEntries: ["/settings/masters/countries"] });
+
+    await screen.findByText("Countries 1", {}, ASYNC);
+    await user.click(await screen.findByRole("button", { name: /New Countries/ }, ASYNC));
+
+    const generateButton = await drawer().findByRole("button", { name: /Generate/ }, ASYNC);
+    expect(generateButton).toBeDisabled();
+
+    await user.hover(generateButton);
+    expect(await screen.findByText("Enter a name first to auto-generate a code", {}, ASYNC)).toBeInTheDocument();
+
+    await user.type(drawer().getByLabelText("Name"), "Pakistan");
+    await waitFor(() => expect(generateButton).not.toBeDisabled(), ASYNC);
+  });
+
   it("renders a second, unrelated master through the exact same route/component - proving genericity", async () => {
     signIn();
     renderApp({ initialEntries: ["/settings/masters/uom"] });
