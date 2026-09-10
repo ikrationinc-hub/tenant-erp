@@ -258,6 +258,11 @@ function SchemaFormBody({
     defaultValues,
   });
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // A second click before onSubmit's promise resolves would otherwise fire
+  // a second submission (e.g. two invoices created for the same sale) -
+  // handleSubmit's own async wrapper isn't tracked in RHF's formState, so
+  // this is tracked explicitly and used to disable the Save button below.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   // Empty (nothing collapsed) on first render - every labeled section
   // starts expanded, matching the screen exactly as it looked before this
   // existed. Only labeled sections ever get a key added here (see the
@@ -299,7 +304,11 @@ function SchemaFormBody({
   }
 
   const submit = handleSubmit(async (values) => {
+    if (isSubmitting) {
+      return;
+    }
     setSubmitError(null);
+    setIsSubmitting(true);
     try {
       await onSubmit(stripEmptyOptionalFields(schema, stripServerOwnedFields(schema, stripUploadFields(schema, values))));
     } catch (error) {
@@ -311,6 +320,8 @@ function SchemaFormBody({
       const payload = toToastPayload(error);
       notifyError(payload);
       setSubmitError(payload.description ?? payload.message);
+    } finally {
+      setIsSubmitting(false);
     }
   }, expandSectionsWithErrors);
 
@@ -410,10 +421,12 @@ function SchemaFormBody({
                 <div className="schema-form-actions-buttons">
                   {onDiscard && (
                     <Popconfirm title="Discard unsaved changes?" onConfirm={onDiscard} okText="Discard" cancelText="Keep editing">
-                      <Button block>Discard</Button>
+                      <Button block disabled={isSubmitting}>
+                        Discard
+                      </Button>
                     </Popconfirm>
                   )}
-                  <Button type="primary" htmlType="submit" block>
+                  <Button type="primary" htmlType="submit" block loading={isSubmitting}>
                     Save
                   </Button>
                 </div>

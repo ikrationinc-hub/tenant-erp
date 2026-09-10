@@ -182,6 +182,39 @@ describe("SchemaForm - metadata-driven rendering", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("disables Save while a submission is in flight, so a fast double-click cannot fire two submits", async () => {
+    const module = "_dev";
+    const entity = "double-submit-test";
+    const fixture = buildFixture(module, entity, 1, [
+      field({ fieldKey: "name", label: "Name", fieldType: "Textbox" }),
+    ]);
+    mockFieldDefinitions(module, entity, fixture);
+
+    let resolveSubmit: (() => void) | undefined;
+    const onSubmit = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSubmit = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+
+    renderWithProviders(<SchemaForm module={module} entity={entity} mode="create" onSubmit={onSubmit} />);
+    await screen.findByLabelText("Name");
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    await user.click(saveButton);
+    // Real double-clicks land while onSubmit's promise is still pending -
+    // a second click here must be a no-op, not a second call.
+    await user.click(saveButton);
+    await user.click(saveButton);
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+
+    resolveSubmit?.();
+    await waitFor(() => expect(saveButton).not.toBeDisabled());
+  });
+
   it("does not render a field the schema omits", async () => {
     const module = "_dev";
     const entity = "omitted-field-test";

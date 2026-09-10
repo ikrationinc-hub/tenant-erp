@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import type { RouteObject } from "react-router-dom";
 import { renderApp } from "../../test/render-app";
 import { useAppStore } from "../../core/store/app-store";
@@ -88,6 +88,42 @@ describe("SupplierScreen", () => {
       expect(await drawer().findByText(/already exists/i, {}, ASYNC)).toBeInTheDocument();
       // The drawer stays open on failure - the duplicate was never created.
       expect(drawer().getByLabelText("Supplier Name")).toHaveValue("Metal Traders LLC");
+    },
+    30000,
+  );
+
+  it(
+    "editing a supplier whose optional text fields are null (never filled in) saves without a false 'Invalid input'",
+    async () => {
+      // Global Copper Co (mocks/suppliers-handlers.ts) seeds
+      // taxRegistrationNo/remarks as null, not "" - what a real Postgres
+      // text column returns when a field was never filled in at creation.
+      // default-values.ts used to carry that null straight into RHF's
+      // defaultValues, and compile-validator.ts's non-mandatory
+      // Textbox/TextArea builder is z.string() (rejects null) - Save then
+      // failed client-side with "Invalid input" on fields that show no
+      // required asterisk at all, in edit mode only (create mode has no
+      // initialValues to carry a null through).
+      signIn();
+      const user = userEvent.setup();
+      renderApp({ routes: testRoutes, initialEntries: ["/"] });
+
+      await screen.findByText("Global Copper Co", {}, ASYNC);
+      const row = screen.getByText("Global Copper Co").closest("tr");
+      if (!row) {
+        throw new Error("expected a table row for Global Copper Co");
+      }
+      await user.click(within(row).getByRole("button", { name: "Edit" }));
+
+      const dialog = await screen.findByRole("dialog", {}, ASYNC);
+      await within(dialog).findByLabelText("Supplier Name", {}, ASYNC);
+      expect(within(dialog).getByLabelText("Tax Registration No.")).toHaveValue("");
+      expect(within(dialog).getByLabelText("Remarks")).toHaveValue("");
+
+      await user.click(within(dialog).getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), ASYNC);
+      expect(screen.queryByText("Invalid input")).not.toBeInTheDocument();
     },
     30000,
   );

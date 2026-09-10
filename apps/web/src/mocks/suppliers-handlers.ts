@@ -111,10 +111,16 @@ const suppliers: MockRow[] = [
     countryId: "sg",
     cityId: "singapore-city",
     address: "Marina Bay",
-    taxRegistrationNo: "",
+    // null, not "" - a real Postgres text column that was never filled in
+    // at creation comes back this way (the bug this row exists to catch:
+    // default-values.ts previously carried a null initialValue through
+    // verbatim, and compile-validator.ts's non-mandatory Textbox/TextArea
+    // builder is z.string(), which rejects null - "Invalid input" on Save
+    // for an optional, blank field, in edit mode only).
+    taxRegistrationNo: null,
     paymentTermId: "term-advance",
     currencyId: "sgd",
-    remarks: "",
+    remarks: null,
     status: "active",
     contacts: [],
     banks: [],

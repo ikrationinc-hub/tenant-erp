@@ -27,8 +27,16 @@ export function buildDefaultValues(
 
   for (const section of resolveFieldSections(schema)) {
     for (const field of section.fields) {
-      if (initialValues && field.fieldKey in initialValues) {
-        values[field.fieldKey] = initialValues[field.fieldKey];
+      const initialValue = initialValues?.[field.fieldKey];
+      // A field the API returns as `null` (never filled in) must still fall
+      // through to the type-appropriate empty value below, not be carried
+      // through as literal `null` - compile-validator.ts's non-mandatory
+      // Textbox/TextArea builder is `z.string()`, which rejects `null`,
+      // turning a genuinely optional, blank field into an "Invalid input"
+      // error on Save in edit mode only (create mode has no initialValues
+      // at all, so this never surfaced there).
+      if (initialValues && field.fieldKey in initialValues && initialValue !== null) {
+        values[field.fieldKey] = initialValue;
       } else if (field.defaultValue !== undefined && field.defaultValue !== null) {
         values[field.fieldKey] = field.defaultValue;
       } else if (resolveFieldType(field) === "Dropdown" && field.multiple) {
