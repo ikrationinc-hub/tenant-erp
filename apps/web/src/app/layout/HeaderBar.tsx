@@ -1,11 +1,12 @@
 import type { ReactElement } from "react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, Button, Dropdown, Space, Typography } from "antd";
-import { SettingOutlined, UserOutlined } from "@ant-design/icons";
+import { CheckOutlined, DownOutlined, SettingOutlined, UserOutlined } from "@ant-design/icons";
 import { useLogoutMutation } from "../../modules/auth/api";
 import { queryClient } from "../../core/api/query-client";
 import { useAppStore } from "../../core/store/app-store";
 import { steelCobalt } from "../../theme/palette";
+import { FONT_SCALE_STEPS } from "../../theme/font-scale";
 import { CompanyBranchSwitcher } from "./CompanyBranchSwitcher";
 
 export interface HeaderBarProps {
@@ -17,6 +18,8 @@ export function HeaderBar({ showSettingsEntry = false }: HeaderBarProps): ReactE
   const navigate = useNavigate();
   const user = useAppStore((s) => s.user);
   const clearAuth = useAppStore((s) => s.clearAuth);
+  const fontScale = useAppStore((s) => s.fontScale);
+  const setFontScale = useAppStore((s) => s.setFontScale);
   const logoutMutation = useLogoutMutation();
 
   async function handleLogout(): Promise<void> {
@@ -32,6 +35,21 @@ export function HeaderBar({ showSettingsEntry = false }: HeaderBarProps): ReactE
   return (
     <Space size="middle">
       <CompanyBranchSwitcher />
+      <Dropdown
+        menu={{
+          items: FONT_SCALE_STEPS.map((step) => ({
+            key: step.key,
+            label: step.label,
+            icon: step.scale === fontScale ? <CheckOutlined /> : undefined,
+            onClick: () => setFontScale(step.scale),
+          })),
+        }}
+        placement="bottomRight"
+      >
+        <Button type="text" aria-label="Font size" style={{ fontWeight: 600 }}>
+          Aa <DownOutlined style={{ fontSize: 10 }} />
+        </Button>
+      </Dropdown>
       {showSettingsEntry && (
         <Button
           type="text"

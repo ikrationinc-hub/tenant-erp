@@ -1,9 +1,8 @@
-import { App as AntApp, ConfigProvider } from "antd";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider, type RouteObject } from "react-router-dom";
 import { render } from "@testing-library/react";
 import { queryClient } from "../core/api/query-client";
-import { themeTokens } from "../theme/tokens";
+import { AppThemeProvider } from "../app/AppThemeProvider";
 import { routes as appRoutes } from "../app/routes";
 
 /**
@@ -22,13 +21,11 @@ export function renderApp(
   });
 
   const utils = render(
-    <ConfigProvider theme={themeTokens} componentSize="middle">
-      <AntApp>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
-      </AntApp>
-    </ConfigProvider>,
+    <AppThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </AppThemeProvider>,
   );
 
   return { ...utils, router };

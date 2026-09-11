@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { LoginUserSummary } from "@ikration/contracts";
+import { DEFAULT_FONT_SCALE } from "../../theme/font-scale";
 
 /**
  * Auth token + UI prefs ONLY (frontend rule 5) - server data belongs to
@@ -29,8 +30,11 @@ interface UiPrefsSlice {
   sidebarCollapsed: boolean;
   activeCompanyId: string | null;
   activeBranchId: string | null;
+  /** HeaderBar's font-size control (theme/font-scale.ts's FONT_SCALE_STEPS) - multiplies buildThemeTokens' base sizes (theme/tokens.ts). */
+  fontScale: number;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setActiveScope: (scope: { companyId: string | null; branchId: string | null }) => void;
+  setFontScale: (scale: number) => void;
 }
 
 export type AppStore = AuthSlice & UiPrefsSlice;
@@ -67,9 +71,11 @@ export const useAppStore = create<AppStore>()(
       sidebarCollapsed: false,
       activeCompanyId: null,
       activeBranchId: null,
+      fontScale: DEFAULT_FONT_SCALE,
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setActiveScope: ({ companyId, branchId }) =>
         set({ activeCompanyId: companyId, activeBranchId: branchId }),
+      setFontScale: (fontScale) => set({ fontScale }),
     }),
     {
       name: "ikration-app-store",
