@@ -298,6 +298,16 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
       // once (no draft state); read reuses purchase.po.read (PL-4's own
       // precedent for the Receipts/Bills list screens).
       permissionEntry("purchase", "payment", "record", "Record a payment against one or more bills"),
+      // docs/PO-SHORT-CLOSE.md: finalizing a line at less than ordered
+      // quantity when the supplier under-delivered and won't send the
+      // rest - a distinct, governance-level capability from ordinary
+      // po.update line edits (the audited write-off of the remainder is
+      // the whole point, so it gets its own permission rather than
+      // reusing po.update). Reopen is deliberately separate from
+      // shortclose - reversing a finalization is more sensitive than
+      // making one, so a role can be granted one without the other.
+      permissionEntry("purchase", "line", "shortclose", "Short-close a purchase order line at less than ordered quantity"),
+      permissionEntry("purchase", "line", "reopen", "Re-open a short-closed purchase order line"),
     ],
     dependsOn: ["auth", "roles", "masters", "suppliers", "storage"],
     migrations: [

@@ -54,6 +54,11 @@ const FULFILMENT_LABELS: Record<string, string> = {
   not_received: "Not Received",
   partial: "Partial",
   fully_received: "Fully Received",
+  // docs/PO-SHORT-CLOSE.md: the PO-level received axis's own terminal
+  // state - every line is either fully received or short-closed, nothing
+  // genuinely pending. Distinct wording from "Fully Received" since not
+  // everything actually arrived.
+  short_closed: "Short Closed",
   not_billed: "Not Billed",
   fully_billed: "Fully Billed",
   not_paid: "Not Paid",
@@ -66,6 +71,7 @@ const FULFILMENT_COLORS: Record<string, string> = {
   not_paid: slate[400],
   partial: semantic.warning,
   fully_received: semantic.success,
+  short_closed: semantic.warning,
   fully_billed: semantic.success,
   fully_paid: semantic.success,
 };
@@ -299,6 +305,7 @@ export function PurchaseListScreen(): ReactElement {
               { label: "Not Received", value: "not_received" },
               { label: "Partial", value: "partial" },
               { label: "Fully Received", value: "fully_received" },
+              { label: "Short Closed", value: "short_closed" },
             ],
           },
           {

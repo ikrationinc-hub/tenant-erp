@@ -415,6 +415,99 @@ describe("Purchase - PL-4 fulfilment lifecycle (Receive/Convert to Bill drive th
   );
 });
 
+describe("Purchase - short-close (docs/PO-SHORT-CLOSE.md): finalizing a line at less than ordered quantity", () => {
+  it(
+    "Short Close on a partially-received line labels it distinctly and caps the Bill form at received qty, never ordered",
+    async () => {
+      signIn();
+      const user = userEvent.setup();
+      const { router } = renderApp({ routes: testRoutes, initialEntries: [`${PURCHASE_LIST_PATH}/new`] });
+
+      await fillHeaderAndShipment(user, "CONT-SHORTCLOSE");
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(router.state.location.pathname).not.toBe(`${PURCHASE_LIST_PATH}/new`), ASYNC);
+
+      await user.click(await screen.findByRole("button", { name: "Add Item" }, ASYNC));
+      const itemDrawer = within(screen.getByRole("dialog"));
+      await user.click(itemDrawer.getByRole("combobox", { name: "Item" }));
+      await user.click((await screen.findAllByText("Items 1", {}, ASYNC)).at(-1) ?? screen.getByText("Items 1"));
+      await user.type(itemDrawer.getByLabelText("Quantity"), "10");
+      await user.click(itemDrawer.getByRole("combobox", { name: "Unit of Measure" }));
+      await user.click((await screen.findAllByText("Units of Measure 1", {}, ASYNC)).at(-1) ?? screen.getByText("Units of Measure 1"));
+      await user.type(itemDrawer.getByLabelText("Purchase Rate (USD)"), "100");
+      await user.type(itemDrawer.getByLabelText("Exchange Rate"), "3.6725");
+      await user.click(itemDrawer.getByRole("button", { name: "Save" }));
+      await screen.findByText("Purchase Items & Pricing", {}, ASYNC);
+
+      await user.click(await screen.findByRole("button", { name: "Issue" }, ASYNC));
+      await screen.findByText("Order Placed", {}, ASYNC);
+
+      // Receive 7 of the 10 ordered - a genuine partial, exactly the
+      // scenario the client described ("supplier only has/ships less").
+      await user.click(await screen.findByRole("button", { name: "Receive" }, ASYNC));
+      const receiveDrawer = within(latestDialogElement());
+      const receiveQtyInput = await receiveDrawer.findByRole("textbox", { name: /Quantity for item/ }, ASYNC);
+      await user.clear(receiveQtyInput);
+      await user.type(receiveQtyInput, "7");
+      await user.type(receiveDrawer.getByLabelText("Receipt Date"), "2026-08-10{Enter}");
+      await selectOption(user, "Warehouse", "Jebel Ali Warehouse");
+      await user.click(receiveDrawer.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(screen.getByText("Partially Received")).toBeInTheDocument(), ASYNC);
+
+      // The line shows Partial (not yet short-closed) and a Short Close
+      // button next to it.
+      expect(await screen.findByText("Partial", {}, ASYNC)).toBeInTheDocument();
+      await user.click(await screen.findByRole("button", { name: "Short Close" }, ASYNC));
+
+      const shortCloseDrawer = within(latestDialogElement());
+      await shortCloseDrawer.findByText(/Ordered: 10/, {}, ASYNC);
+      const confirmButton = shortCloseDrawer.getByRole("button", { name: "Confirm Short Close" });
+      expect(confirmButton).toBeDisabled();
+      await user.type(shortCloseDrawer.getByLabelText("Reason"), "Supplier confirmed no further shipment");
+      expect(confirmButton).not.toBeDisabled();
+      await user.click(confirmButton);
+
+      // The line now shows the distinct Short Closed label with the
+      // written-off quantity called out, not a bare "Partial"/"Closed" word.
+      expect(await screen.findByText(/Short Closed — 3 of 10 not received/, {}, ASYNC)).toBeInTheDocument();
+      expect(screen.queryByText("Partial")).not.toBeInTheDocument();
+
+      // The only line on this PO is now short-closed - nothing left to
+      // receive anywhere, so the PO-level fulfilment strip must read
+      // "Short Closed" (not the stale "Partially Received"), and the
+      // Receive button must disappear entirely rather than reopening a
+      // form with nothing left to submit. The Bill step stays "Not
+      // Billed" (not "Short Closed") - a short-closed line's billable
+      // ceiling (7) is still a real, non-zero amount genuinely awaiting a
+      // bill, so "Convert to Bill" correctly stays available below.
+      await waitFor(() => expect(screen.getByText("Short Closed")).toBeInTheDocument(), ASYNC);
+      expect(screen.queryByText("Partially Received")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Receive" })).not.toBeInTheDocument();
+
+      // Converting to Bill must default/cap at the RECEIVED quantity (7),
+      // never the ordered quantity (10) - the actual client requirement.
+      await user.click(screen.getByRole("button", { name: "Convert to Bill" }));
+      const billDrawer = within(latestDialogElement());
+      const billQtyInput = await billDrawer.findByRole("textbox", { name: /Quantity for item/ }, ASYNC);
+      expect(billQtyInput).toHaveValue("7");
+      await user.type(billDrawer.getByLabelText("Invoice Date"), "2026-08-13{Enter}");
+      await user.type(billDrawer.getByLabelText("Invoice Amount (USD)"), "70000");
+      await user.click(billDrawer.getByRole("button", { name: "Save" }));
+
+      // Billing the full 7 (everything actually billable, given 3 were
+      // short-closed) must retire "Convert to Bill" too - there is nothing
+      // left to bill, same as fully_billed. Both axes are now "done" (one
+      // fully_received-equivalent via short-close, one fully_billed
+      // relative to its own reduced ceiling), so the PO auto-closes -
+      // it must not sit in Issued forever just because short-close was
+      // involved.
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Convert to Bill" })).not.toBeInTheDocument(), ASYNC);
+      await waitFor(() => expect(screen.getByText("Closed")).toBeInTheDocument(), ASYNC);
+    },
+    60000,
+  );
+});
+
 describe("Purchase - PL-5 Payment (records against a bill, drives the fulfilment strip's Pay step)", () => {
   it(
     "recording a payment for the bill's full amount moves the bill to Paid and the PO's own Pay step to Fully Paid",

@@ -101,7 +101,7 @@ export const purchasesListQuerySchema = z.object({
   supplierId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
   divisionId: z.string().uuid().optional(),
-  receivedStatus: z.enum(["not_received", "partial", "fully_received"]).optional(),
+  receivedStatus: z.enum(["not_received", "partial", "fully_received", "short_closed"]).optional(),
   billedStatus: z.enum(["not_billed", "partial", "fully_billed"]).optional(),
   purchaseDateFrom: dateStringSchema.optional(),
   purchaseDateTo: dateStringSchema.optional(),

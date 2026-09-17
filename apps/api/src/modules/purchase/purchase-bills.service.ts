@@ -136,10 +136,17 @@ export async function list(ctx: RequestContext, purchaseId: string): Promise<Pur
  * (PL-2 §1: partial billing is a first-class case, not a flag - unlike
  * Prompt 22's ALLOW_PARTIAL_INVOICING, there is no single-bill-by-default
  * restriction here). `items` is optional - see purchase-bills.validator.ts's
- * doc comment - but when present, over-billing (billing more than a
- * purchase item's ordered quantity, summed across every existing bill) is
- * rejected at create time, same discipline as receipts' own over-receipt
- * guard.
+ * doc comment - but when present, over-billing is rejected at create time,
+ * same discipline as receipts' own over-receipt guard.
+ *
+ * docs/PO-SHORT-CLOSE.md: the ceiling is min(ordered - shortClosed,
+ * received), NEVER plain ordered - "bill only for what was actually
+ * received" is the client's actual requirement, and this must hold for
+ * EVERY purchase item, short-closed or not (confirmed: a universal fix,
+ * not scoped only to short-closed lines - a bill for goods never received
+ * is a real gap regardless of whether short-close was ever invoked on that
+ * line). Short-close further lowers the ceiling once invoked, since the
+ * written-off remainder should never become billable either.
  */
 export async function create(ctx: RequestContext, purchaseId: string, input: CreatePurchaseInvoiceInput): Promise<PurchaseBillWireWithItems> {
   const scope = requireTenantScope(ctx);
@@ -162,6 +169,8 @@ export async function create(ctx: RequestContext, purchaseId: string, input: Cre
 
       const alreadyBilled = await sumBilledQuantitiesByItem(tx, scope.companyId, purchaseId);
       const alreadyBilledById = new Map(alreadyBilled.map((row) => [row.purchaseItemId, parseMoney(row.billedQuantity)]));
+      const receivedSums = await sumConfirmedReceivedQuantitiesByItem(tx, scope.companyId, purchaseId);
+      const receivedById = new Map(receivedSums.map((row) => [row.purchaseItemId, parseMoney(row.receivedQuantity)]));
 
       for (const line of billLines) {
         const orderedItem = orderedById.get(line.purchaseItemId);
@@ -174,9 +183,27 @@ export async function create(ctx: RequestContext, purchaseId: string, input: Cre
         }
         const alreadyBilledQuantity = alreadyBilledById.get(line.purchaseItemId) ?? parseMoney("0");
         const orderedQuantity = parseMoney(orderedItem.quantity);
-        if (alreadyBilledQuantity.plus(requestedQuantity).gt(orderedQuantity)) {
+        const receivedQuantity = receivedById.get(line.purchaseItemId) ?? parseMoney("0");
+        const shortClosedQuantity = parseMoney(orderedItem.shortClosedQty);
+        // docs/PO-SHORT-CLOSE.md, user-confirmed: a line with ZERO receipts
+        // and no short-close keeps billing up to ordered qty - this is the
+        // pre-shipment/LC commercial-invoice flow PURCHASE-LIFECYCLE-4DOC.md
+        // §1 explicitly designed for ("billed but not received"), and
+        // nothing about that changes here. The moment ANY receipt exists
+        // against the line, or it's been short-closed, the ceiling becomes
+        // received qty (further lowered by short-close) - "bill only for
+        // what was actually received" only kicks in once there's something
+        // to compare against.
+        const hasAnyReceiptOrShortClose = receivedQuantity.gt(0) || shortClosedQuantity.gt(0);
+        const orderedLessShortClosed = orderedQuantity.minus(shortClosedQuantity);
+        const billableCeiling = hasAnyReceiptOrShortClose
+          ? orderedLessShortClosed.lt(receivedQuantity)
+            ? orderedLessShortClosed
+            : receivedQuantity
+          : orderedQuantity;
+        if (alreadyBilledQuantity.plus(requestedQuantity).gt(billableCeiling)) {
           throw new ConflictError(
-            `Cannot bill ${requestedQuantity.toString()} of item ${line.purchaseItemId}: only ${orderedQuantity.minus(alreadyBilledQuantity).toString()} remains unbilled (ordered ${orderedQuantity.toString()}, already billed ${alreadyBilledQuantity.toString()})`,
+            `Cannot bill ${requestedQuantity.toString()} of item ${line.purchaseItemId}: only ${billableCeiling.minus(alreadyBilledQuantity).toString()} remains billable (received ${receivedQuantity.toString()}, ordered ${orderedQuantity.toString()}, short-closed ${shortClosedQuantity.toString()}, already billed ${alreadyBilledQuantity.toString()})`,
           );
         }
       }
@@ -334,7 +361,7 @@ export async function approve(ctx: RequestContext, purchaseId: string, billId: s
       scope.companyId,
       purchaseId,
       computeReceivedStatus(orderedItems, receivedByItemId),
-      computeBilledStatus(orderedItems, billedByItemId),
+      computeBilledStatus(orderedItems, billedByItemId, receivedByItemId),
     );
 
     return toWireShape(row);

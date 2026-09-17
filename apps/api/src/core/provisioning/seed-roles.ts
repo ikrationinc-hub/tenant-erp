@@ -47,7 +47,16 @@ const ROLE_PERMISSION_FILTERS: Record<DefaultRoleName, (action: string) => boole
   // actions AND the Draft->Approved->Signed->Closed transitions - a
   // Signed contract is a legally binding document, the same governance
   // tier as issue/approve/confirm for every other document type.
-  Manager: (action) => ["read", "create", "update", "approve", "confirm", "issue", "cancel", "record", "assign", "provision", "assemble"].includes(action),
+  // "shortclose" (docs/PO-SHORT-CLOSE.md) joins this tier too - finalizing
+  // a PO line below ordered quantity is the same class of ledger-affecting
+  // decision as issue/cancel, not routine data entry. "reopen" is
+  // deliberately NOT included here - reversing a short-close is more
+  // sensitive than making one; only Admin gets it by default until the
+  // client's own role model says otherwise.
+  Manager: (action) =>
+    ["read", "create", "update", "approve", "confirm", "issue", "cancel", "record", "assign", "provision", "assemble", "shortclose"].includes(
+      action,
+    ),
   Admin: () => true,
 };
 

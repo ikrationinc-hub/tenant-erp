@@ -7,6 +7,7 @@ import * as purchaseCostsController from "./purchase-costs.controller.js";
 import * as purchaseHedgesController from "./purchase-hedges.controller.js";
 import * as purchaseBillsController from "./purchase-bills.controller.js";
 import * as purchaseItemsController from "./purchase-items.controller.js";
+import * as purchaseLineShortcloseController from "./purchase-line-shortclose.controller.js";
 import * as purchaseLmeController from "./purchase-lme.controller.js";
 import * as purchaseReceiptsController from "./purchase-receipts.controller.js";
 import * as purchasePaymentsController from "./purchase-payments.controller.js";
@@ -25,6 +26,8 @@ const invoiceUpdatePermission = requirePermission("purchase.invoice.update");
 const invoiceApprovePermission = requirePermission("purchase.invoice.approve");
 const receiptCreatePermission = requirePermission("purchase.receipt.create");
 const receiptConfirmPermission = requirePermission("purchase.receipt.confirm");
+const lineShortclosePermission = requirePermission("purchase.line.shortclose");
+const lineReopenPermission = requirePermission("purchase.line.reopen");
 
 purchaseRouter.get("/", scopeResolverMiddleware, requirePurchaseModule, readPermission, purchaseController.list);
 purchaseRouter.get("/:id", scopeResolverMiddleware, requirePurchaseModule, readPermission, purchaseController.getById);
@@ -59,6 +62,34 @@ purchaseRouter.patch(
   requirePurchaseModule,
   updatePermission,
   purchaseItemsController.updateItem,
+);
+
+// docs/PO-SHORT-CLOSE.md: finalizing a line (or every still-partial line)
+// at less than ordered quantity when the supplier under-delivered and
+// won't send the rest - NOT a reversal, doesn't touch existing receipts.
+// Own permissions (purchase.line.shortclose/.reopen), not the parent PO's
+// po.* ones - a distinct, governance-level capability from ordinary item
+// edits.
+purchaseRouter.post(
+  "/:id/lines/:itemId/short-close",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  lineShortclosePermission,
+  purchaseLineShortcloseController.shortCloseLine,
+);
+purchaseRouter.post(
+  "/:id/short-close-remaining",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  lineShortclosePermission,
+  purchaseLineShortcloseController.shortCloseAllRemaining,
+);
+purchaseRouter.post(
+  "/:id/lines/:itemId/reopen",
+  scopeResolverMiddleware,
+  requirePurchaseModule,
+  lineReopenPermission,
+  purchaseLineShortcloseController.reopenLine,
 );
 
 // Sub Tab 2, table F - resolved open question #3: many reserved customers

@@ -1429,6 +1429,20 @@ export const purchaseShipmentsRelations = relations(purchaseShipments, ({ one })
 // `numeric(18,6)`. Never `mode: "number"` - every one of these stays a
 // plain string in JS/TS, parsed to `Decimal` only at the repository
 // boundary (common/money/decimal.ts, docs/adr/0012-money-rounding.md).
+/**
+ * Purchase order short-close (docs/PO-SHORT-CLOSE.md): a line's fulfilment
+ * state, derived/maintained by purchase-lifecycle.ts's computeLineStatus -
+ * never free-entry. `short_closed` means the supplier under-delivered and
+ * the remainder was formally written off (shortClosedQty > 0); distinct
+ * from `partial`, which still expects more to arrive.
+ */
+export const purchaseLineStatusEnum = pgEnum("purchase_line_status", [
+  "open",
+  "partial",
+  "short_closed",
+  "fully_received",
+]);
+
 export const purchaseItems = pgTable(
   "purchase_items",
   {
@@ -1447,6 +1461,14 @@ export const purchaseItems = pgTable(
     uomId: uuid("uom_id")
       .notNull()
       .references(() => uom.id, { onDelete: "restrict" }),
+    // Short-close (docs/PO-SHORT-CLOSE.md): the remainder written off as
+    // "not coming", written once by the short-close action, never inferred.
+    // Cleared back to 0 by reopen. Received/billed themselves stay derived
+    // by summing purchase_receipt_items/purchase_bill_items (never stored
+    // here) - only this written-off portion needs a real column, since
+    // nothing else can compute "the supplier said no more is coming".
+    shortClosedQty: numeric("short_closed_qty", { precision: 18, scale: 6 }).notNull().default("0"),
+    lineStatus: purchaseLineStatusEnum("line_status").notNull().default("open"),
     ...auditColumns(),
   },
   (table) => [index("purchase_items_purchase_id_idx").on(table.purchaseId)],

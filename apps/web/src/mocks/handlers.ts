@@ -477,6 +477,8 @@ const mockPermissions: MyPermissionsResponse = myPermissionsResponseSchema.parse
     "purchase.receipt.create",
     "purchase.receipt.confirm",
     "purchase.payment.record",
+    "purchase.line.shortclose",
+    "purchase.line.reopen",
     "contract.clause.read",
     "contract.clause.create",
     "contract.clause.version",

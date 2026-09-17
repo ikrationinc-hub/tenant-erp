@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { App as AntApp, Button, Drawer, Select, Space, Spin, Steps, Table, Typography } from "antd";
+import { App as AntApp, Button, Drawer, Input, Popconfirm, Select, Space, Spin, Steps, Table, Tag, Typography } from "antd";
 import { paginatedRowsResponseSchema } from "@ikration/contracts";
 import { apiFetch } from "../../core/api/client";
 import { endpoints, withQuery } from "../../core/api/endpoints";
@@ -20,6 +20,8 @@ interface FulfilmentItemRow {
   quantity: string;
   receivedQuantity: string;
   billedQuantity: string;
+  /** docs/PO-SHORT-CLOSE.md: the written-off remainder - lowers the billable ceiling below plain (quantity - billedQuantity) once set, same as the server's own guard (purchase-bills.service.ts). "0" for a line that's never been short-closed. */
+  shortClosedQty: string;
   /** The item's own server-computed purchase amount (pricing.purchaseAmountUsd, a string) - the Bill form's per-line "Bill Amount (USD)" defaults to this verbatim (a pass-through, never a frontend calculation - rule 3) and is editable down for a partial bill. Unused by the Receipt form. */
   purchaseAmountUsd: string;
 }
@@ -37,6 +39,7 @@ function toFulfilmentItems(items: Record<string, unknown>[]): FulfilmentItemRow[
     quantity: asDisplayString(item.quantity) || "0",
     receivedQuantity: asDisplayString(item.receivedQuantity) || "0",
     billedQuantity: asDisplayString(item.billedQuantity) || "0",
+    shortClosedQty: asDisplayString(item.shortClosedQty) || "0",
     purchaseAmountUsd: asDisplayString(pricingField(item.pricing, "purchaseAmountUsd")) || "0",
   }));
 }
@@ -45,6 +48,44 @@ function toFulfilmentItems(items: Record<string, unknown>[]): FulfilmentItemRow[
 function subtractDecimalStrings(a: string, b: string): string {
   const result = Number(a || "0") - Number(b || "0");
   return (Number.isFinite(result) ? Math.max(result, 0) : 0).toString();
+}
+
+/**
+ * docs/PO-SHORT-CLOSE.md, user-confirmed: the Bill form's billable ceiling
+ * for one line - min(ordered - shortClosed, received) once ANY receipt
+ * exists or the line is short-closed, but plain ordered qty for a line
+ * with zero receipts and no short-close (the pre-shipment/LC invoice flow
+ * PURCHASE-LIFECYCLE-4DOC.md §1 already supports - nothing changes there).
+ * Mirrors purchase-bills.service.ts's own create() guard exactly - display
+ * only, the server re-checks this for real regardless.
+ */
+function billableCeiling(row: FulfilmentItemRow): string {
+  const ordered = Number(row.quantity || "0");
+  const received = Number(row.receivedQuantity || "0");
+  const shortClosed = Number(row.shortClosedQty || "0");
+  if (received <= 0 && shortClosed <= 0) {
+    return row.quantity;
+  }
+  const orderedLessShortClosed = ordered - shortClosed;
+  return String(Math.max(Math.min(orderedLessShortClosed, received), 0));
+}
+
+/**
+ * docs/PO-SHORT-CLOSE.md: mirrors purchase-receipts.service.ts's own
+ * over-receipt guard - a short-closed line's written-off remainder lowers
+ * what's still receivable, same as it lowers what's still billable. A line
+ * with no short-close at all keeps its plain ordered qty as the ceiling,
+ * unchanged.
+ */
+function receivableCeiling(row: FulfilmentItemRow): string {
+  const ordered = Number(row.quantity || "0");
+  const shortClosed = Number(row.shortClosedQty || "0");
+  return String(Math.max(ordered - shortClosed, 0));
+}
+
+/** The "ceiling" a line can be receipted/billed up to, before subtracting what's already been received/billed - receivableCeiling for the Receipt form, the received-qty-aware billableCeiling for the Bill form. Both collapse to plain ordered qty for a line that's never been short-closed. */
+function fulfilmentCeiling(row: FulfilmentItemRow, axis: "received" | "billed"): string {
+  return axis === "received" ? receivableCeiling(row) : billableCeiling(row);
 }
 
 /**
@@ -66,10 +107,31 @@ export function PurchaseFulfilmentStrip({
   paidStatus: string;
 }): ReactElement {
   const orderStatus = status === "cancelled" ? "error" : status === "draft" ? "wait" : "finish";
-  const receiveStatus = receivedStatus === "fully_received" ? "finish" : receivedStatus === "partial" ? "process" : "wait";
+  // docs/PO-SHORT-CLOSE.md: "short_closed" (PO-level) means nothing is
+  // genuinely still pending - render it "finish" like fully_received, but
+  // with its own distinct label so it never reads as "everything actually
+  // arrived" when it didn't.
+  const receiveStatus =
+    receivedStatus === "fully_received" || receivedStatus === "short_closed"
+      ? "finish"
+      : receivedStatus === "partial"
+        ? "process"
+        : "wait";
+  // docs/PO-SHORT-CLOSE.md: the billed axis has no "short_closed" state of
+  // its own (see purchase-lifecycle.ts's computeBilledStatus doc comment)
+  // - a short-closed line's billable ceiling is still real and non-zero,
+  // so "fully_billed" already correctly means "billed everything billable"
+  // whether or not short-close was involved, with no separate state needed.
   const billStatus = billedStatus === "fully_billed" ? "finish" : billedStatus === "partial" ? "process" : "wait";
   const payStatus = paidStatus === "fully_paid" ? "finish" : paidStatus === "partial" ? "process" : "wait";
-  const receiveLabel = receivedStatus === "fully_received" ? "Received" : receivedStatus === "partial" ? "Partially Received" : "Not Received";
+  const receiveLabel =
+    receivedStatus === "fully_received"
+      ? "Received"
+      : receivedStatus === "short_closed"
+        ? "Short Closed"
+        : receivedStatus === "partial"
+          ? "Partially Received"
+          : "Not Received";
   const billLabel = billedStatus === "fully_billed" ? "Billed" : billedStatus === "partial" ? "Partially Billed" : "Not Billed";
   const payLabel = paidStatus === "fully_paid" ? "Paid" : paidStatus === "partial" ? "Partially Paid" : "Not Paid";
 
@@ -131,13 +193,13 @@ function OutstandingQtyTable({ items, axis, quantities, onChange, amounts, onAmo
           title: "Outstanding",
           key: "outstanding",
           render: (_value, row: FulfilmentItemRow) =>
-            subtractDecimalStrings(row.quantity, axis === "received" ? row.receivedQuantity : row.billedQuantity),
+            subtractDecimalStrings(fulfilmentCeiling(row, axis), axis === "received" ? row.receivedQuantity : row.billedQuantity),
         },
         {
           title: axis === "received" ? "Receive Qty" : "Bill Qty",
           key: "input",
           render: (_value, row: FulfilmentItemRow) => {
-            const outstanding = subtractDecimalStrings(row.quantity, axis === "received" ? row.receivedQuantity : row.billedQuantity);
+            const outstanding = subtractDecimalStrings(fulfilmentCeiling(row, axis), axis === "received" ? row.receivedQuantity : row.billedQuantity);
             const value = quantities[row.id] ?? "";
             const overCap = value !== "" && NUMERIC_STRING_PATTERN.test(value) && Number(value) > Number(outstanding);
             return (
@@ -206,9 +268,16 @@ export function PurchaseReceiptForm({
 }): ReactElement {
   const { message } = AntApp.useApp();
   const [submitting, setSubmitting] = useState(false);
-  const fulfilmentItems = useMemo(() => toFulfilmentItems(items).filter((item) => Number(item.quantity) > Number(item.receivedQuantity)), [items]);
+  // docs/PO-SHORT-CLOSE.md: a line the supplier already confirmed won't
+  // ship the rest (short-closed) has nothing left to receive, even if
+  // received < ordered - receivableCeiling() already collapses to plain
+  // ordered qty for a line that's never been short-closed.
+  const fulfilmentItems = useMemo(
+    () => toFulfilmentItems(items).filter((item) => Number(receivableCeiling(item)) > Number(item.receivedQuantity)),
+    [items],
+  );
   const [quantities, setQuantities] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fulfilmentItems.map((item) => [item.id, subtractDecimalStrings(item.quantity, item.receivedQuantity)])),
+    Object.fromEntries(fulfilmentItems.map((item) => [item.id, subtractDecimalStrings(receivableCeiling(item), item.receivedQuantity)])),
   );
 
   async function handleSubmit(headerValues: Record<string, unknown>): Promise<void> {
@@ -276,9 +345,16 @@ export function PurchaseBillForm({
 }): ReactElement {
   const { message } = AntApp.useApp();
   const [submitting, setSubmitting] = useState(false);
-  const fulfilmentItems = useMemo(() => toFulfilmentItems(items).filter((item) => Number(item.quantity) > Number(item.billedQuantity)), [items]);
+  // docs/PO-SHORT-CLOSE.md, user-confirmed: a line is offered here only
+  // while there's still something billable UNDER THE RECEIVED-QTY-AWARE
+  // CEILING, not plain ordered qty - billableCeiling() already preserves
+  // the zero-receipts pre-shipment-invoice case (ceiling = ordered then).
+  const fulfilmentItems = useMemo(
+    () => toFulfilmentItems(items).filter((item) => Number(billableCeiling(item)) > Number(item.billedQuantity)),
+    [items],
+  );
   const [quantities, setQuantities] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fulfilmentItems.map((item) => [item.id, subtractDecimalStrings(item.quantity, item.billedQuantity)])),
+    Object.fromEntries(fulfilmentItems.map((item) => [item.id, subtractDecimalStrings(billableCeiling(item), item.billedQuantity)])),
   );
   // Defaults to the item's own server-computed purchaseAmountUsd (a
   // pass-through, not a frontend calculation - rule 3) - editable down for
@@ -377,36 +453,221 @@ export function PurchaseFulfilmentDrawer({
   );
 }
 
-/** The PO detail screen's own Receive/Convert to Bill buttons - permission-gated (<Can/>, frontend rule 4), only shown once Issued (draft has nothing to receive/bill against yet) and only while there's something outstanding on the relevant axis. */
+/** The PO detail screen's own Receive/Convert to Bill/Short Close All Remaining buttons - permission-gated (<Can/>, frontend rule 4), only shown once Issued (draft has nothing to receive/bill/short-close against yet). */
 export function PurchaseFulfilmentActions({
   issued,
   receivedStatus,
   billedStatus,
   onReceive,
   onBill,
+  onShortCloseRemaining,
 }: {
   issued: boolean;
   receivedStatus: string;
   billedStatus: string;
   onReceive: () => void;
   onBill: () => void;
+  /** docs/PO-SHORT-CLOSE.md's PO-level convenience - only offered while there's at least one line still genuinely partial (received_status partial/not_received doesn't rule this out on its own, so PurchaseDetailScreen passes true only when it's actually found a partial line among the items). Omit entirely (rather than always rendering disabled) when there's nothing to short-close - matches Receive/Convert to Bill's own "hide, don't disable" convention above. */
+  onShortCloseRemaining?: () => void;
 }): ReactElement | null {
   if (!issued) {
     return null;
   }
+  // docs/PO-SHORT-CLOSE.md: "short_closed" (PO-level) means every line is
+  // either fully received or short-closed - nothing genuinely pending
+  // anywhere, same as "fully_received" for the purpose of "is there
+  // anything left to Receive". A PO with SOME lines still partial (mixed)
+  // stays "partial" at this level and correctly keeps the button.
+  const nothingLeftToReceive = receivedStatus === "fully_received" || receivedStatus === "short_closed";
+  // docs/PO-SHORT-CLOSE.md: "fully_billed" already means "billed against
+  // whatever the real ceiling is" (computeBilledStatus accounts for
+  // short-close in the ceiling itself, no separate billed-axis state).
+  const nothingLeftToBill = billedStatus === "fully_billed";
   return (
     <Space>
-      {receivedStatus !== "fully_received" && (
+      {!nothingLeftToReceive && (
         <Can permission="purchase.receipt.create">
           <Button onClick={onReceive}>Receive</Button>
         </Can>
       )}
-      {billedStatus !== "fully_billed" && (
+      {!nothingLeftToBill && (
         <Can permission="purchase.invoice.create">
           <Button onClick={onBill}>Convert to Bill</Button>
         </Can>
       )}
+      {onShortCloseRemaining && (
+        <Can permission="purchase.line.shortclose">
+          <Button onClick={onShortCloseRemaining}>Short Close All Remaining</Button>
+        </Can>
+      )}
     </Space>
+  );
+}
+
+/** docs/PO-SHORT-CLOSE.md: a purchase_item's own lineStatus, rendered distinctly from the plain "Partial"/"Fully Received" wording elsewhere in this file - "Short Closed - 3 of 10 not received" makes the written-off remainder visible at a glance, not just a bare status word. */
+export function LineStatusTag({ lineStatus, quantity, shortClosedQty }: { lineStatus: string; quantity: string; shortClosedQty: string }): ReactElement {
+  if (lineStatus === "short_closed") {
+    return (
+      <Tag color="orange">
+        Short Closed — {shortClosedQty} of {quantity} not received
+      </Tag>
+    );
+  }
+  const labelByStatus: Record<string, string> = { open: "Open", partial: "Partial", fully_received: "Fully Received" };
+  const colorByStatus: Record<string, string> = { open: "default", partial: "blue", fully_received: "green" };
+  return <Tag color={colorByStatus[lineStatus] ?? "default"}>{labelByStatus[lineStatus] ?? lineStatus}</Tag>;
+}
+
+/**
+ * docs/PO-SHORT-CLOSE.md: the per-line Short Close action - a small Drawer
+ * (matching every other action in this file's own Drawer-not-Modal
+ * convention) showing ordered/received/would-be-short-closed quantities, a
+ * required reason, and a confirm button. Only rendered by the caller when
+ * the line's own lineStatus is "partial" (nothing to short-close
+ * otherwise - purchase-line-shortclose.service.ts's own guards reject
+ * fully-received or zero-receipt lines regardless, this just avoids
+ * offering a button that would always 409).
+ */
+export function ShortCloseLineAction({
+  purchaseId,
+  itemId,
+  quantity,
+  receivedQuantity,
+  onDone,
+}: {
+  purchaseId: string;
+  itemId: string;
+  quantity: string;
+  receivedQuantity: string;
+  onDone: () => void;
+}): ReactElement {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { message } = AntApp.useApp();
+  const wouldBeShortClosedQty = subtractDecimalStrings(quantity, receivedQuantity);
+
+  async function handleConfirm(): Promise<void> {
+    setSubmitting(true);
+    try {
+      await apiFetch(endpoints.shortClosePurchaseLine(purchaseId, itemId), { method: "POST", body: { reason } });
+      void message.success("Line short-closed");
+      setOpen(false);
+      setReason("");
+      onDone();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <Can permission="purchase.line.shortclose">
+        <Button size="small" onClick={() => setOpen(true)}>
+          Short Close
+        </Button>
+      </Can>
+      <Drawer title="Short Close Line" open={open} onClose={() => setOpen(false)} width={420} destroyOnHidden>
+        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+          <Typography.Text>
+            Ordered: {quantity}
+            <br />
+            Received: {receivedQuantity}
+            <br />
+            Will be written off as not coming: {wouldBeShortClosedQty}
+          </Typography.Text>
+          <Input.TextArea
+            id="short-close-reason"
+            aria-label="Reason"
+            placeholder="Why is the remainder not coming? (required)"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            rows={3}
+          />
+          <Button type="primary" disabled={reason.trim().length === 0} loading={submitting} onClick={() => void handleConfirm()}>
+            Confirm Short Close
+          </Button>
+        </Space>
+      </Drawer>
+    </>
+  );
+}
+
+/** docs/PO-SHORT-CLOSE.md §5, user-confirmed: reversible with a dedicated permission - a plain Popconfirm (no reason needed to undo, unlike short-close itself) since reopening just restores the line to Partial rather than making a new audited decision. */
+export function ReopenLineAction({ purchaseId, itemId, onDone }: { purchaseId: string; itemId: string; onDone: () => void }): ReactElement {
+  const { message } = AntApp.useApp();
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleReopen(): Promise<void> {
+    setSubmitting(true);
+    try {
+      await apiFetch(endpoints.reopenPurchaseLine(purchaseId, itemId), { method: "POST" });
+      void message.success("Line reopened");
+      onDone();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Can permission="purchase.line.reopen">
+      <Popconfirm title="Reopen this line?" okText="Reopen" cancelText="Cancel" onConfirm={() => void handleReopen()}>
+        <Button size="small" loading={submitting}>
+          Reopen
+        </Button>
+      </Popconfirm>
+    </Can>
+  );
+}
+
+/** docs/PO-SHORT-CLOSE.md: the PO-level convenience - same required-reason Drawer as ShortCloseLineAction, applied to every currently-partial line at once. */
+export function ShortCloseAllRemainingDrawer({
+  open,
+  purchaseId,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  purchaseId: string;
+  onClose: () => void;
+  onDone: () => void;
+}): ReactElement {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { message } = AntApp.useApp();
+
+  async function handleConfirm(): Promise<void> {
+    setSubmitting(true);
+    try {
+      const result = await apiFetch<{ items: unknown[] }>(endpoints.shortCloseAllRemaining(purchaseId), { method: "POST", body: { reason } });
+      void message.success(`${result.items.length} line(s) short-closed`);
+      setReason("");
+      onDone();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Drawer title="Short Close All Remaining" open={open} onClose={onClose} width={420} destroyOnHidden>
+      <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+        <Typography.Text type="secondary">
+          Finalizes every line still awaiting more stock at its currently received quantity. Fully received and already short-closed lines are left
+          untouched.
+        </Typography.Text>
+        <Input.TextArea
+          id="short-close-remaining-reason"
+          aria-label="Reason"
+          placeholder="Why is the remainder not coming? (required)"
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          rows={3}
+        />
+        <Button type="primary" disabled={reason.trim().length === 0} loading={submitting} onClick={() => void handleConfirm()}>
+          Confirm Short Close All Remaining
+        </Button>
+      </Space>
+    </Drawer>
   );
 }
 

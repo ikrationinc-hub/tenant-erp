@@ -13,7 +13,15 @@ import { useHasPermission } from "../../core/permissions/use-permissions";
 import { StatusTag } from "../../core/status-tag/StatusTag";
 import { INVOICE_STATUS_COLORS, PURCHASE_STATUS_COLORS } from "../../core/status-tag/status-colors";
 import { PURCHASE_LIST_PATH } from "./PurchaseListScreen";
-import { PurchaseFulfilmentActions, PurchaseFulfilmentDrawer, PurchaseFulfilmentStrip } from "./PurchaseFulfilmentPanels";
+import {
+  LineStatusTag,
+  PurchaseFulfilmentActions,
+  PurchaseFulfilmentDrawer,
+  PurchaseFulfilmentStrip,
+  ReopenLineAction,
+  ShortCloseAllRemainingDrawer,
+  ShortCloseLineAction,
+} from "./PurchaseFulfilmentPanels";
 
 const MULTI_UPLOAD_ATTACHMENT_KEYS = new Set(["otherDocuments", "otherDocuments2"]);
 
@@ -142,6 +150,7 @@ export function PurchaseDetailScreen({
   const { message } = AntApp.useApp();
   const customerLabels = useMasterLabels("customers");
   const [fulfilmentDrawer, setFulfilmentDrawer] = useState<"receive" | "bill" | null>(null);
+  const [shortCloseRemainingOpen, setShortCloseRemainingOpen] = useState(false);
   // A Viewer (read-only role, missing purchase.po.create/update) was
   // getting an editable Header/Shipment form and Additional Cost form on
   // any non-posted purchase - the mode/readOnly calculations below only
@@ -224,6 +233,23 @@ export function PurchaseDetailScreen({
   const issued = status === "issued";
   const draft = status === "draft";
   const hasItems = rowsOf(purchase?.items).length > 0;
+  // docs/PO-SHORT-CLOSE.md: "Short Close All Remaining" is only offered
+  // when at least one line is actually short-closable - the server itself
+  // silently skips anything that isn't (shortCloseAllRemaining), but
+  // showing the button at all when there's nothing to do would just
+  // round-trip a no-op every time.
+  const hasPartialLine = rowsOf(purchase?.items).some((item) => item.lineStatus === "partial");
+  // purchase.service.ts's requireNothingFulfilledForCancel: cancel is only
+  // ever valid before anything's been received or billed against the PO -
+  // once a receipt or bill exists, Cancel must not even be offered rather
+  // than round-tripping a 409 the user can't act on differently anyway.
+  const hasAnyReceipt = rowsOf(purchase?.receipts).length > 0;
+  const hasAnyBill = rowsOf(purchase?.invoices).length > 0;
+  const cancelBlockedReason = hasAnyReceipt
+    ? "Cannot cancel: this purchase already has a receipt against it"
+    : hasAnyBill
+      ? "Cannot cancel: this purchase already has a bill against it"
+      : undefined;
   // Prompt 21 item 2: under "lme" pricing, item rate comes from the LME
   // record (purchase-items.service.ts's resolveItemRate), not a manual
   // entry - the LME Records section only applies there too.
@@ -267,8 +293,9 @@ export function PurchaseDetailScreen({
               billedStatus={asDisplayString(purchase?.billedStatus)}
               onReceive={() => setFulfilmentDrawer("receive")}
               onBill={() => setFulfilmentDrawer("bill")}
+              {...(hasPartialLine ? { onShortCloseRemaining: () => setShortCloseRemainingOpen(true) } : {})}
             />
-            {(draft || issued) && (
+            {(draft || issued) && !cancelBlockedReason && (
               <Can permission="purchase.po.cancel">
                 <Popconfirm title="Cancel this purchase order?" okText="Cancel PO" cancelText="Back" onConfirm={() => void handleCancel()}>
                   <Button danger>Cancel</Button>
@@ -412,6 +439,15 @@ export function PurchaseDetailScreen({
               refresh();
             }}
           />
+          <ShortCloseAllRemainingDrawer
+            open={shortCloseRemainingOpen}
+            purchaseId={purchaseId}
+            onClose={() => setShortCloseRemainingOpen(false)}
+            onDone={() => {
+              setShortCloseRemainingOpen(false);
+              refresh();
+            }}
+          />
         </>
       )}
     </Space>
@@ -513,6 +549,44 @@ function PurchaseItemsPanel({
             title: "Amount (AED)",
             dataIndex: "pricing",
             render: (pricing: unknown) => asDisplayString(pricingField(pricing, "purchaseAmountAed")),
+          },
+          {
+            title: "Status",
+            key: "lineStatus",
+            render: (_value, row: Record<string, unknown>) => (
+              <LineStatusTag
+                lineStatus={asDisplayString(row.lineStatus) || "open"}
+                quantity={asDisplayString(row.quantity) || "0"}
+                shortClosedQty={asDisplayString(row.shortClosedQty) || "0"}
+              />
+            ),
+          },
+          // docs/PO-SHORT-CLOSE.md: only offered while the line is actually
+          // short-closable/reopenable - the server's own guards reject
+          // anything else regardless, this just avoids a button that would
+          // always 409.
+          {
+            title: "Actions",
+            key: "shortCloseActions",
+            render: (_value, row: Record<string, unknown>) => {
+              const itemId = asDisplayString(row.id);
+              const lineStatus = asDisplayString(row.lineStatus) || "open";
+              if (lineStatus === "partial") {
+                return (
+                  <ShortCloseLineAction
+                    purchaseId={purchaseId}
+                    itemId={itemId}
+                    quantity={asDisplayString(row.quantity) || "0"}
+                    receivedQuantity={asDisplayString(row.receivedQuantity) || "0"}
+                    onDone={onAdded}
+                  />
+                );
+              }
+              if (lineStatus === "short_closed") {
+                return <ReopenLineAction purchaseId={purchaseId} itemId={itemId} onDone={onAdded} />;
+              }
+              return null;
+            },
           },
         ]}
       />

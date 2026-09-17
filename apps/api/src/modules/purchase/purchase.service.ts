@@ -27,7 +27,16 @@ import {
   type PurchaseBillRow,
 } from "./purchase-bills.repository.js";
 import { listLmeRecordsForPurchase, type LmeRecordRow } from "./purchase-lme.repository.js";
-import { computeBilledStatus, computePaidStatus, computeReceivedStatus, type BilledStatus, type PaidStatus, type ReceivedStatus } from "./purchase-lifecycle.js";
+import {
+  computeBilledStatus,
+  computeLineStatus,
+  computePaidStatus,
+  computeReceivedStatus,
+  type BilledStatus,
+  type PaidStatus,
+  type PurchaseLineStatus,
+  type ReceivedStatus,
+} from "./purchase-lifecycle.js";
 import { sumPaidAmountsByBill, sumPaidAmountsByBillForPurchases, type PaidAmountRowForPurchase } from "./purchase-payments.repository.js";
 import {
   hasAnyReceiptForPurchase,
@@ -253,6 +262,8 @@ function attachLmeRecordUsage(items: PurchaseItemWithPricing[], lmeRecords: LmeR
 export interface PurchaseItemWithFulfilment extends PurchaseItemWithPricing {
   receivedQuantity: string;
   billedQuantity: string;
+  /** docs/PO-SHORT-CLOSE.md: real columns on purchase_items (shortClosedQty/lineStatus already came through on `item` via PurchaseItemWithPricing extending the full row) - listed here explicitly so this interface documents the short-close fields alongside the derived received/billed ones, not just implicitly through inheritance. */
+  lineStatus: PurchaseLineStatus;
 }
 
 function attachItemFulfilment(
@@ -264,6 +275,7 @@ function attachItemFulfilment(
     ...item,
     receivedQuantity: receivedByItemId.get(item.id) ?? "0",
     billedQuantity: billedByItemId.get(item.id) ?? "0",
+    lineStatus: computeLineStatus(item.quantity, receivedByItemId.get(item.id) ?? "0", item.shortClosedQty),
   }));
 }
 
@@ -378,7 +390,11 @@ export async function list(ctx: RequestContext, params: PurchasesListQuery): Pro
         return {
           ...row,
           receivedStatus: computeReceivedStatus(orderedItems, receivedByPurchase.get(row.id) ?? new Map<string, string>()),
-          billedStatus: computeBilledStatus(orderedItems, billedByPurchase.get(row.id) ?? new Map<string, string>()),
+          billedStatus: computeBilledStatus(
+            orderedItems,
+            billedByPurchase.get(row.id) ?? new Map<string, string>(),
+            receivedByPurchase.get(row.id) ?? new Map<string, string>(),
+          ),
           paidStatus: computePaidStatus(billsByPurchase.get(row.id) ?? [], paidByPurchase.get(row.id) ?? new Map<string, string>()),
         };
       }),
@@ -425,7 +441,7 @@ export async function getById(ctx: RequestContext, id: string): Promise<Purchase
       invoices: attachInvoiceVariance(items, bills),
       receipts,
       receivedStatus: computeReceivedStatus(items, receivedByItemId),
-      billedStatus: computeBilledStatus(items, billedByItemId),
+      billedStatus: computeBilledStatus(items, billedByItemId, receivedByItemId),
       paidStatus: computePaidStatus(bills, paidByBillId),
     };
   });

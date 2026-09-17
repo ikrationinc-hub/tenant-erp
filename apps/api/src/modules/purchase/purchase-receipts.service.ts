@@ -118,7 +118,10 @@ export async function create(ctx: RequestContext, purchaseId: string, input: Cre
     // Guard: cannot receive more than ordered, per item, across ALL
     // (confirmed) receipts - a draft receipt's own quantities don't count
     // toward another draft's over-receipt check, only confirmed ones have
-    // actually moved stock.
+    // actually moved stock. docs/PO-SHORT-CLOSE.md: a short-closed line's
+    // written-off remainder lowers the ceiling too - can't receive into a
+    // remainder the supplier already confirmed isn't coming, without
+    // reopening the line first.
     for (const line of input.items) {
       const orderedItem = orderedById.get(line.purchaseItemId);
       if (!orderedItem) {
@@ -130,9 +133,11 @@ export async function create(ctx: RequestContext, purchaseId: string, input: Cre
       }
       const alreadyReceivedQuantity = alreadyReceivedById.get(line.purchaseItemId) ?? parseMoney("0");
       const orderedQuantity = parseMoney(orderedItem.quantity);
-      if (alreadyReceivedQuantity.plus(requestedQuantity).gt(orderedQuantity)) {
+      const shortClosedQuantity = parseMoney(orderedItem.shortClosedQty);
+      const receivableCeiling = orderedQuantity.minus(shortClosedQuantity);
+      if (alreadyReceivedQuantity.plus(requestedQuantity).gt(receivableCeiling)) {
         throw new ConflictError(
-          `Cannot receive ${requestedQuantity.toString()} of item ${line.purchaseItemId}: only ${orderedQuantity.minus(alreadyReceivedQuantity).toString()} remains unreceived (ordered ${orderedQuantity.toString()}, already received ${alreadyReceivedQuantity.toString()})`,
+          `Cannot receive ${requestedQuantity.toString()} of item ${line.purchaseItemId}: only ${receivableCeiling.minus(alreadyReceivedQuantity).toString()} remains receivable (ordered ${orderedQuantity.toString()}, short-closed ${shortClosedQuantity.toString()}, already received ${alreadyReceivedQuantity.toString()})`,
         );
       }
     }
@@ -296,7 +301,7 @@ export async function confirm(ctx: RequestContext, purchaseId: string, receiptId
       scope.companyId,
       purchaseId,
       computeReceivedStatus(orderedItems, receivedByItemId),
-      computeBilledStatus(orderedItems, billedByItemId),
+      computeBilledStatus(orderedItems, billedByItemId, receivedByItemId),
     );
 
     return { ...row, items };

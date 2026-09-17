@@ -289,32 +289,18 @@ function omitKeys<T extends Record<string, unknown>, K extends keyof T>(source: 
   return result;
 }
 
-function computeFulfilmentStatus(
-  items: Record<string, unknown>[],
-  quantityByItem: Map<string, number>,
-  emptyLabel: string,
-  partialLabel: string,
-  fullLabel: string,
-): string {
-  if (items.length === 0) {
-    return emptyLabel;
+/** docs/PO-SHORT-CLOSE.md: mirrors purchase-lifecycle.ts's computeLineStatus exactly. */
+function computeMockLineStatus(ordered: number, received: number, shortClosed: number): string {
+  if (received >= ordered) {
+    return "fully_received";
   }
-  let any = false;
-  let allFull = true;
-  for (const item of items) {
-    const ordered = Number(item.quantity ?? "0");
-    const fulfilled = quantityByItem.get(String(item.id)) ?? 0;
-    if (fulfilled > 0) {
-      any = true;
-    }
-    if (fulfilled < ordered) {
-      allFull = false;
-    }
+  if (shortClosed > 0) {
+    return "short_closed";
   }
-  if (!any) {
-    return emptyLabel;
+  if (received > 0) {
+    return "partial";
   }
-  return allFull ? fullLabel : partialLabel;
+  return "open";
 }
 
 function receivedQuantityByItem(purchase: MockPurchase): Map<string, number> {
@@ -346,12 +332,88 @@ function billedQuantityByItem(purchase: MockPurchase): Map<string, number> {
   return totals;
 }
 
+/**
+ * docs/PO-SHORT-CLOSE.md: mirrors purchase-lifecycle.ts's own
+ * computeReceivedStatus exactly - "short_closed" when every line is either
+ * fully_received or short-closed (nothing genuinely pending),
+ * "fully_received" only if every line actually arrived in full, otherwise
+ * "partial".
+ */
 function receivedStatusFor(purchase: MockPurchase): string {
-  return computeFulfilmentStatus(purchase.items, receivedQuantityByItem(purchase), "not_received", "partial", "fully_received");
+  if (purchase.items.length === 0) {
+    return "not_received";
+  }
+  const receivedTotals = receivedQuantityByItem(purchase);
+  let anyReceived = false;
+  let allFullyReceived = true;
+  let allDone = true;
+  let anyShortClosed = false;
+  for (const item of purchase.items) {
+    const ordered = Number(item.quantity ?? "0");
+    const received = receivedTotals.get(String(item.id)) ?? 0;
+    const shortClosed = Number(item.shortClosedQty ?? "0");
+    const isShortClosed = shortClosed > 0;
+    if (received > 0) {
+      anyReceived = true;
+    }
+    if (received < ordered) {
+      allFullyReceived = false;
+    }
+    if (isShortClosed) {
+      anyShortClosed = true;
+    } else if (received < ordered) {
+      allDone = false;
+    }
+  }
+  if (allFullyReceived) {
+    return "fully_received";
+  }
+  if (anyShortClosed && allDone) {
+    return "short_closed";
+  }
+  if (!anyReceived) {
+    return "not_received";
+  }
+  return "partial";
 }
 
+/**
+ * docs/PO-SHORT-CLOSE.md: mirrors purchase-lifecycle.ts's own
+ * computeBilledStatus exactly - billed compares against each item's own
+ * BILLABLE CEILING (min(ordered - shortClosed, received) once any receipt
+ * exists or the line is short-closed, plain ordered qty otherwise).
+ * Deliberately still 3-state (not_billed/partial/fully_billed) - a
+ * short-closed line's billable ceiling is still a real, non-zero amount
+ * that genuinely needs billing, so this never short-circuits to "done"
+ * just because short-close was involved; "fully_billed" already means
+ * "billed everything that's actually billable" via the reduced ceiling.
+ */
 function billedStatusFor(purchase: MockPurchase): string {
-  return computeFulfilmentStatus(purchase.items, billedQuantityByItem(purchase), "not_billed", "partial", "fully_billed");
+  if (purchase.items.length === 0) {
+    return "not_billed";
+  }
+  const billedTotals = billedQuantityByItem(purchase);
+  const receivedTotals = receivedQuantityByItem(purchase);
+  let anyBilled = false;
+  let allFullyBilled = true;
+  for (const item of purchase.items) {
+    const ordered = Number(item.quantity ?? "0");
+    const billed = billedTotals.get(String(item.id)) ?? 0;
+    const received = receivedTotals.get(String(item.id)) ?? 0;
+    const shortClosed = Number(item.shortClosedQty ?? "0");
+    const hasAnyReceiptOrShortClose = received > 0 || shortClosed > 0;
+    const billableCeiling = hasAnyReceiptOrShortClose ? Math.min(ordered - shortClosed, received) : ordered;
+    if (billed > 0) {
+      anyBilled = true;
+    }
+    if (billed < billableCeiling) {
+      allFullyBilled = false;
+    }
+  }
+  if (!anyBilled) {
+    return "not_billed";
+  }
+  return allFullyBilled ? "fully_billed" : "partial";
 }
 
 /** PL-5: mirrors the real backend's computePaidStatus - per-BILL, not per-item (a purchase item has no direct "paid" concept, only its bill does). A purchase with no bills yet is "not_paid", same "nothing to derive from" treatment as zero items being "not_received". */
@@ -378,12 +440,27 @@ function paidStatusFor(purchase: MockPurchase): string {
   return allFullyPaid ? "fully_paid" : "partial";
 }
 
-/** PL-3: Closed is derived/automatic (fully received AND fully billed while Issued) - mirrors purchase-lifecycle.ts's maybeAutoClosePurchase, called after every receipt confirm and bill approve in this mock too. */
+/**
+ * PL-3: Closed is derived/automatic (both axes DONE while Issued) -
+ * mirrors purchase-lifecycle.ts's maybeAutoClosePurchase, called after
+ * every receipt confirm, bill approve, AND short-close in this mock too.
+ * docs/PO-SHORT-CLOSE.md, user-confirmed: "short_closed" counts as done on
+ * either axis, same as "fully_received"/"fully_billed" - a PO with
+ * nothing genuinely still pending (arrived/billed or formally written
+ * off) reaches Closed, not stuck in Issued forever.
+ */
 function maybeAutoClosePurchase(purchase: MockPurchase): void {
   if (purchase.status !== "issued") {
     return;
   }
-  if (receivedStatusFor(purchase) === "fully_received" && billedStatusFor(purchase) === "fully_billed") {
+  // docs/PO-SHORT-CLOSE.md: "short_closed" counts as done on the RECEIVED
+  // axis only - the billed axis has no such state (a short-closed line's
+  // billable ceiling is still real and non-zero), so "fully_billed" alone
+  // is the correct "done" check there (billedStatusFor's own ceiling
+  // already accounts for short-close).
+  const receivedDone = ["fully_received", "short_closed"].includes(receivedStatusFor(purchase));
+  const billedDone = billedStatusFor(purchase) === "fully_billed";
+  if (receivedDone && billedDone) {
     purchase.status = "closed";
   }
 }
@@ -427,11 +504,16 @@ function withComputedFields(purchase: MockPurchase): MockPurchase {
   // Convert to Bill forms can default a line to its own outstanding qty.
   const receivedTotals = receivedQuantityByItem(purchase);
   const billedTotals = billedQuantityByItem(purchase);
-  const items = purchase.items.map((item) => ({
-    ...item,
-    receivedQuantity: String(receivedTotals.get(String(item.id)) ?? 0),
-    billedQuantity: String(billedTotals.get(String(item.id)) ?? 0),
-  }));
+  const items = purchase.items.map((item) => {
+    const received = receivedTotals.get(String(item.id)) ?? 0;
+    const shortClosed = Number(item.shortClosedQty ?? "0");
+    return {
+      ...item,
+      receivedQuantity: String(received),
+      billedQuantity: String(billedTotals.get(String(item.id)) ?? 0),
+      lineStatus: computeMockLineStatus(Number(item.quantity ?? "0"), received, shortClosed),
+    };
+  });
 
   return {
     ...purchase,
@@ -598,6 +680,10 @@ export const purchaseHandlers = [
       gradeId: body.gradeId,
       quantity,
       uomId: body.uomId,
+      // docs/PO-SHORT-CLOSE.md: written-off remainder, mirrors purchase_items'
+      // own shortClosedQty/lineStatus columns - starts "open", never free-entry.
+      shortClosedQty: "0",
+      lineStatus: "open",
       pricing: {
         purchaseRateUsd: rate,
         purchaseAmountUsd,
@@ -621,6 +707,82 @@ export const purchaseHandlers = [
     }
     const body = (await request.json()) as Record<string, unknown>;
     Object.assign(item, body);
+    return HttpResponse.json(item);
+  }),
+
+  // docs/PO-SHORT-CLOSE.md: mirrors purchase-line-shortclose.service.ts's
+  // own guards - rejects a reasonless request, a fully-received line, or a
+  // line with zero receipts, same status codes as the real backend.
+  http.post(`${API_BASE}${endpoints.shortClosePurchaseLine(":id", ":itemId")}`, async ({ params, request }) => {
+    const purchase = findPurchase(params.id);
+    const item = purchase?.items.find((candidate) => candidate.id === params.itemId);
+    if (!purchase || !item) {
+      return new HttpResponse(null, { status: 404 });
+    }
+    const body = (await request.json()) as Record<string, unknown>;
+    const reason = typeof body.reason === "string" ? body.reason : "";
+    if (reason.trim().length === 0) {
+      return new HttpResponse(null, { status: 422 });
+    }
+    const ordered = Number(item.quantity ?? "0");
+    const received = receivedQuantityByItem(purchase).get(String(item.id)) ?? 0;
+    if (received <= 0 || received >= ordered) {
+      return new HttpResponse(null, { status: 409 });
+    }
+    item.shortClosedQty = String(ordered - received);
+    item.lineStatus = "short_closed";
+    maybeAutoClosePurchase(purchase);
+    return HttpResponse.json(item);
+  }),
+
+  http.post(`${API_BASE}${endpoints.shortCloseAllRemaining(":id")}`, async ({ params, request }) => {
+    const purchase = findPurchase(params.id);
+    if (!purchase) {
+      return new HttpResponse(null, { status: 404 });
+    }
+    const body = (await request.json()) as Record<string, unknown>;
+    const reason = typeof body.reason === "string" ? body.reason : "";
+    if (reason.trim().length === 0) {
+      return new HttpResponse(null, { status: 422 });
+    }
+    const receivedTotals = receivedQuantityByItem(purchase);
+    const shortClosed: Record<string, unknown>[] = [];
+    for (const item of purchase.items) {
+      const ordered = Number(item.quantity ?? "0");
+      const received = receivedTotals.get(String(item.id)) ?? 0;
+      const currentShortClosed = Number(item.shortClosedQty ?? "0");
+      if (computeMockLineStatus(ordered, received, currentShortClosed) !== "partial") {
+        continue;
+      }
+      item.shortClosedQty = String(ordered - received);
+      item.lineStatus = "short_closed";
+      shortClosed.push(item);
+    }
+    if (shortClosed.length > 0) {
+      maybeAutoClosePurchase(purchase);
+    }
+    return HttpResponse.json({ items: shortClosed });
+  }),
+
+  http.post(`${API_BASE}${endpoints.reopenPurchaseLine(":id", ":itemId")}`, ({ params }) => {
+    const purchase = findPurchase(params.id);
+    const item = purchase?.items.find((candidate) => candidate.id === params.itemId);
+    if (!purchase || !item) {
+      return new HttpResponse(null, { status: 404 });
+    }
+    // rule 8: a Closed/Cancelled purchase is immutable - mirrors
+    // purchase-line-shortclose.service.ts's own guard, reachable now that
+    // a short-close can itself trigger auto-close.
+    if (purchase.status === "closed" || purchase.status === "cancelled") {
+      return new HttpResponse(null, { status: 409 });
+    }
+    if (item.lineStatus !== "short_closed") {
+      return new HttpResponse(null, { status: 409 });
+    }
+    const ordered = Number(item.quantity ?? "0");
+    const received = receivedQuantityByItem(purchase).get(String(item.id)) ?? 0;
+    item.shortClosedQty = "0";
+    item.lineStatus = computeMockLineStatus(ordered, received, 0);
     return HttpResponse.json(item);
   }),
 

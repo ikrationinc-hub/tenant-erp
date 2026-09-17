@@ -74,6 +74,13 @@ export const endpoints = {
   approvePurchaseInvoice: (purchaseId: string, invoiceId: string) => `/purchases/${purchaseId}/invoices/${invoiceId}/approve`,
   purchaseReceipts: (purchaseId: string) => `/purchases/${purchaseId}/receipts`,
   confirmPurchaseReceipt: (purchaseId: string, receiptId: string) => `/purchases/${purchaseId}/receipts/${receiptId}/confirm`,
+  // docs/PO-SHORT-CLOSE.md: finalizing a line (or every still-partial line)
+  // at less than ordered quantity - own action names, not nested under
+  // purchaseItem's PATCH, since this is a distinct governance-level action
+  // with its own permission, not an ordinary item edit.
+  shortClosePurchaseLine: (purchaseId: string, itemId: string) => `/purchases/${purchaseId}/lines/${itemId}/short-close`,
+  shortCloseAllRemaining: (purchaseId: string) => `/purchases/${purchaseId}/short-close-remaining`,
+  reopenPurchaseLine: (purchaseId: string, itemId: string) => `/purchases/${purchaseId}/lines/${itemId}/reopen`,
   // PL-4: the standalone, cross-purchase "Purchase Receipts"/"Purchase
   // Bills" list screens - own top-level paths (app.ts mounts these as
   // separate routers), not nested under /purchases/:id.

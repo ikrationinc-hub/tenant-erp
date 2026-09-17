@@ -50,3 +50,7 @@ export const purchaseItemParamsSchema = z.object({
   id: z.string().uuid(),
   itemId: z.string().uuid(),
 });
+
+/** docs/PO-SHORT-CLOSE.md: the audit trail for WHY a line was short-closed - required, never inferred. */
+export const shortCloseReasonSchema = z.object({ reason: z.string().min(1) }).strict();
+export type ShortCloseReasonInput = z.infer<typeof shortCloseReasonSchema>;

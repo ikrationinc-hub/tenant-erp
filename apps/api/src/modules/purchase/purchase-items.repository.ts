@@ -15,6 +15,7 @@ export interface OrderedQuantityRow {
   purchaseId: string;
   id: string;
   quantity: string;
+  shortClosedQty: string;
 }
 
 /** Only the repository layer touches SQL (rule 5) - service/controller never import `db`. */
@@ -31,7 +32,12 @@ export async function listOrderedQuantitiesForPurchases(tx: TenantTx, companyId:
     return [];
   }
   return tx
-    .select({ purchaseId: purchaseItems.purchaseId, id: purchaseItems.id, quantity: purchaseItems.quantity })
+    .select({
+      purchaseId: purchaseItems.purchaseId,
+      id: purchaseItems.id,
+      quantity: purchaseItems.quantity,
+      shortClosedQty: purchaseItems.shortClosedQty,
+    })
     .from(purchaseItems)
     .where(and(inArray(purchaseItems.purchaseId, purchaseIds), eq(purchaseItems.companyId, companyId), isNull(purchaseItems.deletedAt)));
 }

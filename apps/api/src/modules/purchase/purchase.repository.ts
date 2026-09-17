@@ -18,7 +18,7 @@ export interface PurchasesListParams {
   supplierId?: string | undefined;
   branchId?: string | undefined;
   divisionId?: string | undefined;
-  receivedStatus?: "not_received" | "partial" | "fully_received" | undefined;
+  receivedStatus?: "not_received" | "partial" | "fully_received" | "short_closed" | undefined;
   billedStatus?: "not_billed" | "partial" | "fully_billed" | undefined;
   /** Inclusive range on purchase_date - both ends optional independently. */
   purchaseDateFrom?: string | undefined;
@@ -35,12 +35,16 @@ export interface PurchasesListParams {
  * purchase_items instead of an in-memory loop over already-fetched rows:
  *   not_received:   no item on this purchase has any confirmed receipt qty yet
  *   fully_received: EVERY item's confirmed-received qty >= its ordered qty
- *   partial:        anything in between
+ *   short_closed:   every item is either fully_received or short-closed
+ *                   (short_closed_qty > 0), i.e. nothing genuinely pending,
+ *                   but NOT every item is fully_received (else it'd be
+ *                   that instead) - docs/PO-SHORT-CLOSE.md
+ *   partial:        anything in between (genuinely still awaiting more)
  * Per-item received qty is its own correlated scalar subquery (SUM over
  * purchase_receipt_items joined to purchase_receipts, status='confirmed'),
  * matching sumConfirmedReceivedQuantitiesByItem's own filter exactly.
  */
-function receivedStatusCondition(status: "not_received" | "partial" | "fully_received"): SQL {
+function receivedStatusCondition(status: "not_received" | "partial" | "fully_received" | "short_closed"): SQL {
   const receivedQtyForItem = sql`(
     select coalesce(sum(pri.received_quantity), 0)
     from purchase_receipt_items pri
@@ -50,6 +54,8 @@ function receivedStatusCondition(status: "not_received" | "partial" | "fully_rec
   const hasAnyItem = sql`exists (select 1 from purchase_items pi where pi.purchase_id = ${purchases.id} and pi.deleted_at is null)`;
   const anyReceived = sql`exists (select 1 from purchase_items pi where pi.purchase_id = ${purchases.id} and pi.deleted_at is null and ${receivedQtyForItem} > 0)`;
   const anyUnfulfilled = sql`exists (select 1 from purchase_items pi where pi.purchase_id = ${purchases.id} and pi.deleted_at is null and ${receivedQtyForItem} < pi.quantity)`;
+  const anyGenuinelyPending = sql`exists (select 1 from purchase_items pi where pi.purchase_id = ${purchases.id} and pi.deleted_at is null and ${receivedQtyForItem} < pi.quantity and pi.short_closed_qty = 0)`;
+  const anyShortClosed = sql`exists (select 1 from purchase_items pi where pi.purchase_id = ${purchases.id} and pi.deleted_at is null and pi.short_closed_qty > 0)`;
 
   if (status === "not_received") {
     return sql`(not ${hasAnyItem} or not ${anyReceived})`;
@@ -57,10 +63,31 @@ function receivedStatusCondition(status: "not_received" | "partial" | "fully_rec
   if (status === "fully_received") {
     return sql`(${hasAnyItem} and not ${anyUnfulfilled})`;
   }
-  return sql`(${hasAnyItem} and ${anyReceived} and ${anyUnfulfilled})`;
+  if (status === "short_closed") {
+    return sql`(${hasAnyItem} and ${anyUnfulfilled} and ${anyShortClosed} and not ${anyGenuinelyPending})`;
+  }
+  return sql`(${hasAnyItem} and ${anyReceived} and ${anyUnfulfilled} and ${anyGenuinelyPending})`;
 }
 
-/** PL-4: the billed axis's own version of receivedStatusCondition - same shape, substituting purchase_bill_items/purchase_bills (every bill regardless of status counts, matching sumBilledQuantitiesByItem's own "draft AND approved both count" rule - billing itself is the financial fact, unlike receiving where only "confirmed" counts). */
+/**
+ * PL-4: the billed axis's own version of receivedStatusCondition - same
+ * shape, substituting purchase_bill_items/purchase_bills (every bill
+ * regardless of status counts, matching sumBilledQuantitiesByItem's own
+ * "draft AND approved both count" rule - billing itself is the financial
+ * fact, unlike receiving where only "confirmed" counts).
+ *
+ * docs/PO-SHORT-CLOSE.md, user-confirmed: "unfulfilled" here means billed
+ * qty is short of the item's own BILLABLE CEILING - LEAST(ordered -
+ * short_closed_qty, received qty) once any receipt exists or the line is
+ * short-closed, plain ordered qty otherwise (the zero-receipts pre-
+ * shipment/LC invoice flow this preserves unchanged) - mirrors
+ * purchase-bills.service.ts's own create() guard and purchase-lifecycle.
+ * ts's computeBilledStatus exactly, just as correlated subqueries.
+ * Deliberately still 3-state - unlike the received axis, a short-closed
+ * line's billable ceiling is still a real, non-zero amount that genuinely
+ * needs billing, so this never short-circuits to "done" just because
+ * short-close was involved (see computeBilledStatus's own doc comment).
+ */
 function billedStatusCondition(status: "not_billed" | "partial" | "fully_billed"): SQL {
   const billedQtyForItem = sql`(
     select coalesce(sum(pbi.billed_quantity), 0)
@@ -68,9 +95,22 @@ function billedStatusCondition(status: "not_billed" | "partial" | "fully_billed"
     inner join purchase_bills pb on pb.id = pbi.bill_id
     where pbi.purchase_item_id = pi.id and pb.deleted_at is null
   )`;
+  const receivedQtyForItem = sql`(
+    select coalesce(sum(pri.received_quantity), 0)
+    from purchase_receipt_items pri
+    inner join purchase_receipts pr on pr.id = pri.receipt_id
+    where pri.purchase_item_id = pi.id and pr.status = 'confirmed' and pr.deleted_at is null
+  )`;
+  const billableCeilingForItem = sql`(
+    case
+      when ${receivedQtyForItem} > 0 or pi.short_closed_qty > 0
+        then least(pi.quantity - pi.short_closed_qty, ${receivedQtyForItem})
+      else pi.quantity
+    end
+  )`;
   const hasAnyItem = sql`exists (select 1 from purchase_items pi where pi.purchase_id = ${purchases.id} and pi.deleted_at is null)`;
   const anyBilled = sql`exists (select 1 from purchase_items pi where pi.purchase_id = ${purchases.id} and pi.deleted_at is null and ${billedQtyForItem} > 0)`;
-  const anyUnfulfilled = sql`exists (select 1 from purchase_items pi where pi.purchase_id = ${purchases.id} and pi.deleted_at is null and ${billedQtyForItem} < pi.quantity)`;
+  const anyUnfulfilled = sql`exists (select 1 from purchase_items pi where pi.purchase_id = ${purchases.id} and pi.deleted_at is null and ${billedQtyForItem} < ${billableCeilingForItem})`;
 
   if (status === "not_billed") {
     return sql`(not ${hasAnyItem} or not ${anyBilled})`;
